@@ -36,6 +36,27 @@ if (isProduction && configuredOrigins.length === 0) {
   console.warn('⚠️ [CORS] No ADMIN_WEB_URL or CORS_ORIGINS configured. Allowing requests from all origins by default.');
 }
 
+// Restore original request URL if rewritten by Vercel serverless router
+app.use((req, res, next) => {
+  if (req.url.endsWith('.js') || req.url.includes('.js?')) {
+    const rawMatches = req.headers['x-now-route-matches'];
+    if (rawMatches) {
+      try {
+        const params = new URLSearchParams(rawMatches);
+        const matched = params.get('1');
+        if (matched) {
+          req.url = matched.startsWith('/') ? matched : '/' + matched;
+        }
+      } catch {}
+    }
+    const forwarded = req.headers['x-matched-path'] || req.headers['x-forwarded-url'] || req.headers['x-forwarded-uri'] || req.headers['x-original-url'];
+    if (forwarded && (req.url.endsWith('.js') || req.url.includes('.js?')) && !forwarded.endsWith('.js')) {
+      req.url = forwarded;
+    }
+  }
+  next();
+});
+
 // Root endpoint for Vercel health/browser checks
 app.get('/', (req, res) => {
   res.json({
