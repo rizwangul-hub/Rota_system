@@ -3,7 +3,11 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || (
+  import.meta.env.PROD
+    ? 'https://rota-system-kohl.vercel.app/api'
+    : 'http://localhost:5000/api'
+);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
