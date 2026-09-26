@@ -71,8 +71,10 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 
-app.use('/api', async (req, res, next) => {
-  if (req.path === '/health') return next();
+app.use(async (req, res, next) => {
+  if (req.path === '/health' || req.path === '/api/health' || req.path === '/' || req.path === '/favicon.ico' || req.path === '/favicon.png') {
+    return next();
+  }
   try {
     await connectDB();
     return next();
@@ -81,20 +83,46 @@ app.use('/api', async (req, res, next) => {
   }
 });
 
-// Routes
+// Routes (mounted with and without /api prefix for Vercel serverless compatibility)
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
 app.use('/api/shops', shopRoutes);
+app.use('/shops', shopRoutes);
+
 app.use('/api/employees', employeeRoutes);
+app.use('/employees', employeeRoutes);
+
 app.use('/api/attendance', attendanceRoutes);
+app.use('/attendance', attendanceRoutes);
+
 app.use('/api/salaries', salaryRoutes);
+app.use('/salaries', salaryRoutes);
+
 app.use('/api/bonuses', bonusRoutes);
+app.use('/bonuses', bonusRoutes);
+
 app.use('/api/reports', reportRoutes);
+app.use('/reports', reportRoutes);
+
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/dashboard', dashboardRoutes);
+
 app.use('/api/audit', auditRoutes);
+app.use('/audit', auditRoutes);
+
 app.use('/api/settings', settingRoutes);
+app.use('/settings', settingRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    service: 'PixxTechnologies Rota & Payroll API',
+    time: new Date().toISOString()
+  });
+});
+app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
     service: 'PixxTechnologies Rota & Payroll API',
