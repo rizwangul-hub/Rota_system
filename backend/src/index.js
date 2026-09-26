@@ -33,8 +33,21 @@ if (isProduction && !process.env.MONGO_URI) {
   throw new Error('MONGO_URI must be configured in production.');
 }
 if (isProduction && configuredOrigins.length === 0) {
-  throw new Error('Configure ADMIN_WEB_URL or CORS_ORIGINS in production.');
+  console.warn('⚠️ [CORS] No ADMIN_WEB_URL or CORS_ORIGINS configured. Allowing requests from all origins by default.');
 }
+
+// Root endpoint for Vercel health/browser checks
+app.get('/', (req, res) => {
+  res.json({
+    status: 'OK',
+    service: 'PixxTechnologies Rota & Payroll API',
+    version: '1.0.0',
+    health: '/api/health',
+    time: new Date().toISOString()
+  });
+});
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/favicon.png', (req, res) => res.status(204).end());
 
 // Middleware
 app.use((req, res, next) => {
@@ -45,6 +58,9 @@ app.use((req, res, next) => {
 });
 app.use(cors({
   origin(origin, callback) {
+    if (configuredOrigins.length === 0) {
+      return callback(null, true);
+    }
     if (isAllowedOrigin(origin, configuredOrigins, isProduction)) {
       return callback(null, true);
     }
