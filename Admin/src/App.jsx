@@ -16,6 +16,7 @@ import BonusPage from './pages/BonusPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import AuditPage from './pages/AuditPage';
+import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
 
 function ProtectedLayout({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -82,6 +83,16 @@ export default function App() {
             element={
               <ProtectedLayout allowedRoles={['ADMIN']}>
                 <AdminDashboard />
+              </ProtectedLayout>
+            }
+          />
+
+          {/* Weekly Rota Planner (Admin only) */}
+          <Route
+            path="/rota-planner"
+            element={
+              <ProtectedLayout allowedRoles={['ADMIN']}>
+                <WeeklyRotaPlanner />
               </ProtectedLayout>
             }
           />

@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/scripts/seed.js",
-    "test": "node src/tests/verify.test.js",
+    "test": "node src/tests/verify.test.js && node src/tests/rota.test.js",
+    "test:rota": "node src/tests/rota.test.js",
     "test:phase10": "node src/tests/phase10_production.test.js",
     "test:attendance-visibility": "node src/tests/attendance_role_visibility.test.js"
   },

@@ -7,6 +7,7 @@ const ROUTE_TITLES = {
   '/dashboard': { title: 'Executive Dashboard', parent: 'Core', parentPath: '/dashboard' },
   '/employees': { title: 'Staff Directory', parent: 'Core', parentPath: '/dashboard' },
   '/settings': { title: 'Shop Settings & Schedules', parent: 'Core', parentPath: '/dashboard' },
+  '/rota-planner': { title: 'Weekly Rota Planner', parent: 'Core', parentPath: '/dashboard' },
   '/attendance-checker': { title: 'Attendance Approval', parent: 'Attendance', parentPath: '/attendance-checker' },
   '/salaries': { title: 'Weekly Salaries', parent: 'Payroll', parentPath: '/salaries' },
   '/bonuses': { title: 'Sales Commission', parent: 'Payroll', parentPath: '/salaries' },
@@ -100,4 +101,3 @@ export default function Navbar({ setMobileOpen }) {
     </header>
   );
 }
-

@@ -1,0 +1,628 @@
+.rota-planner {
+  max-width: 1500px;
+  color: #0f172a;
+}
+
+.rota-header,
+.rota-header-actions,
+.rota-week-bar,
+.rota-section-title,
+.rota-ai-actions,
+.rota-draft-actions,
+.rota-select-actions {
+  display: flex;
+  align-items: center;
+}
+
+.rota-header {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.rota-header h1 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.rota-header p,
+.rota-section-title p {
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.rota-header-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rota-export-employee {
+  min-height: 32px;
+  max-width: 170px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: #334155;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.rota-week-bar {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rota-week-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.rota-week-picker input,
+.rota-form-grid input,
+.rota-form-grid select,
+.rota-manual-fields input,
+.rota-manual-fields select {
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+}
+
+.rota-week-range {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.rota-message {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 11px 13px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.rota-message button {
+  margin-left: auto;
+  color: inherit;
+  background: none;
+  border: 0;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.rota-error {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.rota-success {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.rota-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.rota-stat {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 15px 17px;
+  min-width: 0;
+}
+
+.rota-stat > span,
+.rota-stat small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.rota-stat > strong {
+  display: block;
+  font-size: 23px;
+  margin: 3px 0 1px;
+}
+
+.rota-stat .rota-status {
+  font-size: 18px;
+  text-transform: capitalize;
+}
+
+.rota-section {
+  margin-bottom: 18px;
+  padding: 19px;
+}
+
+.rota-section-title {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.rota-section-title h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  margin: 0;
+}
+
+.rota-section-title h2 svg {
+  color: #2563eb;
+}
+
+.rota-availability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  margin-bottom: 17px;
+}
+
+.rota-form-panel,
+.rota-manual-form,
+.rota-ai-panel {
+  min-width: 0;
+  padding: 15px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+}
+
+.rota-form-panel h3,
+.rota-manual-form h3 {
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.rota-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rota-form-grid label,
+.rota-manual-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.rota-form-grid label input,
+.rota-form-grid label select,
+.rota-manual-fields label input,
+.rota-manual-fields label select {
+  width: 100%;
+  font-size: 13px;
+}
+
+.rota-reason {
+  grid-column: 1 / -1;
+}
+
+.rota-all-day {
+  align-self: end;
+}
+
+.rota-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 11px 0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.rota-check input,
+.rota-employee-checks input {
+  accent-color: #2563eb;
+}
+
+.rota-current-record {
+  display: inline-block;
+  margin-left: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.rota-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin: -7px 0 12px;
+}
+
+.rota-select-actions {
+  gap: 10px;
+  margin: 11px 0 7px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.rota-select-actions span {
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.rota-select-actions button,
+.rota-row-actions button {
+  color: #2563eb;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.rota-employee-checks {
+  max-height: 120px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 7px;
+}
+
+.rota-employee-checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #334155;
+  font-size: 12px;
+}
+
+.rota-employee-checks label input {
+  flex: 0 0 auto;
+}
+
+.rota-availability-table {
+  margin-top: 8px;
+}
+
+.rota-availability-table th small,
+.rota-interval {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  margin-top: 3px;
+  color: #64748b;
+}
+
+.rota-availability-pill,
+.rota-lock {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 15px;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.avail-available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.avail-unavailable {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.avail-unknown {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rota-ai-panel {
+  margin-bottom: 15px;
+}
+
+.rota-ai-panel > label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.rota-ai-panel textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  padding: 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.rota-ai-actions {
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.rota-ai-actions > span {
+  color: #64748b;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.rota-manual-form {
+  margin-bottom: 15px;
+}
+
+.rota-manual-form h3 {
+  margin-bottom: 10px;
+}
+
+.rota-manual-fields {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1.1fr 0.8fr 0.8fr auto;
+  align-items: end;
+  gap: 9px;
+}
+
+.rota-assignment-table th,
+.rota-assignment-table td {
+  padding: 10px 12px;
+}
+
+.rota-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.rota-row-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rota-lock {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
+.rota-draft-actions {
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.rota-draft-actions > span {
+  color: #64748b;
+  font-size: 12px;
+  margin-right: auto;
+}
+
+.rota-validation {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.rota-validation ul {
+  margin: 7px 0 0 18px;
+}
+
+.rota-validation.has-errors {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.rota-validation.is-valid {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.rota-warnings {
+  margin-top: 9px;
+  color: #92400e;
+}
+
+.rota-timetable {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(145px, 1fr));
+  gap: 9px;
+  overflow-x: auto;
+  padding-bottom: 5px;
+}
+
+.rota-day-column {
+  min-width: 145px;
+  min-height: 145px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.rota-day-column > header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 4px;
+  padding: 9px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.rota-day-column > header span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.rota-day-column > header small {
+  grid-column: 1 / -1;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.rota-shift-card {
+  margin: 7px;
+  padding: 8px;
+  border-left: 3px solid #2563eb;
+  border-radius: 5px;
+  background: white;
+  box-shadow: 0 1px 2px #0f172a0b;
+}
+
+.rota-shift-card.is-locked {
+  border-left-color: #64748b;
+}
+
+.rota-shift-card strong,
+.rota-shift-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.rota-shift-card strong {
+  font-size: 11px;
+}
+
+.rota-shift-card span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  font-size: 11px;
+  color: #334155;
+}
+
+.rota-shift-card small,
+.rota-day-empty {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.rota-day-empty {
+  padding: 11px 8px;
+}
+
+.rota-empty {
+  padding: 16px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
+
+.rota-history-section .table-responsive {
+  margin-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .rota-manual-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .rota-planner {
+    padding: 16px;
+  }
+
+  .rota-header,
+  .rota-week-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .rota-week-bar {
+    justify-content: flex-start;
+  }
+
+  .rota-week-range {
+    order: 4;
+    width: 100%;
+  }
+
+  .rota-header-actions {
+    width: 100%;
+  }
+
+  .rota-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rota-availability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rota-section {
+    padding: 14px;
+  }
+
+  .rota-manual-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rota-ai-actions > span {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 460px) {
+  .rota-header h1 {
+    font-size: 20px;
+  }
+
+  .rota-stats,
+  .rota-form-grid,
+  .rota-manual-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .rota-week-picker {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .rota-current-record {
+    display: block;
+    margin: 8px 0 0;
+  }
+
+  .rota-draft-actions {
+    justify-content: stretch;
+  }
+
+  .rota-draft-actions > span {
+    width: 100%;
+  }
+}

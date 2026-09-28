@@ -126,6 +126,14 @@ All API routes use the `/api` prefix. Except for `POST /auth/login` and `GET /he
 
 For exact paths and request/response details, see the route files under `backend/src/routes/`. Export routes return downloadable Excel or PDF files where applicable.
 
+## Weekly rota planning
+
+The Admin-only Weekly Rota Planner is for future planned shifts and stores its rotas, employee availability, and employee/date assignment claims separately from attendance and payroll. Weeks run Monday through Sunday using date-only keys; assignments require active employees/shops, valid shop opening hours, and confirmed availability. A database unique index enforces no more than one shop assignment per employee per date, including concurrent edits.
+
+Manual rota planning does not require an AI credential. To enable AI text generation, configure `ROTA_AI_API_KEY` only in the backend hosting environment. `ROTA_AI_MODEL` and `ROTA_AI_BASE_URL` may optionally select a compatible chat-completions provider/model. AI output is validated by the backend and saved as a draft; it is never published automatically. Voice entry uses browser speech recognition where available, displays the transcript for administrator review/editing, then submits that confirmed text through the same AI generation flow. If the browser does not support speech recognition, use text entry instead.
+
+Availability and rota updates are independent of attendance, salary, payments, and bonuses. Use a MongoDB replica set or sharded cluster for transaction-backed concurrent assignment updates, as with the existing salary/payment flows.
+
 ## Security and operational notes
 
 - Production requires a configured MongoDB URI, a non-placeholder JWT secret of at least 32 characters, and at least one configured browser origin (`ADMIN_WEB_URL` or `CORS_ORIGINS`).

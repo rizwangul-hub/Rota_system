@@ -20,6 +20,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const settingRoutes = require('./routes/settingRoutes');
+const rotaRoutes = require('./routes/rotaRoutes');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -134,6 +135,9 @@ app.use('/audit', auditRoutes);
 
 app.use('/api/settings', settingRoutes);
 app.use('/settings', settingRoutes);
+
+app.use('/api/rota', rotaRoutes);
+app.use('/rota', rotaRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

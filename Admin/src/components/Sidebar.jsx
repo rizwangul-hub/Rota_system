@@ -11,7 +11,8 @@ import {
   Settings,
   ShieldCheck,
   LogOut,
-  Clock
+  Clock,
+  CalendarDays
 } from 'lucide-react';
 import logo from '../assets/logo.jpg';
 
@@ -53,6 +54,11 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
             <li className="nav-item">
               <NavLink to="/employees" onClick={() => setMobileOpen(false)}>
                 <Users size={18} /> Staff / Employees
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink to="/rota-planner" onClick={() => setMobileOpen(false)}>
+                <CalendarDays size={18} /> Weekly Rota Planner
               </NavLink>
             </li>
             <li className="nav-item">
