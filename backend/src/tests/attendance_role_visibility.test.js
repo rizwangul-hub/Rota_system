@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { inflateSync } = require('node:zlib');
 const { Writable } = require('node:stream');
 const ExcelJS = require('exceljs');
@@ -290,6 +292,60 @@ async function run() {
       assert.equal(sheet.getCell('I5').value, 'Absent / Off');
       assert.equal(sheet.getCell('G4').value, '9:10 AM');
       assert.equal(sheet.getCell('H4').value, '5:00 PM');
+      assert.equal(sheet.getCell('A1').value, 'PIXX ROTA  |  DAILY ATTENDANCE');
+      assert.match(sheet.getCell('A2').value, /12-hour format/);
+      assert.equal(sheet.views[0].state, 'frozen');
+      assert.equal(sheet.views[0].ySplit, 3);
+      assert.equal(sheet.autoFilter, 'A3:L5');
+      assert.equal(sheet.getCell('I4').fill.fgColor.argb, 'FFFFF7ED');
+      assert.equal(sheet.getCell('I5').fill.fgColor.argb, 'FFFEF2F2');
+      assert.equal(sheet.pageSetup.orientation, 'landscape');
+      assert.equal(sheet.getColumn(10).width, 30);
+    });
+
+    test('Vercel backend configurations include daily report signature assets', () => {
+      const repositoryRoot = path.resolve(__dirname, '../../..');
+      const deploymentConfigs = [
+        {
+          file: path.join(repositoryRoot, 'vercel.json'),
+          expected: 'backend/src/assets/**'
+        },
+        {
+          file: path.join(repositoryRoot, 'backend/vercel.json'),
+          expected: 'src/assets/**'
+        }
+      ];
+
+      for (const { file, expected } of deploymentConfigs) {
+        const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+        assert.equal(config.builds[0].config.includeFiles, expected);
+      }
+
+      assert.equal(fs.existsSync(path.join(repositoryRoot, 'backend/src/assets/usmansign.png')), true);
+      assert.equal(fs.existsSync(path.join(repositoryRoot, 'backend/src/assets/sarfrazsign.png')), true);
+    });
+
+    await testAsync('daily attendance PDF generates with bundled signature images', async () => {
+      replaceMethod(Attendance, 'find', () => ({
+        sort: async () => []
+      }), restores);
+      auditEvents.length = 0;
+      const res = new CaptureResponse();
+      const finish = new Promise((resolve, reject) => {
+        res.once('finish', resolve);
+        res.once('error', reject);
+      });
+
+      await reportController.exportDailyAttendancePDF({
+        query: { date: '2026-04-05' },
+        user: { _id: 'checker-1', name: 'Sarfraz', role: 'ATTENDANCE_CHECKER' }
+      }, res);
+      await finish;
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.headers['content-type'], 'application/pdf');
+      assert.equal(res.buffer.subarray(0, 4).toString('ascii'), '%PDF');
+      assert.ok(res.buffer.length > 1000);
     });
 
     test('daily attendance exports remain checker/admin-only while attendance report is operator-readable', () => {

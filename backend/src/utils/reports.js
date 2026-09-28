@@ -82,32 +82,44 @@ function generateWhatsAppAttendanceText(dateStr, records, shopName = 'All Shops'
 async function buildDailyAttendanceExcel(records, dateStr) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Daily Attendance');
+  const navy = 'FF0F172A';
+  const blue = 'FF2563EB';
+  const paleBlue = 'FFEFF6FF';
+  const slate = 'FF475569';
+  const border = 'FFCBD5E1';
 
-  // Title styling
   sheet.mergeCells('A1:L1');
   const titleCell = sheet.getCell('A1');
-  titleCell.value = `PIXX ROTA - Daily Attendance Report (${dateStr})`;
-  titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  titleCell.value = 'PIXX ROTA  |  DAILY ATTENDANCE';
+  titleCell.font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getRow(1).height = 30;
+  sheet.getRow(1).height = 36;
 
-  // Header row
+  sheet.mergeCells('A2:L2');
+  const subtitleCell = sheet.getCell('A2');
+  subtitleCell.value = `Attendance register  •  ${dateStr}  •  Times shown in 12-hour format`;
+  subtitleCell.font = { name: 'Aptos', size: 10, color: { argb: slate }, italic: true };
+  subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(2).height = 24;
+
   const headers = [
     'Date', 'Shop', 'Employee ID', 'Worker Name', 'Shift Start', 'Shift End',
     'Arrival', 'Leave', 'Status', 'Remarks', 'Submitted By', 'Checked By'
   ];
-  sheet.addRow([]);
   const headerRow = sheet.addRow(headers);
   headerRow.eachCell(cell => {
-    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: blue } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = { bottom: { style: 'medium', color: { argb: navy } } };
   });
+  headerRow.height = 30;
 
   records.forEach(r => {
     const isAbsent = r.status === 'Absent';
-    sheet.addRow([
+    const row = sheet.addRow([
       r.dateString || dateStr,
       isAbsent ? '' : (r.shopName || ''),
       r.employeeId || '',
@@ -121,30 +133,80 @@ async function buildDailyAttendanceExcel(records, dateStr) {
       r.createdByName || '',
       r.checkedByName || ''
     ]);
+    const statusColors = {
+      Present: ['FFE8F5E9', 'FF166534'],
+      Late: ['FFFFF7ED', 'FFB45309'],
+      Half: ['FFEFF6FF', 'FF1D4ED8'],
+      Absent: ['FFFEF2F2', 'FFB91C1C']
+    };
+    const [statusFill, statusFont] = statusColors[r.status] || statusColors.Present;
+    row.height = 24;
+    row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+      cell.font = { name: 'Aptos', size: 10, color: { argb: 'FF1E293B' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: row.number % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC' }
+      };
+      cell.border = {
+        bottom: { style: 'hair', color: { argb: border } }
+      };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: [1, 3, 5, 6, 7, 8, 9].includes(columnNumber) ? 'center' : 'left',
+        wrapText: [2, 4, 10, 11, 12].includes(columnNumber)
+      };
+    });
+    const statusCell = row.getCell(9);
+    statusCell.value = isAbsent ? 'Absent / Off' : (r.status || 'Present');
+    statusCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: statusFont } };
+    statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusFill } };
   });
 
   sheet.addRow([]);
   const summaryRow = sheet.addRow([
-    `Workers: ${records.length}`,
-    `Present: ${records.filter(record => record.status === 'Present').length}`,
-    `Late: ${records.filter(record => record.status === 'Late').length}`,
-    `Half: ${records.filter(record => record.status === 'Half').length}`,
-    `Absent: ${records.filter(record => record.status === 'Absent').length}`
+    'TOTAL WORKERS', records.length,
+    'PRESENT', records.filter(record => record.status === 'Present').length,
+    'LATE', records.filter(record => record.status === 'Late').length,
+    'HALF DAY', records.filter(record => record.status === 'Half').length,
+    'ABSENT', records.filter(record => record.status === 'Absent').length
   ]);
-  summaryRow.eachCell(cell => {
-    cell.font = { name: 'Arial', size: 10, bold: true };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  summaryRow.height = 26;
+  summaryRow.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+    const isLabel = [1, 3, 5, 7, 9].includes(columnNumber);
+    cell.font = {
+      name: 'Aptos',
+      size: 9,
+      bold: true,
+      color: { argb: isLabel ? 'FFFFFFFF' : navy }
+    };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: isLabel ? navy : paleBlue }
+    };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = {
+      top: { style: 'thin', color: { argb: border } },
+      bottom: { style: 'thin', color: { argb: border } }
+    };
   });
 
-  // Auto column widths
-  sheet.columns.forEach(col => {
-    let maxLen = 12;
-    col.eachCell({ includeEmpty: true }, cell => {
-      const len = cell.value ? cell.value.toString().length : 0;
-      if (len > maxLen) maxLen = len;
-    });
-    col.width = maxLen + 3;
-  });
+  sheet.columns = [
+    { width: 14 }, { width: 22 }, { width: 16 }, { width: 25 },
+    { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 },
+    { width: 16 }, { width: 30 }, { width: 22 }, { width: 22 }
+  ];
+  sheet.views = [{ state: 'frozen', ySplit: 3, showGridLines: false }];
+  sheet.autoFilter = { from: 'A3', to: `L${Math.max(3, records.length + 3)}` };
+  sheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0
+  };
+  sheet.printTitlesRow = '1:3';
+  sheet.headerFooter.oddFooter = '&LPixxTechnologies Rota System&CConfidential Attendance Report&RPage &P of &N';
 
   return workbook;
 }
