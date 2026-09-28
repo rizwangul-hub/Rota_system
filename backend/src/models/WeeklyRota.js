@@ -6,7 +6,10 @@ const AssignmentSchema = new mongoose.Schema({
   dateKey: { type: String, required: true },
   startTime: { type: String, required: true },
   endTime: { type: String, required: true },
-  locked: { type: Boolean, default: false }
+  scheduledHours: { type: Number, required: true, min: 0 },
+  locked: { type: Boolean, default: false },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { _id: true });
 
 const StaffingTargetSchema = new mongoose.Schema({
@@ -32,12 +35,14 @@ const WeeklyRotaSchema = new mongoose.Schema({
   staffingTargets: { type: [StaffingTargetSchema], default: [] },
   generationMethod: { type: String, enum: ['MANUAL', 'AI_TEXT', 'AI_VOICE'], default: 'MANUAL' },
   instructionText: { type: String, default: '' },
-  status: { type: String, enum: ['DRAFT', 'PUBLISHED'], default: 'DRAFT' },
+  status: { type: String, enum: ['DRAFT', 'PUBLISHED', 'ARCHIVED'], default: 'DRAFT' },
+  publishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  publishedAt: { type: Date, default: null },
   validation: { errors: { type: [String], default: [] }, warnings: { type: [String], default: [] } },
   publishedVersions: { type: [PublishedVersionSchema], default: [] },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
-}, { timestamps: true });
+}, { timestamps: true, optimisticConcurrency: true });
 
 WeeklyRotaSchema.index({ weekStart: 1 }, { unique: true });
 

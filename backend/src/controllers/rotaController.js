@@ -8,12 +8,16 @@ const WeeklyRota = require('../models/WeeklyRota');
 const RotaAvailability = require('../models/RotaAvailability');
 const RotaAssignmentClaim = require('../models/RotaAssignmentClaim');
 const { logAction } = require('../utils/audit');
-const { getWeek, dateInWeek, minutes, validateIntervals, validatePayload, isDateKey } = require('../utils/rota');
+const {
+  getWeek, dateInWeek, minutes, validateIntervals, validatePayload, isDateKey,
+  findDuplicateEmployeeDates, createAiRosterContext, resolveAiAssignments
+} = require('../utils/rota');
 
 class RotaError extends Error {
-  constructor(status, message) {
+  constructor(status, message, details = {}) {
     super(message);
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -41,6 +45,7 @@ async function buildValidation(rota, source) {
   const assignments = source.assignments || [];
   const targets = source.staffingTargets || [];
 
+  if (!assignments.length) errors.push('Add at least one assignment before publishing this weekly rota.');
   assignments.forEach((assignment, index) => {
     if (!dateInWeek(assignment.dateKey, week.weekStart)) errors.push(`Assignment ${index + 1} is outside the rota week.`);
   });
@@ -48,12 +53,7 @@ async function buildValidation(rota, source) {
     if (!dateInWeek(target.dateKey, week.weekStart)) errors.push(`Staffing target ${index + 1} is outside the rota week.`);
   });
 
-  const occupied = new Set();
-  for (const assignment of assignments) {
-    const key = `${id(assignment.employeeId)}:${assignment.dateKey}`;
-    if (occupied.has(key)) errors.push(`${assignment.dateKey}: an employee can only have one shift per day.`);
-    occupied.add(key);
-  }
+  const duplicateAssignments = findDuplicateEmployeeDates(assignments);
 
   const employeeIds = [...new Set(assignments.map(a => id(a.employeeId)))];
   const shopIds = [...new Set([...assignments.map(a => id(a.shopId)), ...targets.map(t => id(t.shopId))])];
@@ -70,6 +70,10 @@ async function buildValidation(rota, source) {
   for (const schedule of schedules) {
     const key = `${id(schedule.shop)}:${schedule.dayOfWeek}`;
     if (!scheduleMap.has(key) || schedule.shop) scheduleMap.set(key, schedule);
+  }
+  for (const duplicate of duplicateAssignments) {
+    const employeeName = employeeMap.get(duplicate.employeeId)?.name || 'This employee';
+    errors.push(`${employeeName} already has a shift on ${duplicate.dateKey}. Remove the existing assignment before assigning another shop that day.`);
   }
 
   for (const assignment of assignments) {
@@ -141,6 +145,7 @@ async function buildValidation(rota, source) {
 }
 
 async function getOrCreateRota(week) {
+  await WeeklyRota.init();
   let rota = await WeeklyRota.findOne({ weekStart: week.weekStart });
   if (!rota) {
     try {
@@ -179,16 +184,48 @@ async function persistDraft(req, res, input, generationMethod = input.generation
   });
   (input.staffingTargets || []).forEach(t => checkObjectId(t.shopId, 'shopId'));
 
-  const rota = await getOrCreateRota(week);
-  for (const locked of rota.assignments.filter(a => a.locked)) {
+  let rota = await WeeklyRota.findOne({ weekStart: week.weekStart });
+  if (rota?.status === 'ARCHIVED') throw new RotaError(409, 'This rota has been archived and can no longer be edited.');
+  if (rota?.status === 'PUBLISHED' && input.revisePublished !== true) {
+    throw new RotaError(409, 'This rota is published. Confirm a revision before changing it.');
+  }
+  for (const locked of (rota?.assignments || []).filter(a => a.locked)) {
     const retained = input.assignments.find(a => id(a.employeeId) === id(locked.employeeId) && a.dateKey === locked.dateKey);
     if (!retained || id(retained.shopId) !== id(locked.shopId) ||
         retained.startTime !== locked.startTime || retained.endTime !== locked.endTime || !retained.locked) {
       throw new RotaError(409, `Locked shift for ${locked.dateKey} cannot be changed or removed.`);
     }
   }
-  const validation = await buildValidation(rota, input);
-  rota.assignments = input.assignments;
+  const validationTarget = rota || { _id: new mongoose.Types.ObjectId(), weekStart: week.weekStart };
+  const validation = await buildValidation(validationTarget, input);
+  const errors = validation.errors.filter(error =>
+    !(input.assignments.length === 0 && error === 'Add at least one assignment before publishing this weekly rota.')
+  );
+  if (errors.length) {
+    throw new RotaError(422, 'Rota draft contains invalid assignments.', {
+      validation: { ...validation, errors }
+    });
+  }
+  rota ||= await getOrCreateRota(week);
+  const previousByDay = new Map(rota.assignments.map(assignment =>
+    [`${id(assignment.employeeId)}:${assignment.dateKey}`, assignment]
+  ));
+  const nextByDay = new Map(input.assignments.map(assignment =>
+    [`${id(assignment.employeeId)}:${assignment.dateKey}`, assignment]
+  ));
+  rota.assignments = input.assignments.map(assignment => {
+    const previous = rota.assignments.find(existing =>
+      id(existing.employeeId) === id(assignment.employeeId) && existing.dateKey === assignment.dateKey
+    );
+    const scheduledHours = (minutes(assignment.endTime) - minutes(assignment.startTime)) / 60;
+    return {
+      ...assignment,
+      ...(previous?._id ? { _id: previous._id } : {}),
+      scheduledHours,
+      createdBy: previous?.createdBy || req.user._id,
+      updatedBy: req.user._id
+    };
+  });
   rota.staffingTargets = input.staffingTargets || [];
   rota.generationMethod = generationMethod;
   rota.instructionText = String(input.instructionText || '').slice(0, 5000);
@@ -197,6 +234,36 @@ async function persistDraft(req, res, input, generationMethod = input.generation
   rota.updatedBy = req.user._id;
   if (!rota.createdBy) rota.createdBy = req.user._id;
   await rota.save();
+  for (const key of new Set([...previousByDay.keys(), ...nextByDay.keys()])) {
+    const previous = previousByDay.get(key);
+    const next = nextByDay.get(key);
+    let action;
+    let description;
+    if (!previous && next) {
+      action = 'ROTA_ASSIGNMENT_ADDED';
+      description = `Added assignment ${key} at shop ${id(next.shopId)} (${next.startTime}-${next.endTime}).`;
+    } else if (previous && !next) {
+      action = 'ROTA_ASSIGNMENT_REMOVED';
+      description = `Removed assignment ${key} from shop ${id(previous.shopId)}.`;
+    } else if (previous && next && (
+      id(previous.shopId) !== id(next.shopId) ||
+      previous.startTime !== next.startTime ||
+      previous.endTime !== next.endTime
+    )) {
+      action = 'ROTA_ASSIGNMENT_CHANGED';
+      description = `Changed assignment ${key} to shop ${id(next.shopId)} (${next.startTime}-${next.endTime}).`;
+    }
+    if (action) {
+      await logAction({
+        user: req.user,
+        action,
+        recordType: 'WeeklyRota',
+        recordId: rota._id,
+        details: description,
+        req
+      });
+    }
+  }
   await logAction({
     user: req.user, action: 'ROTA_DRAFT_SAVED', recordType: 'WeeklyRota', recordId: rota._id,
     details: `Saved ${week.weekStart} rota draft using ${generationMethod}.`, req
@@ -205,8 +272,9 @@ async function persistDraft(req, res, input, generationMethod = input.generation
 }
 
 function handleError(res, error) {
-  if (error instanceof RotaError) return res.status(error.status).json({ success: false, message: error.message });
+  if (error instanceof RotaError) return res.status(error.status).json({ success: false, message: error.message, ...error.details });
   if (error?.code === 11000) return res.status(409).json({ success: false, message: 'An employee already has a published shift on that date.' });
+  if (error?.name === 'VersionError') return res.status(409).json({ success: false, message: 'This rota changed in another request. Refresh it and retry your changes.' });
   if (error?.name === 'ValidationError' || error?.name === 'CastError') {
     return res.status(400).json({ success: false, message: 'The rota request contains invalid data.' });
   }
@@ -243,9 +311,14 @@ exports.setAssignmentLock = async (req, res) => {
     if (typeof req.body.locked !== 'boolean') throw new RotaError(400, 'locked must be a boolean.');
     const rota = await WeeklyRota.findOne({ weekStart: week.weekStart });
     if (!rota) throw new RotaError(404, 'No rota draft exists for this week.');
+    if (rota.status === 'ARCHIVED') throw new RotaError(409, 'An archived rota cannot be changed.');
+    if (rota.status === 'PUBLISHED' && req.body.revisePublished !== true) {
+      throw new RotaError(409, 'This rota is published. Confirm a revision before changing it.');
+    }
     const assignment = rota.assignments.id(req.params.assignmentId);
     if (!assignment) throw new RotaError(404, 'Rota assignment not found.');
     assignment.locked = req.body.locked;
+    if (rota.status === 'PUBLISHED') rota.status = 'DRAFT';
     rota.updatedBy = req.user._id;
     await rota.save();
     await logAction({
@@ -284,12 +357,14 @@ exports.publish = async (req, res) => {
     const week = getWeek(req.params.weekStart);
     const rota = await WeeklyRota.findOne({ weekStart: week.weekStart });
     if (!rota) throw new RotaError(404, 'No rota draft exists for this week.');
+    if (rota.status === 'ARCHIVED') throw new RotaError(409, 'An archived rota cannot be published.');
     const validation = await buildValidation(rota, rota);
     rota.validation = validation;
     if (!validation.valid) {
       await rota.save();
       return res.status(422).json({ success: false, message: 'Rota has validation errors and cannot be published.', rota: cleanRota(rota), validation });
     }
+    await RotaAssignmentClaim.init();
     session = await mongoose.startSession();
     session.startTransaction();
     const newClaims = rota.assignments.map(assignment => ({
@@ -309,17 +384,20 @@ exports.publish = async (req, res) => {
         { $set: { ...claim } }, { upsert: true, session }
       );
     }
+    const publishedAt = new Date();
     const version = {
       version: rota.publishedVersions.length + 1,
       assignments: rota.assignments,
       staffingTargets: rota.staffingTargets,
       generationMethod: rota.generationMethod,
       instructionText: rota.instructionText,
-      publishedAt: new Date(),
+      publishedAt,
       publishedBy: req.user._id
     };
     rota.publishedVersions.push(version);
     rota.status = 'PUBLISHED';
+    rota.publishedAt = publishedAt;
+    rota.publishedBy = req.user._id;
     rota.updatedBy = req.user._id;
     await rota.save({ session });
     await session.commitTransaction();
@@ -334,6 +412,54 @@ exports.publish = async (req, res) => {
     return handleError(res, error);
   } finally {
     if (session) await session.endSession();
+  }
+};
+
+exports.archive = async (req, res) => {
+  try {
+    const week = getWeek(req.params.weekStart);
+    const rota = await WeeklyRota.findOne({ weekStart: week.weekStart });
+    if (!rota) throw new RotaError(404, 'No rota exists for this week.');
+    if (rota.status !== 'PUBLISHED') throw new RotaError(409, 'Only a published rota can be archived.');
+    rota.status = 'ARCHIVED';
+    rota.updatedBy = req.user._id;
+    await rota.save();
+    await logAction({
+      user: req.user,
+      action: 'ROTA_ARCHIVED',
+      recordType: 'WeeklyRota',
+      recordId: rota._id,
+      details: `Archived the ${week.weekStart} weekly rota.`,
+      req
+    });
+    return res.json({ success: true, rota: cleanRota(rota) });
+  } catch (error) {
+    if (error.message?.includes('weekStart')) return handleError(res, new RotaError(400, error.message));
+    return handleError(res, error);
+  }
+};
+
+exports.discardDraft = async (req, res) => {
+  try {
+    const week = getWeek(req.params.weekStart);
+    const rota = await WeeklyRota.findOne({ weekStart: week.weekStart });
+    if (!rota) throw new RotaError(404, 'No draft exists for this week.');
+    if (rota.publishedVersions.length || rota.status === 'PUBLISHED' || rota.status === 'ARCHIVED') {
+      throw new RotaError(409, 'A rota with publication history cannot be discarded. Archive it instead.');
+    }
+    await WeeklyRota.deleteOne({ _id: rota._id });
+    await logAction({
+      user: req.user,
+      action: 'ROTA_DRAFT_DISCARDED',
+      recordType: 'WeeklyRota',
+      recordId: rota._id,
+      details: `Discarded the ${week.weekStart} rota draft.`,
+      req
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    if (error.message?.includes('weekStart')) return handleError(res, new RotaError(400, error.message));
+    return handleError(res, error);
   }
 };
 
@@ -360,9 +486,10 @@ exports.saveAvailability = async (req, res) => {
     const employee = await Employee.findById(data.employeeId).select('employmentStatus');
     if (!employee) throw new RotaError(404, 'Employee not found.');
     if (employee.employmentStatus !== 'Active') throw new RotaError(400, 'Availability can only be set for an active employee.');
+    await RotaAvailability.init();
     const availability = await RotaAvailability.findOneAndUpdate(
       { employeeId: data.employeeId, dateKey: data.dateKey },
-      { $set: { ...data, updatedBy: req.user._id } }, { new: true, upsert: true, runValidators: true }
+      { $set: { ...data, updatedBy: req.user._id }, $setOnInsert: { createdBy: req.user._id } }, { new: true, upsert: true, runValidators: true }
     );
     await logAction({ user: req.user, action: 'ROTA_AVAILABILITY_UPDATED', recordType: 'RotaAvailability', recordId: availability._id, details: `Updated availability for ${data.dateKey}.`, req });
     return res.json({ success: true, availability });
@@ -380,10 +507,11 @@ exports.saveAvailabilityBulk = async (req, res) => {
     const employeeIds = [...new Set(entries.map(entry => entry.employeeId))];
     const activeEmployees = await Employee.find({ _id: { $in: employeeIds }, employmentStatus: 'Active' }).select('_id');
     if (activeEmployees.length !== employeeIds.length) throw new RotaError(400, 'Every availability entry must belong to an active employee.');
+    await RotaAvailability.init();
     const operations = entries.map(data => ({
       updateOne: {
         filter: { employeeId: data.employeeId, dateKey: data.dateKey },
-        update: { $set: { ...data, updatedBy: req.user._id } },
+        update: { $set: { ...data, updatedBy: req.user._id }, $setOnInsert: { createdBy: req.user._id } },
         upsert: true
       }
     }));
@@ -475,6 +603,13 @@ exports.exportExcel = async (req, res) => {
       });
     }
     sheet.getRow(1).font = { bold: true };
+    await logAction({
+      user: req.user,
+      action: 'ROTA_EXPORTED',
+      recordType: 'WeeklyRota',
+      details: `Exported ${employeeId ? `employee ${employeeId} ` : ''}rota for ${data.week.weekStart} as Excel.`,
+      req
+    });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="rota-${employeeId ? 'employee-' : ''}${data.week.weekStart}.xlsx"`);
     await workbook.xlsx.write(res);
@@ -500,6 +635,13 @@ exports.exportPdf = async (req, res) => {
       const shop = data.shopsById.get(id(assignment.shopId));
       doc.text(`${assignment.dateKey}  ${assignment.startTime}-${assignment.endTime}  ${employee?.name || ''} (${employee?.employeeId || ''})  ${shop?.name || ''}${assignment.locked ? '  [Locked]' : ''}`);
     }
+    await logAction({
+      user: req.user,
+      action: 'ROTA_EXPORTED',
+      recordType: 'WeeklyRota',
+      details: `Exported ${employeeId ? `employee ${employeeId} ` : ''}rota for ${data.week.weekStart} as PDF.`,
+      req
+    });
     doc.end();
     return undefined;
   } catch (error) { return handleError(res, error); }
@@ -516,25 +658,41 @@ exports.generateWithAI = async (req, res) => {
     if (typeof fetch !== 'function') throw new RotaError(503, 'Rota AI is unavailable on this server runtime.');
 
     const week = getWeek(req.params.weekStart);
-    const [employees, shops, schedules, availability] = await Promise.all([
-      Employee.find({ employmentStatus: 'Active' }).select('name employeeId').lean(),
-      Shop.find({ status: 'Active', isActive: true }).select('name code').lean(),
+    const [employees, shops, schedules, availability, existingRota] = await Promise.all([
+      Employee.find({ employmentStatus: 'Active' }).select('name employeeId').sort({ name: 1, _id: 1 }).lean(),
+      Shop.find({ status: 'Active', isActive: true }).select('name code').sort({ name: 1, _id: 1 }).lean(),
       ShopSchedule.find({ isActive: true }).lean(),
-      RotaAvailability.find({ dateKey: { $gte: week.weekStart, $lte: week.weekEnd }, confirmed: true }).lean()
+      RotaAvailability.find({ dateKey: { $gte: week.weekStart, $lte: week.weekEnd }, confirmed: true }).lean(),
+      WeeklyRota.findOne({ weekStart: week.weekStart }).select('assignments staffingTargets status').lean()
     ]);
+    if (existingRota?.status === 'ARCHIVED') throw new RotaError(409, 'This rota has been archived and cannot be regenerated.');
+    const aiContext = createAiRosterContext(employees, shops, text);
     const prompt = [
       'Create a weekly employee rota from the provided text. Return only valid JSON with assignments and staffingTargets arrays.',
-      'Each assignment must contain employeeId (database ID), shopId (database ID), dateKey (YYYY-MM-DD), startTime, endTime, and optional locked boolean.',
-      'Each staffingTargets item must contain dateKey, shopId, targetWorkers. Never invent IDs, dates, availability, or shop schedules.',
+      'Each assignment must contain workerKey and shopKey chosen only from the supplied lists, dateKey (YYYY-MM-DD), startTime, endTime, and optional locked boolean.',
+      'Each staffingTargets item must contain dateKey, shopKey, targetWorkers. Never invent keys, dates, employees, or shops.',
       `Selected week: ${week.weekStart} through ${week.weekEnd}.`,
-      `User instruction: ${text}`,
-      `Active employees: ${JSON.stringify(employees.map(e => ({ id: id(e._id), name: e.name, employeeId: e.employeeId })))}`,
-      `Active shops: ${JSON.stringify(shops.map(s => ({ id: id(s._id), name: s.name, code: s.code })))}`,
-      `Shop schedules: ${JSON.stringify(schedules.map(s => ({ shopId: id(s.shop), dayOfWeek: s.dayOfWeek, openingTime: s.openingTime, closingTime: s.closingTime })))}`,
-      `Confirmed availability: ${JSON.stringify(availability.map(a => ({ employeeId: id(a.employeeId), dateKey: a.dateKey, status: a.status, intervals: a.intervals })))}`,
+      `User instruction with known employee names/IDs replaced by worker keys: ${aiContext.sanitizedInstruction}`,
+      `Active employee keys: ${JSON.stringify(aiContext.employeeOptions)}`,
+      `Active shops: ${JSON.stringify(aiContext.shopOptions)}`,
+      `Shop schedules: ${JSON.stringify(schedules.map(s => ({ shopKey: aiContext.shopOptions.find(shop => aiContext.shopIds.get(shop.shopKey) === id(s.shop))?.shopKey || null, dayOfWeek: s.dayOfWeek, openingTime: s.openingTime, closingTime: s.closingTime })))}`,
+      `Confirmed availability: ${JSON.stringify(availability.map(a => ({ workerKey: aiContext.employeeOptions.find(worker => aiContext.employeeIds.get(worker.workerKey) === id(a.employeeId))?.workerKey || null, dateKey: a.dateKey, status: a.status, intervals: a.intervals })))}`,
+      `Assignments marked locked that must be preserved exactly: ${JSON.stringify((existingRota?.assignments || []).filter(a => a.locked).map(a => ({
+        workerKey: aiContext.employeeOptions.find(worker => aiContext.employeeIds.get(worker.workerKey) === id(a.employeeId))?.workerKey || null,
+        shopKey: aiContext.shopOptions.find(shop => aiContext.shopIds.get(shop.shopKey) === id(a.shopId))?.shopKey || null,
+        dateKey: a.dateKey, startTime: a.startTime, endTime: a.endTime, locked: true
+      })))}`,
       'Output example: {"assignments":[...],"staffingTargets":[]}'
     ].join('\n');
-    const baseUrl = (process.env.ROTA_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const configuredBaseUrl = process.env.ROTA_AI_BASE_URL || 'https://api.openai.com/v1';
+    let baseUrl;
+    try {
+      const providerUrl = new URL(configuredBaseUrl);
+      if (providerUrl.protocol !== 'https:') throw new Error('HTTPS is required.');
+      baseUrl = providerUrl.toString().replace(/\/+$/, '');
+    } catch {
+      throw new RotaError(503, 'Rota AI provider URL must be a valid HTTPS URL.');
+    }
     let response;
     try {
       response = await fetch(`${baseUrl}/chat/completions`, {
@@ -560,10 +718,43 @@ exports.generateWithAI = async (req, res) => {
     } catch {
       throw new RotaError(502, 'Rota AI provider did not return valid JSON.');
     }
+    if (!Array.isArray(generated.assignments)) throw new RotaError(502, 'Rota AI provider returned no assignment list.');
+    let resolvedAssignments;
+    let resolvedTargets;
+    try {
+      resolvedAssignments = resolveAiAssignments(generated.assignments, aiContext);
+      resolvedTargets = (generated.staffingTargets || []).map(target => {
+        const shopId = aiContext.shopIds.get(target?.shopKey);
+        if (!shopId) throw new Error('AI output referenced an unknown shop.');
+        return { shopId, dateKey: target.dateKey, targetWorkers: target.targetWorkers };
+      });
+    } catch {
+      throw new RotaError(502, 'Rota AI provider returned an unknown employee or shop reference.');
+    }
+    const lockedAssignments = (existingRota?.assignments || []).filter(assignment => assignment.locked);
+    const lockedKeys = new Set(lockedAssignments.map(assignment => `${id(assignment.employeeId)}:${assignment.dateKey}`));
+    await logAction({
+      user: req.user,
+      action: 'ROTA_AI_DRAFT_GENERATED',
+      recordType: 'WeeklyRota',
+      details: `Generated an unpublished ${method} rota proposal for ${week.weekStart}.`,
+      req
+    });
     return await persistDraft(req, res, {
-      assignments: generated.assignments,
-      staffingTargets: generated.staffingTargets || [],
-      instructionText: text
+      assignments: [
+        ...resolvedAssignments.filter(assignment => !lockedKeys.has(`${id(assignment.employeeId)}:${assignment.dateKey}`)),
+        ...lockedAssignments.map(assignment => ({
+          employeeId: assignment.employeeId,
+          shopId: assignment.shopId,
+          dateKey: assignment.dateKey,
+          startTime: assignment.startTime,
+          endTime: assignment.endTime,
+          locked: true
+        }))
+      ],
+      staffingTargets: resolvedTargets.length ? resolvedTargets : existingRota?.staffingTargets || [],
+      instructionText: text,
+      revisePublished: req.body.revisePublished === true
     }, method);
   } catch (error) {
     if (error.message?.includes('weekStart')) return handleError(res, new RotaError(400, error.message));

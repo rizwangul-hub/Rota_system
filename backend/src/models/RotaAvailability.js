@@ -12,6 +12,7 @@ const RotaAvailabilitySchema = new mongoose.Schema({
   intervals: { type: [IntervalSchema], default: [] },
   confirmed: { type: Boolean, default: false },
   reason: { type: String, default: '' },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { timestamps: true });
 

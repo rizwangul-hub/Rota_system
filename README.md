@@ -128,7 +128,7 @@ For exact paths and request/response details, see the route files under `backend
 
 ## Weekly rota planning
 
-The Admin-only Weekly Rota Planner is for future planned shifts and stores its rotas, employee availability, and employee/date assignment claims separately from attendance and payroll. Weeks run Monday through Sunday using date-only keys; assignments require active employees/shops, valid shop opening hours, and confirmed availability. A database unique index enforces no more than one shop assignment per employee per date, including concurrent edits.
+The Admin-only Weekly Rota Planner is for future planned shifts and stores its rotas, employee availability, and employee/date assignment claims separately from attendance and payroll. Weeks run Sunday through Saturday using date-only keys; assignments require active employees/shops, valid shop opening hours, and confirmed availability. A database unique index enforces no more than one shop assignment per employee per date, including concurrent edits.
 
 Manual rota planning does not require an AI credential. To enable AI text generation, configure `ROTA_AI_API_KEY` only in the backend hosting environment. `ROTA_AI_MODEL` and `ROTA_AI_BASE_URL` may optionally select a compatible chat-completions provider/model. AI output is validated by the backend and saved as a draft; it is never published automatically. Voice entry uses browser speech recognition where available, displays the transcript for administrator review/editing, then submits that confirmed text through the same AI generation flow. If the browser does not support speech recognition, use text entry instead.
 

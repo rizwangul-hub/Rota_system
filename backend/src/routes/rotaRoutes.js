@@ -17,9 +17,11 @@ router.get('/employee/:employeeId/:weekStart', rotaController.employeeWeek);
 router.get('/week/:weekStart/export.xlsx', rotaController.exportExcel);
 router.get('/week/:weekStart/export.pdf', rotaController.exportPdf);
 router.put('/week/:weekStart/draft', rotaController.saveDraft);
+router.delete('/week/:weekStart/draft', rotaController.discardDraft);
 router.patch('/week/:weekStart/assignment/:assignmentId/lock', rotaController.setAssignmentLock);
 router.post('/week/:weekStart/validate', rotaController.validateWeek);
 router.post('/week/:weekStart/publish', rotaController.publish);
+router.post('/week/:weekStart/archive', rotaController.archive);
 router.post('/week/:weekStart/ai', rotaController.generateWithAI);
 router.get('/week/:weekStart', rotaController.getWeek);
 
