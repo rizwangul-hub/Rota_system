@@ -279,11 +279,13 @@ async function run() {
       const allText = values.join('|');
       assert.deepEqual(sheet.getRow(3).values.slice(1), [
         'Date', 'Shop', 'Employee ID', 'Worker Name', 'Shift Start', 'Shift End',
-        'Arrival', 'Leave', 'Status', 'Remarks', 'Submitted By', 'Checked By'
+        'Arrival', 'Leave', 'Status', 'Remarks'
       ]);
       for (const value of ['987.65', '123.45', '12.34', '975.31', 'Wage', 'Deduction', 'Pay']) {
         assert.equal(allText.includes(value), false, `${value} must not appear`);
       }
+      assert.equal(allText.includes('SUBMITTED BY (ATTENDANCE OPERATOR)'), true);
+      assert.equal(allText.includes('VERIFIED BY (ATTENDANCE CHECKER)'), true);
       assert.equal(sheet.getCell('B5').value, '');
       assert.equal(sheet.getCell('E5').value, '');
       assert.equal(sheet.getCell('F5').value, '');
@@ -296,7 +298,7 @@ async function run() {
       assert.match(sheet.getCell('A2').value, /12-hour format/);
       assert.equal(sheet.views[0].state, 'frozen');
       assert.equal(sheet.views[0].ySplit, 3);
-      assert.equal(sheet.autoFilter, 'A3:L5');
+      assert.equal(sheet.autoFilter, 'A3:J5');
       assert.equal(sheet.getCell('I4').fill.fgColor.argb, 'FFFFF7ED');
       assert.equal(sheet.getCell('I5').fill.fgColor.argb, 'FFFEF2F2');
       assert.equal(sheet.pageSetup.orientation, 'landscape');
