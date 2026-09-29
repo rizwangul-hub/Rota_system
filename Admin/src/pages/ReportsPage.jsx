@@ -787,14 +787,6 @@ export default function ReportsPage() {
               >
                 <Download size={14} /> {downloadingMonthlyReport === 'excel' ? 'Preparing Excel...' : 'Export Excel'}
               </button>
-              <button
-                type="button"
-                onClick={() => downloadMonthlyReport('pdf')}
-                disabled={Boolean(downloadingMonthlyReport)}
-                className="btn btn-outline btn-sm"
-              >
-                <Download size={14} /> {downloadingMonthlyReport === 'pdf' ? 'Preparing PDF...' : 'Export PDF'}
-              </button>
             </div>
           </div>
 
@@ -920,12 +912,6 @@ export default function ReportsPage() {
                 onClick={() => handleDownload('/reports/employee-yearly/excel', { employeeId: selectedEmployee, year: selectedYear }, `Employee_Yearly_${selectedEmployee}_${selectedYear}.xlsx`)}
               >
                 <Download size={14} /> Export Excel
-              </button>
-              <button
-                className="btn btn-outline btn-sm"
-                onClick={() => handleDownload('/reports/employee-yearly/pdf', { employeeId: selectedEmployee, year: selectedYear }, `Employee_Yearly_${selectedEmployee}_${selectedYear}.pdf`)}
-              >
-                <Download size={14} /> Export PDF
               </button>
             </div>
           </div>
