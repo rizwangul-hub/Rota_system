@@ -47,8 +47,8 @@ exports.getAdminDashboard = async (req, res) => {
     const shopBreakdown = [];
 
     for (const s of shops) {
-      const shopAttendance = todayAttendance.filter(a => a.shop.toString() === s._id.toString());
-      const shopSalaries = weekSalaries.filter(ws => ws.shop.toString() === s._id.toString());
+      const shopAttendance = todayAttendance.filter(a => a.shop && a.shop.toString() === s._id.toString());
+      const shopSalaries = weekSalaries.filter(ws => ws.shop && ws.shop.toString() === s._id.toString());
       shopBreakdown.push({
         shopId: s._id,
         shopName: s.name,

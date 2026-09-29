@@ -23,6 +23,25 @@ import {
   Info
 } from 'lucide-react';
 
+async function getAttendanceExportErrorMessage(error, format) {
+  const fallback = `Unable to export ${format.toUpperCase()} attendance report.`;
+  const responseData = error.response?.data;
+  if (responseData instanceof Blob) {
+    const contentType = error.response?.headers?.['content-type'] || '';
+    if (contentType.includes('application/json')) {
+      const responseText = await responseData.text();
+      try {
+        const payload = JSON.parse(responseText);
+        return payload.message || fallback;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  }
+  return responseData?.message || fallback;
+}
+
 export default function SarfrazAttendance() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -246,7 +265,8 @@ export default function SarfrazAttendance() {
       showNotification(`${isPdf ? 'PDF' : 'Excel'} attendance report downloaded.`);
     } catch (error) {
       if (error.name !== 'AbortError') {
-        showNotification(error.response?.data?.message || `Unable to export ${format.toUpperCase()} attendance report.`, true);
+        console.error('Attendance report export failed:', format, error.response?.status || 'network error');
+        showNotification(await getAttendanceExportErrorMessage(error, format), true);
       }
     }
   };
