@@ -250,8 +250,13 @@ export default function SarfrazAttendance() {
       );
       const file = new File([response.data], fileName, { type: mimeType });
       if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-        await navigator.share({ files: [file], title: fileName });
-        return;
+        try {
+          await navigator.share({ files: [file], title: fileName });
+          return;
+        } catch (shareError) {
+          if (shareError.name === 'AbortError') return;
+          console.warn('Sharing attendance report failed; downloading it instead:', shareError.name);
+        }
       }
 
       const objectUrl = URL.createObjectURL(file);
@@ -264,10 +269,8 @@ export default function SarfrazAttendance() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
       showNotification(`${isPdf ? 'PDF' : 'Excel'} attendance report downloaded.`);
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.error('Attendance report export failed:', format, error.response?.status || 'network error');
-        showNotification(await getAttendanceExportErrorMessage(error, format), true);
-      }
+      console.error('Attendance report export failed:', format, error.response?.status || 'network error');
+      showNotification(await getAttendanceExportErrorMessage(error, format), true);
     }
   };
 
