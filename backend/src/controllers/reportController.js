@@ -7,10 +7,8 @@ const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const LedgerTransaction = require('../models/LedgerTransaction');
 const PDFDocument = require('pdfkit');
-const {
-  usmanSignBase64,
-  sarfrazSignBase64
-} = require('../assets/signatureData');
+const fs = require('fs');
+const path = require('path');
 const {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
@@ -207,8 +205,14 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       req
     });
 
-    const usmanSign = Buffer.from(usmanSignBase64, 'base64');
-    const sarfrazSign = Buffer.from(sarfrazSignBase64, 'base64');
+    let usmanSign = null;
+    let sarfrazSign = null;
+    try {
+      usmanSign = fs.readFileSync(path.join(__dirname, '../assets/usmansign.png'));
+    } catch (e) { /* image not available */ }
+    try {
+      sarfrazSign = fs.readFileSync(path.join(__dirname, '../assets/sarfrazsign.png'));
+    } catch (e) { /* image not available */ }
 
     // Group records by shop
     const shopGroups = {};
@@ -411,10 +415,12 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     doc.rect(30, curY, sigBoxW, 92).fillAndStroke('#ffffff', BORDER);
     doc.fillColor(SLATE).font('Helvetica').fontSize(8)
        .text('SUBMITTED BY (ATTENDANCE OPERATOR)', 36, curY + 6, { width: sigBoxW - 12 });
-    try {
-      doc.image(usmanSign, 36, curY + 18, { fit: [130, 42] });
-    } catch (e) {
-      console.warn('Failed to embed Usman signature:', e.message);
+    if (usmanSign) {
+      try {
+        doc.image(usmanSign, 36, curY + 18, { fit: [130, 42] });
+      } catch (e) {
+        console.warn('Failed to embed Usman signature:', e.message);
+      }
     }
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9)
        .text('Usman', 36, curY + 64, { width: sigBoxW - 12 });
@@ -426,10 +432,12 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     doc.rect(rightX, curY, sigBoxW, 92).fillAndStroke('#ffffff', BORDER);
     doc.fillColor(SLATE).font('Helvetica').fontSize(8)
        .text('VERIFIED BY (ATTENDANCE CHECKER)', rightX + 6, curY + 6, { width: sigBoxW - 12 });
-    try {
-      doc.image(sarfrazSign, rightX + 6, curY + 18, { fit: [130, 42] });
-    } catch (e) {
-      console.warn('Failed to embed Sarfraz signature:', e.message);
+    if (sarfrazSign) {
+      try {
+        doc.image(sarfrazSign, rightX + 6, curY + 18, { fit: [130, 42] });
+      } catch (e) {
+        console.warn('Failed to embed Sarfraz signature:', e.message);
+      }
     }
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9)
        .text('Sarfraz Khan', rightX + 6, curY + 64, { width: sigBoxW - 12 });
