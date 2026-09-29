@@ -8,6 +8,10 @@ const Shop = require('../models/Shop');
 const LedgerTransaction = require('../models/LedgerTransaction');
 const PDFDocument = require('pdfkit');
 const {
+  usmanSignBase64,
+  sarfrazSignBase64
+} = require('../assets/signatureData');
+const {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
   buildDailyAttendanceExcel,
@@ -177,9 +181,6 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
 
 exports.exportDailyAttendancePDF = async (req, res) => {
   try {
-    const path = require('path');
-    const fs = require('fs');
-
     const { date, shopId, employeeId, status, approvalStatus, search } = req.query;
     const dateStr = date ? getUKDateString(date) : getUKDateString(new Date());
     const query = { dateString: dateStr };
@@ -206,28 +207,8 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       req
     });
 
-    // Signature image paths with embedded fallback for serverless
-    const assetsDir = path.join(__dirname, '../assets');
-    const usmanSignPath = path.join(assetsDir, 'usmansign.png');
-    const sarfrazSignPath = path.join(assetsDir, 'sarfrazsign.png');
-    let usmanSign;
-    let sarfrazSign;
-    try {
-      if (fs.existsSync(usmanSignPath)) {
-        usmanSign = fs.readFileSync(usmanSignPath);
-      }
-    } catch (_) {}
-    try {
-      if (fs.existsSync(sarfrazSignPath)) {
-        sarfrazSign = fs.readFileSync(sarfrazSignPath);
-      }
-    } catch (_) {}
-
-    if (!usmanSign || !sarfrazSign) {
-      const { usmanSignBase64, sarfrazSignBase64 } = require('../assets/signatureData');
-      if (!usmanSign) usmanSign = Buffer.from(usmanSignBase64, 'base64');
-      if (!sarfrazSign) sarfrazSign = Buffer.from(sarfrazSignBase64, 'base64');
-    }
+    const usmanSign = Buffer.from(usmanSignBase64, 'base64');
+    const sarfrazSign = Buffer.from(sarfrazSignBase64, 'base64');
 
     // Group records by shop
     const shopGroups = {};
