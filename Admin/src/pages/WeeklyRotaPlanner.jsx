@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import {
-  AlertCircle, AlertTriangle, Calendar, Check, CheckCircle2, ChevronLeft,
-  ChevronRight, Copy, Download, Plus, Printer, RefreshCw, Save, Trash2,
-  UserCheck, Users, X
+  AlertCircle, AlertTriangle, ArrowRight, Calendar, Check, CheckCircle2,
+  ChevronLeft, ChevronRight, Copy, Download, GripVertical, Maximize2,
+  Minimize2, Move, Plus, Printer, RefreshCw, Save, Trash2, UserCheck,
+  UserX, Users, X
 } from 'lucide-react';
 import { API_BASE_URL } from '../context/AuthContext';
 import './WeeklyRotaPlanner.css';
@@ -62,6 +63,17 @@ export default function WeeklyRotaPlanner() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
+  // Fullscreen & Pick/Drop Modes
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewMode, setViewMode] = useState('GRID'); // 'GRID' (Weekly matrix) or 'BOARD' (Daily drag & drop board)
+  const [selectedDailyDate, setSelectedDailyDate] = useState(() => weekStart);
+
+  // Pick & Drop active state: { employeeId, sourceShopId, dateKey, employeeName, sourceShopName }
+  const [pickedWorker, setPickedWorker] = useState(null);
+
+  // Drag over target tracking
+  const [dragOverTarget, setDragOverTarget] = useState(null); // 'shopId:dateKey' or 'OFF:dateKey'
+
   // Data from backend
   const [shops, setShops] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -83,11 +95,34 @@ export default function WeeklyRotaPlanner() {
   // Days in selected week (Sunday - Saturday)
   const weekDays = useMemo(() => getWeekDates(weekStart), [weekStart]);
 
+  // Keep selectedDailyDate in sync with weekStart if week changes
+  useEffect(() => {
+    setSelectedDailyDate(weekStart);
+  }, [weekStart]);
+
+  // Keyboard shortcut: Escape exits pick mode or fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (pickedWorker) {
+          setPickedWorker(null);
+        } else if (isFullscreen) {
+          setIsFullscreen(false);
+        } else if (activeCell) {
+          setActiveCell(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pickedWorker, isFullscreen, activeCell]);
+
   // Load week rota from backend
   const loadWeek = useCallback(async (targetWeek) => {
     setLoading(true);
     setError('');
     setActiveCell(null);
+    setPickedWorker(null);
     try {
       const res = await axios.get(`${API}/dashboard`, { params: { weekStart: targetWeek } });
       const data = res.data || {};
@@ -193,7 +228,6 @@ export default function WeeklyRotaPlanner() {
   // on the exact same date!
   // -------------------------------------------------------------
   const conflicts = useMemo(() => {
-    // Map of `${employeeId}:${dateKey}` -> Array of { shopId, shopName, status, note }
     const scheduleTracking = {};
 
     shops.forEach(shop => {
@@ -203,21 +237,16 @@ export default function WeeklyRotaPlanner() {
           const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
           const cell = cells[cellKey] || { status: 'AVAILABLE' };
 
-          // Determine where this worker is active:
           let activeShopId = null;
           let activeShopName = '';
 
-          if (cell.status === 'AVAILABLE') {
-            activeShopId = shop._id;
-            activeShopName = shop.name;
-          } else if (cell.status === 'CUSTOM') {
+          if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
             activeShopId = shop._id;
             activeShopName = shop.name;
           } else if (cell.status === 'LOANED' && cell.targetShopId) {
             activeShopId = cell.targetShopId;
             activeShopName = shopMap.get(cell.targetShopId)?.name || 'Other Shop';
           }
-          // Note: if status === 'OFF', the worker is NOT actively working.
 
           if (activeShopId) {
             const trackKey = `${empId}:${day.dateKey}`;
@@ -237,10 +266,8 @@ export default function WeeklyRotaPlanner() {
       });
     });
 
-    // Detect double-bookings
     const foundConflicts = [];
     Object.entries(scheduleTracking).forEach(([trackKey, entries]) => {
-      // If worker is working at multiple different active shops on this day
       const distinctActiveShops = new Set(entries.map(e => e.activeShopId));
       if (distinctActiveShops.size > 1 || entries.length > 1) {
         const [empId, dateKey] = trackKey.split(':');
@@ -295,6 +322,89 @@ export default function WeeklyRotaPlanner() {
     });
     setCells(updated);
     setNotice(`Resolved: Kept ${conflict.employeeName} at ${shopMap.get(targetShopId)?.name || 'shop'} on ${conflict.dayName}.`);
+  };
+
+  // -------------------------------------------------------------
+  // PICK & DROP / DRAG & DROP ENGINE (PREVENTS DOUBLE BOOKING!)
+  // Moving a worker automatically clears them from other shops!
+  // -------------------------------------------------------------
+  const moveWorkerToTarget = (employeeId, targetShopId, dateKey) => {
+    // If targetShopId is null, it means mark as OFF for this day!
+    setCells(prev => {
+      const next = { ...prev };
+
+      // Set/update for every shop in roster that has this employee
+      shops.forEach(s => {
+        const key = `${s._id}:${employeeId}:${dateKey}`;
+        if (targetShopId === null) {
+          // Set to OFF
+          next[key] = { status: 'OFF', targetShopId: null, targetShopName: '', note: 'OFF' };
+        } else if (s._id === targetShopId) {
+          // Target shop: they are Available!
+          next[key] = { status: 'AVAILABLE', targetShopId: null, targetShopName: '', note: '' };
+        } else if (next[key]?.status === 'AVAILABLE' || next[key]?.status === 'CUSTOM') {
+          // Source or other shop: set to OFF so they are NOT in multiple shops!
+          next[key] = {
+            status: 'OFF',
+            targetShopId: null,
+            targetShopName: '',
+            note: `At ${shopMap.get(targetShopId)?.name || 'other shop'}`
+          };
+        }
+      });
+
+      return next;
+    });
+
+    // Make sure worker is included in target shop roster
+    if (targetShopId) {
+      setShopRosters(prev => {
+        const list = prev[targetShopId] || [];
+        if (list.includes(employeeId)) return prev;
+        return { ...prev, [targetShopId]: [...list, employeeId] };
+      });
+    }
+
+    const empName = employeeMap.get(employeeId)?.name || 'Worker';
+    const day = weekDays.find(d => d.dateKey === dateKey);
+    const destName = targetShopId ? shopMap.get(targetShopId)?.name : 'Day Off (OFF)';
+    setNotice(`Moved ${empName} to ${destName} on ${day?.dayName || dateKey} cleanly.`);
+
+    setPickedWorker(null);
+    setDragOverTarget(null);
+  };
+
+  // HTML5 Drag & Drop Handlers
+  const handleDragStart = (e, employeeId, sourceShopId, dateKey) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ employeeId, sourceShopId, dateKey }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, targetKey) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverTarget !== targetKey) {
+      setDragOverTarget(targetKey);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverTarget(null);
+  };
+
+  const handleDrop = (e, targetShopId, dateKey) => {
+    e.preventDefault();
+    setDragOverTarget(null);
+    try {
+      const dataStr = e.dataTransfer.getData('text/plain');
+      if (!dataStr) return;
+      const data = JSON.parse(dataStr);
+      if (data.employeeId) {
+        moveWorkerToTarget(data.employeeId, targetShopId, dateKey || data.dateKey);
+      }
+    } catch (err) {
+      console.error('Drop error:', err);
+    }
   };
 
   // -------------------------------------------------------------
@@ -364,7 +474,6 @@ export default function WeeklyRotaPlanner() {
       [shopId]: (prev[shopId] || []).filter(id => id !== employeeId)
     }));
 
-    // Clean up cells for this worker in this shop
     setCells(prev => {
       const next = { ...prev };
       weekDays.forEach(day => {
@@ -376,9 +485,7 @@ export default function WeeklyRotaPlanner() {
     setNotice(`Removed ${emp?.name || 'worker'} from ${shopMap.get(shopId)?.name || 'shop'}.`);
   };
 
-  // -------------------------------------------------------------
-  // COPY FROM PREVIOUS WEEK
-  // -------------------------------------------------------------
+  // Copy From Previous Week
   const copyFromPreviousWeek = async () => {
     const prevDate = new Date(`${weekStart}T12:00:00.000Z`);
     prevDate.setUTCDate(prevDate.getUTCDate() - 7);
@@ -396,7 +503,6 @@ export default function WeeklyRotaPlanner() {
         return;
       }
 
-      // Copy Shop Rosters
       const newRosters = {};
       shops.forEach(s => { newRosters[s._id] = []; });
 
@@ -409,7 +515,6 @@ export default function WeeklyRotaPlanner() {
         });
       }
 
-      // Map assignments to current week days by weekday index (0-6)
       const prevDays = getWeekDates(prevWeekKey);
       const newCells = {};
 
@@ -446,9 +551,7 @@ export default function WeeklyRotaPlanner() {
     }
   };
 
-  // -------------------------------------------------------------
-  // SAVE ROTA DRAFT
-  // -------------------------------------------------------------
+  // Save Rota Draft
   const saveRota = async () => {
     if (conflicts.length > 0) {
       if (!window.confirm(
@@ -461,8 +564,6 @@ export default function WeeklyRotaPlanner() {
     setNotice('');
 
     try {
-      // 1. Build assignments list
-      // Only include shifts where worker is actually assigned or explicitly set
       const assignments = [];
       const shopRosterPayload = [];
 
@@ -478,7 +579,6 @@ export default function WeeklyRotaPlanner() {
             const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
             const cell = cells[cellKey] || { status: 'AVAILABLE' };
 
-            // Determine if worker is active or off
             if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
               assignments.push({
                 employeeId: empId,
@@ -491,7 +591,6 @@ export default function WeeklyRotaPlanner() {
                 homeShopId: shop._id
               });
             } else if (cell.status === 'LOANED' && cell.targetShopId) {
-              // Worker loaned to another shop: record under the target shop
               assignments.push({
                 employeeId: empId,
                 shopId: cell.targetShopId,
@@ -527,22 +626,12 @@ export default function WeeklyRotaPlanner() {
     }
   };
 
-  // Print Rota
-  const printRota = () => {
-    window.print();
-  };
+  const printRota = () => window.print();
+  const downloadExcel = () => window.open(`${API}/week/${weekStart}/export.xlsx`, '_blank');
 
-  // Download Excel
-  const downloadExcel = () => {
-    window.open(`${API}/week/${weekStart}/export.xlsx`, '_blank');
-  };
-
-  // -------------------------------------------------------------
-  // CALCULATE ACTIVE TOTALS PER SHOP PER DAY
-  // -------------------------------------------------------------
+  // Calculate active totals per shop per day
   const getShopDayTotal = (shopId, dateKey) => {
     let count = 0;
-    // 1. Count home workers scheduled here
     const workerIds = shopRosters[shopId] || [];
     workerIds.forEach(empId => {
       const cellKey = `${shopId}:${empId}:${dateKey}`;
@@ -552,7 +641,6 @@ export default function WeeklyRotaPlanner() {
       }
     });
 
-    // 2. Count workers LOANED IN from other shops to this shop
     shops.forEach(otherShop => {
       if (otherShop._id === shopId) return;
       const otherWorkers = shopRosters[otherShop._id] || [];
@@ -568,42 +656,124 @@ export default function WeeklyRotaPlanner() {
     return count;
   };
 
+  // Get active staff for a shop on a single day (for Board view)
+  const getShopStaffForDay = (shopId, dateKey) => {
+    const list = [];
+    const workerIds = shopRosters[shopId] || [];
+    workerIds.forEach(empId => {
+      const cellKey = `${shopId}:${empId}:${dateKey}`;
+      const cell = cells[cellKey] || { status: 'AVAILABLE' };
+      if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
+        list.push({ employeeId: empId, homeShopId: shopId, status: cell.status, note: cell.note });
+      }
+    });
+
+    // Loaned in from other shops
+    shops.forEach(otherShop => {
+      if (otherShop._id === shopId) return;
+      const otherWorkers = shopRosters[otherShop._id] || [];
+      otherWorkers.forEach(empId => {
+        const cellKey = `${otherShop._id}:${empId}:${dateKey}`;
+        const cell = cells[cellKey];
+        if (cell && cell.status === 'LOANED' && cell.targetShopId === shopId) {
+          list.push({ employeeId: empId, homeShopId: otherShop._id, status: 'LOANED', note: `From ${otherShop.name}` });
+        }
+      });
+    });
+
+    return list;
+  };
+
+  // Get workers who are OFF on a single day (for Board view)
+  const getOffStaffForDay = (dateKey) => {
+    const offList = [];
+    const seen = new Set();
+
+    shops.forEach(shop => {
+      const workerIds = shopRosters[shop._id] || [];
+      workerIds.forEach(empId => {
+        const cellKey = `${shop._id}:${empId}:${dateKey}`;
+        const cell = cells[cellKey];
+        if (cell?.status === 'OFF' && !seen.has(empId)) {
+          seen.add(empId);
+          offList.push({ employeeId: empId, homeShopId: shop._id, note: cell.note || 'OFF' });
+        }
+      });
+    });
+
+    return offList;
+  };
+
   return (
-    <div className="page-container weekly-rota-page">
+    <div className={`page-container weekly-rota-page ${isFullscreen ? 'rota-fullscreen-active' : ''}`}>
       {/* ── HEADER & ACTIONS ────────────────────────────────────────── */}
       <div className="rota-top-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 className="rota-main-title">Weekly Rota Planner</h1>
             <span className="rota-version-badge">Live Planner</span>
+            {isFullscreen && (
+              <span className="fullscreen-active-badge">⛶ Fullscreen Board</span>
+            )}
           </div>
           <p className="rota-sub-title">
-            Set weekly schedule for all shops in advance. Prevent double-booking and assign shifts quickly.
+            Set weekly schedule for all shops in advance with Pick & Drop. Prevents double-booking automatically.
           </p>
         </div>
 
         <div className="rota-top-actions">
+          {/* Fullscreen Toggle Button */}
+          <button
+            className={`btn btn-sm rota-btn-fullscreen ${isFullscreen ? 'btn-danger' : 'btn-outline'}`}
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? 'Exit full screen view' : 'Open rota on full screen for easy Pick & Drop'}
+          >
+            {isFullscreen ? (
+              <><Minimize2 size={15} /> Exit Fullscreen</>
+            ) : (
+              <><Maximize2 size={15} /> Fullscreen Board</>
+            )}
+          </button>
+
+          {/* View Mode Switcher in Fullscreen */}
+          {isFullscreen && (
+            <div className="rota-view-switch">
+              <button
+                className={`switch-tab ${viewMode === 'GRID' ? 'active' : ''}`}
+                onClick={() => setViewMode('GRID')}
+              >
+                Weekly Matrix
+              </button>
+              <button
+                className={`switch-tab ${viewMode === 'BOARD' ? 'active' : ''}`}
+                onClick={() => setViewMode('BOARD')}
+              >
+                Daily Pick & Drop Board
+              </button>
+            </div>
+          )}
+
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={copyFromPreviousWeek}
             disabled={copying || loading}
             title="Copy previous week's entire rota to save time"
           >
-            <Copy size={15} /> {copying ? 'Copying…' : 'Copy From Last Week'}
+            <Copy size={15} /> {copying ? 'Copying…' : 'Copy Last Week'}
           </button>
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={printRota}
             title="Print clean landscape weekly sheet"
           >
-            <Printer size={15} /> Print Rota
+            <Printer size={15} /> Print
           </button>
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={downloadExcel}
             title="Download multi-shop formatted Excel sheet"
           >
-            <Download size={15} /> Export Excel
+            <Download size={15} /> Excel
           </button>
           <button
             className="btn btn-primary btn-sm rota-btn-save"
@@ -719,199 +889,456 @@ export default function WeeklyRotaPlanner() {
         </div>
       )}
 
-      {/* ── MAIN SHOPS ROTA TABLES ───────────────────────────────── */}
-      {loading ? (
-        <div className="card" style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-          <RefreshCw size={24} className="spin-icon" style={{ marginBottom: '10px' }} />
-          <div>Loading weekly rota schedule…</div>
+      {/* ── PICK & DROP FLOATING ACTION BAR ─────────────────────── */}
+      {pickedWorker && (
+        <div className="pick-drop-float-bar">
+          <div className="pick-info">
+            <span className="pick-icon">📌</span>
+            <div>
+              <strong>Picked: {pickedWorker.employeeName}</strong>
+              <div style={{ fontSize: '11px', color: '#cbd5e1' }}>
+                Day: {weekDays.find(d => d.dateKey === pickedWorker.dateKey)?.dayName || pickedWorker.dateKey} • From: {pickedWorker.sourceShopName}
+              </div>
+            </div>
+          </div>
+
+          <div className="pick-dest-buttons">
+            <span style={{ fontSize: '11px', color: '#cbd5e1', alignSelf: 'center' }}>Click to Move:</span>
+            {shops.map(s => (
+              <button
+                key={s._id}
+                className="btn btn-sm btn-pick-dest"
+                onClick={() => moveWorkerToTarget(pickedWorker.employeeId, s._id, pickedWorker.dateKey)}
+              >
+                {s.name}
+              </button>
+            ))}
+            <button
+              className="btn btn-sm btn-pick-off"
+              onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, pickedWorker.dateKey)}
+            >
+              🔴 Set to OFF
+            </button>
+            <button
+              className="btn btn-sm btn-pick-cancel"
+              onClick={() => setPickedWorker(null)}
+            >
+              ✕ Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── DAILY DISPATCH BOARD (KANBAN PICK & DROP MODE) ───────── */}
+      {isFullscreen && viewMode === 'BOARD' ? (
+        <div className="rota-daily-board-container card">
+          {/* Day Tabs */}
+          <div className="daily-board-day-tabs">
+            {weekDays.map(d => (
+              <button
+                key={d.dateKey}
+                className={`daily-tab-btn ${selectedDailyDate === d.dateKey ? 'active' : ''}`}
+                onClick={() => setSelectedDailyDate(d.dateKey)}
+              >
+                <span className="tab-day">{d.dayName}</span>
+                <span className="tab-date">{d.dateFormatted}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Columns Grid */}
+          <div className="daily-board-columns-grid">
+            {shops.map(shop => {
+              const style = getShopStyle(shop.name);
+              const staffList = getShopStaffForDay(shop._id, selectedDailyDate);
+              const isTargetHovered = dragOverTarget === `${shop._id}:${selectedDailyDate}`;
+
+              return (
+                <div
+                  key={shop._id}
+                  className={`daily-shop-column ${isTargetHovered ? 'drag-over-active' : ''}`}
+                  style={{ borderColor: style.border }}
+                  onDragOver={(e) => handleDragOver(e, `${shop._id}:${selectedDailyDate}`)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, shop._id, selectedDailyDate)}
+                >
+                  {/* Column Header */}
+                  <div className="column-header" style={{ background: style.pillBg, borderBottom: `2px solid ${style.color}` }}>
+                    <div>
+                      <strong style={{ color: style.text, fontSize: '14px' }}>{shop.name}</strong>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>{staffList.length} staff working</div>
+                    </div>
+                    {/* Quick drop button if picked */}
+                    {pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
+                      <button
+                        className="btn btn-sm btn-primary drop-here-btn"
+                        onClick={() => moveWorkerToTarget(pickedWorker.employeeId, shop._id, selectedDailyDate)}
+                      >
+                        Drop Here
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Worker Cards */}
+                  <div className="column-cards-list">
+                    {staffList.length === 0 ? (
+                      <div className="empty-column-dropzone">
+                        <span>Drag or Drop worker here</span>
+                      </div>
+                    ) : (
+                      staffList.map(item => {
+                        const emp = employeeMap.get(item.employeeId);
+                        const isPicked = pickedWorker?.employeeId === item.employeeId && pickedWorker?.dateKey === selectedDailyDate;
+
+                        return (
+                          <div
+                            key={item.employeeId}
+                            className={`worker-drag-card ${isPicked ? 'picked-card-highlight' : ''}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item.employeeId, item.homeShopId, selectedDailyDate)}
+                          >
+                            <div className="card-top-row">
+                              <span className="card-grip"><GripVertical size={14} color="#94a3b8" /></span>
+                              <strong className="card-name">{emp?.name || 'Worker'}</strong>
+                              <span className="card-id">{emp?.employeeId || ''}</span>
+                            </div>
+
+                            {item.note && (
+                              <div className="card-note-badge">{item.note}</div>
+                            )}
+
+                            <div className="card-action-bar">
+                              <button
+                                className="card-pick-btn"
+                                onClick={() => setPickedWorker({
+                                  employeeId: item.employeeId,
+                                  sourceShopId: item.homeShopId,
+                                  dateKey: selectedDailyDate,
+                                  employeeName: emp?.name || 'Worker',
+                                  sourceShopName: shop.name
+                                })}
+                                title="Pick to move this worker to another shop"
+                              >
+                                <Move size={12} /> {isPicked ? 'Picked' : 'Move'}
+                              </button>
+                              <button
+                                className="card-off-btn"
+                                onClick={() => moveWorkerToTarget(item.employeeId, null, selectedDailyDate)}
+                                title="Mark as OFF for this day"
+                              >
+                                Set OFF
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* OFF / ABSENT COLUMN */}
+            <div
+              className={`daily-shop-column column-off-pool ${dragOverTarget === `OFF:${selectedDailyDate}` ? 'drag-over-active' : ''}`}
+              onDragOver={(e) => handleDragOver(e, `OFF:${selectedDailyDate}`)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, null, selectedDailyDate)}
+            >
+              <div className="column-header header-off">
+                <div>
+                  <strong style={{ color: '#991b1b', fontSize: '14px' }}>🔴 OFF / Absent</strong>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {getOffStaffForDay(selectedDailyDate).length} staff off
+                  </div>
+                </div>
+                {pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
+                  <button
+                    className="btn btn-sm btn-danger drop-here-btn"
+                    onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, selectedDailyDate)}
+                  >
+                    Drop to OFF
+                  </button>
+                )}
+              </div>
+
+              <div className="column-cards-list">
+                {getOffStaffForDay(selectedDailyDate).length === 0 ? (
+                  <div className="empty-column-dropzone">
+                    <span>No staff off today</span>
+                  </div>
+                ) : (
+                  getOffStaffForDay(selectedDailyDate).map(item => {
+                    const emp = employeeMap.get(item.employeeId);
+                    const isPicked = pickedWorker?.employeeId === item.employeeId && pickedWorker?.dateKey === selectedDailyDate;
+
+                    return (
+                      <div
+                        key={item.employeeId}
+                        className={`worker-drag-card card-off-item ${isPicked ? 'picked-card-highlight' : ''}`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, item.employeeId, item.homeShopId, selectedDailyDate)}
+                      >
+                        <div className="card-top-row">
+                          <span className="card-grip"><GripVertical size={14} color="#94a3b8" /></span>
+                          <strong className="card-name" style={{ color: '#991b1b' }}>{emp?.name || 'Worker'}</strong>
+                          <span className="card-id">{emp?.employeeId || ''}</span>
+                        </div>
+                        <div className="card-action-bar">
+                          <button
+                            className="card-pick-btn"
+                            onClick={() => setPickedWorker({
+                              employeeId: item.employeeId,
+                              sourceShopId: item.homeShopId,
+                              dateKey: selectedDailyDate,
+                              employeeName: emp?.name || 'Worker',
+                              sourceShopName: 'OFF'
+                            })}
+                          >
+                            <Move size={12} /> Assign to Shop
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="rota-shops-container">
-          {shops.map(shop => {
-            const style = getShopStyle(shop.name);
-            const workerIds = shopRosters[shop._id] || [];
-            const isAddingWorker = addingWorkerShopId === shop._id;
+        /* ── WEEKLY MATRIX VIEW (GRID) ────────────────────────────── */
+        loading ? (
+          <div className="card" style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+            <RefreshCw size={24} className="spin-icon" style={{ marginBottom: '10px' }} />
+            <div>Loading weekly rota schedule…</div>
+          </div>
+        ) : (
+          <div className="rota-shops-container">
+            {shops.map(shop => {
+              const style = getShopStyle(shop.name);
+              const workerIds = shopRosters[shop._id] || [];
+              const isAddingWorker = addingWorkerShopId === shop._id;
+              const availableToAdd = employees.filter(e => !workerIds.includes(e._id));
 
-            // Filter active employees not yet in this shop's roster
-            const availableToAdd = employees.filter(e => !workerIds.includes(e._id));
-
-            return (
-              <div key={shop._id} className="shop-rota-card card">
-                {/* Shop Card Header */}
-                <div
-                  className="shop-card-header"
-                  style={{ borderLeft: `6px solid ${style.color}` }}
-                >
-                  <div className="shop-title-wrap">
-                    <span
-                      className="shop-pill-badge"
-                      style={{ background: style.pillBg, color: style.text, borderColor: style.border }}
-                    >
-                      {shop.name}
-                    </span>
-                    <span className="shop-staff-count">
-                      {workerIds.length} worker{workerIds.length === 1 ? '' : 's'} assigned
-                    </span>
-                  </div>
-
-                  <div className="shop-header-actions">
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        className="btn btn-outline btn-sm add-worker-btn"
-                        onClick={() => setAddingWorkerShopId(isAddingWorker ? null : shop._id)}
+              return (
+                <div key={shop._id} className="shop-rota-card card">
+                  {/* Shop Card Header */}
+                  <div
+                    className="shop-card-header"
+                    style={{ borderLeft: `6px solid ${style.color}` }}
+                  >
+                    <div className="shop-title-wrap">
+                      <span
+                        className="shop-pill-badge"
+                        style={{ background: style.pillBg, color: style.text, borderColor: style.border }}
                       >
-                        <Plus size={14} /> Add Worker
-                      </button>
+                        {shop.name}
+                      </span>
+                      <span className="shop-staff-count">
+                        {workerIds.length} worker{workerIds.length === 1 ? '' : 's'} assigned
+                      </span>
+                    </div>
 
-                      {isAddingWorker && (
-                        <div className="add-worker-popover card">
-                          <div className="add-worker-header">
-                            <span>Add Worker to {shop.name}</span>
-                            <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                    <div className="shop-header-actions">
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          className="btn btn-outline btn-sm add-worker-btn"
+                          onClick={() => setAddingWorkerShopId(isAddingWorker ? null : shop._id)}
+                        >
+                          <Plus size={14} /> Add Worker
+                        </button>
+
+                        {isAddingWorker && (
+                          <div className="add-worker-popover card">
+                            <div className="add-worker-header">
+                              <span>Add Worker to {shop.name}</span>
+                              <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                            </div>
+                            <div className="add-worker-list">
+                              {availableToAdd.length === 0 ? (
+                                <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
+                                  All active workers are already in this shop's roster.
+                                </div>
+                              ) : (
+                                availableToAdd.map(emp => (
+                                  <button
+                                    key={emp._id}
+                                    className="add-worker-item"
+                                    onClick={() => addWorkerToShop(shop._id, emp._id)}
+                                  >
+                                    <strong>{emp.name}</strong>
+                                    <span>{emp.employeeId}</span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
                           </div>
-                          <div className="add-worker-list">
-                            {availableToAdd.length === 0 ? (
-                              <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
-                                All active workers are already in this shop's roster.
-                              </div>
-                            ) : (
-                              availableToAdd.map(emp => (
-                                <button
-                                  key={emp._id}
-                                  className="add-worker-item"
-                                  onClick={() => addWorkerToShop(shop._id, emp._id)}
-                                >
-                                  <strong>{emp.name}</strong>
-                                  <span>{emp.employeeId}</span>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Shop Matrix Table */}
-                <div className="table-responsive">
-                  <table className="custom-table rota-matrix-table">
-                    <thead>
-                      <tr>
-                        <th className="th-worker-name">Name</th>
-                        {weekDays.map(day => (
-                          <th key={day.dateKey} className="th-day-col">
-                            <div className="day-col-header">
-                              <span className="day-name">{day.dayName}</span>
-                              <span className="day-date">{day.dateFormatted}</span>
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workerIds.length === 0 ? (
+                  {/* Shop Matrix Table */}
+                  <div className="table-responsive">
+                    <table className="custom-table rota-matrix-table">
+                      <thead>
                         <tr>
-                          <td colSpan="8" className="empty-roster-msg">
-                            No workers assigned to this shop yet. Click <strong>+ Add Worker</strong> above to start.
-                          </td>
+                          <th className="th-worker-name">Name</th>
+                          {weekDays.map(day => (
+                            <th
+                              key={day.dateKey}
+                              className={`th-day-col ${dragOverTarget === `${shop._id}:${day.dateKey}` ? 'th-drag-hover' : ''}`}
+                              onDragOver={(e) => handleDragOver(e, `${shop._id}:${day.dateKey}`)}
+                              onDragLeave={handleDragLeave}
+                              onDrop={(e) => handleDrop(e, shop._id, day.dateKey)}
+                            >
+                              <div className="day-col-header">
+                                <span className="day-name">{day.dayName}</span>
+                                <span className="day-date">{day.dateFormatted}</span>
+                              </div>
+                            </th>
+                          ))}
                         </tr>
-                      ) : (
-                        workerIds.map(empId => {
-                          const emp = employeeMap.get(empId);
-                          const empName = emp?.name || 'Unknown Worker';
-                          const empCode = emp?.employeeId || '';
-
-                          return (
-                            <tr key={empId}>
-                              <td className="td-worker-cell">
-                                <div className="worker-info-wrap">
-                                  <div>
-                                    <div className="worker-name-label">{empName}</div>
-                                    <div className="worker-id-sub">{empCode}</div>
-                                  </div>
-                                  <button
-                                    className="remove-worker-btn"
-                                    onClick={() => removeWorkerFromShop(shop._id, empId)}
-                                    title="Remove from this shop's roster"
-                                    aria-label="Remove worker"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              </td>
-
-                              {weekDays.map(day => {
-                                const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
-                                const cell = cells[cellKey] || { status: 'AVAILABLE' };
-                                const conflicted = isCellConflicted(shop._id, empId, day.dateKey);
-
-                                let cellClass = 'rota-cell-btn';
-                                let cellLabel = 'Available';
-                                let cellStyle = {};
-
-                                if (conflicted) {
-                                  cellClass += ' cell-conflicted';
-                                } else if (cell.status === 'OFF') {
-                                  cellClass += ' cell-off';
-                                  cellLabel = 'OFF';
-                                } else if (cell.status === 'LOANED' && cell.targetShopId) {
-                                  const targetShop = shopMap.get(cell.targetShopId);
-                                  const targetStyle = getShopStyle(targetShop?.name || '');
-                                  cellClass += ' cell-loaned';
-                                  cellLabel = targetShop?.name || 'Other Shop';
-                                  cellStyle = {
-                                    backgroundColor: targetStyle.pillBg,
-                                    color: targetStyle.text,
-                                    borderColor: targetStyle.border
-                                  };
-                                } else if (cell.status === 'CUSTOM' && cell.note) {
-                                  cellClass += ' cell-custom';
-                                  cellLabel = cell.note;
-                                } else {
-                                  cellClass += ' cell-available';
-                                  cellLabel = 'Available';
-                                }
-
-                                return (
-                                  <td key={day.dateKey} className="td-cell-slot">
-                                    <button
-                                      type="button"
-                                      className={cellClass}
-                                      style={cellStyle}
-                                      onClick={(e) => openCellPopover(shop._id, empId, day.dateKey, e)}
-                                      title="Click to change shift or shop"
-                                    >
-                                      {conflicted && <span className="conflict-dot">⚠️</span>}
-                                      <span>{cellLabel}</span>
-                                    </button>
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })
-                      )}
-
-                      {/* Total Staff Row */}
-                      <tr className="tr-total-row">
-                        <td className="td-total-label">Total</td>
-                        {weekDays.map(day => {
-                          const total = getShopDayTotal(shop._id, day.dateKey);
-                          return (
-                            <td key={day.dateKey} className="td-total-count">
-                              <strong>{total}</strong>
+                      </thead>
+                      <tbody>
+                        {workerIds.length === 0 ? (
+                          <tr>
+                            <td colSpan="8" className="empty-roster-msg">
+                              No workers assigned to this shop yet. Click <strong>+ Add Worker</strong> above to start.
                             </td>
-                          );
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
+                          </tr>
+                        ) : (
+                          workerIds.map(empId => {
+                            const emp = employeeMap.get(empId);
+                            const empName = emp?.name || 'Unknown Worker';
+                            const empCode = emp?.employeeId || '';
+
+                            return (
+                              <tr key={empId}>
+                                <td className="td-worker-cell">
+                                  <div className="worker-info-wrap">
+                                    <div>
+                                      <div className="worker-name-label">{empName}</div>
+                                      <div className="worker-id-sub">{empCode}</div>
+                                    </div>
+                                    <button
+                                      className="remove-worker-btn"
+                                      onClick={() => removeWorkerFromShop(shop._id, empId)}
+                                      title="Remove from this shop's roster"
+                                      aria-label="Remove worker"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </div>
+                                </td>
+
+                                {weekDays.map(day => {
+                                  const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
+                                  const cell = cells[cellKey] || { status: 'AVAILABLE' };
+                                  const conflicted = isCellConflicted(shop._id, empId, day.dateKey);
+                                  const isPicked = pickedWorker?.employeeId === empId && pickedWorker?.dateKey === day.dateKey;
+
+                                  let cellClass = 'rota-cell-btn';
+                                  let cellLabel = 'Available';
+                                  let cellStyle = {};
+
+                                  if (conflicted) {
+                                    cellClass += ' cell-conflicted';
+                                  } else if (cell.status === 'OFF') {
+                                    cellClass += ' cell-off';
+                                    cellLabel = 'OFF';
+                                  } else if (cell.status === 'LOANED' && cell.targetShopId) {
+                                    const targetShop = shopMap.get(cell.targetShopId);
+                                    const targetStyle = getShopStyle(targetShop?.name || '');
+                                    cellClass += ' cell-loaned';
+                                    cellLabel = targetShop?.name || 'Other Shop';
+                                    cellStyle = {
+                                      backgroundColor: targetStyle.pillBg,
+                                      color: targetStyle.text,
+                                      borderColor: targetStyle.border
+                                    };
+                                  } else if (cell.status === 'CUSTOM' && cell.note) {
+                                    cellClass += ' cell-custom';
+                                    cellLabel = cell.note;
+                                  } else {
+                                    cellClass += ' cell-available';
+                                    cellLabel = 'Available';
+                                  }
+
+                                  if (isPicked) {
+                                    cellClass += ' cell-picked-ring';
+                                  }
+
+                                  return (
+                                    <td
+                                      key={day.dateKey}
+                                      className="td-cell-slot"
+                                      onDragOver={(e) => handleDragOver(e, `${shop._id}:${day.dateKey}`)}
+                                      onDragLeave={handleDragLeave}
+                                      onDrop={(e) => handleDrop(e, shop._id, day.dateKey)}
+                                    >
+                                      <div className="cell-drag-wrap">
+                                        <button
+                                          type="button"
+                                          className={cellClass}
+                                          style={cellStyle}
+                                          draggable
+                                          onDragStart={(e) => handleDragStart(e, empId, shop._id, day.dateKey)}
+                                          onClick={(e) => openCellPopover(shop._id, empId, day.dateKey, e)}
+                                          title="Click to edit, or drag & drop to another shop"
+                                        >
+                                          {conflicted && <span className="conflict-dot">⚠️</span>}
+                                          <span>{cellLabel}</span>
+                                        </button>
+
+                                        {/* Quick Pick Button on Hover */}
+                                        <button
+                                          type="button"
+                                          className="quick-pick-btn"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPickedWorker({
+                                              employeeId: empId,
+                                              sourceShopId: shop._id,
+                                              dateKey: day.dateKey,
+                                              employeeName: empName,
+                                              sourceShopName: shop.name
+                                            });
+                                          }}
+                                          title="Pick worker to move to another shop"
+                                        >
+                                          <Move size={11} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })
+                        )}
+
+                        {/* Total Staff Row */}
+                        <tr className="tr-total-row">
+                          <td className="td-total-label">Total</td>
+                          {weekDays.map(day => {
+                            const total = getShopDayTotal(shop._id, day.dateKey);
+                            return (
+                              <td key={day.dateKey} className="td-total-count">
+                                <strong>{total}</strong>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
       )}
 
       {/* ── INTERACTIVE CELL POPOVER / MODAL ─────────────────────── */}
@@ -953,7 +1380,28 @@ export default function WeeklyRotaPlanner() {
                 </button>
               </div>
 
-              {/* Loan to Another Shop */}
+              {/* Move / Pick worker button */}
+              <div style={{ marginTop: '12px' }}>
+                <button
+                  className="btn btn-outline btn-sm"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  onClick={() => {
+                    const emp = employeeMap.get(activeCell.employeeId);
+                    setPickedWorker({
+                      employeeId: activeCell.employeeId,
+                      sourceShopId: activeCell.shopId,
+                      dateKey: activeCell.dateKey,
+                      employeeName: emp?.name || 'Worker',
+                      sourceShopName: shopMap.get(activeCell.shopId)?.name || 'Shop'
+                    });
+                    closeCellPopover();
+                  }}
+                >
+                  <Move size={14} /> 📌 Pick & Move to Another Shop
+                </button>
+              </div>
+
+              {/* Transfer / Send to Another Shop */}
               <div className="popover-section-title" style={{ marginTop: '14px' }}>
                 Transfer / Send to Another Shop:
               </div>
