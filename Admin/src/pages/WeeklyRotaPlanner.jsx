@@ -148,19 +148,9 @@ export default function WeeklyRotaPlanner() {
             rosters[sId] = (sr.employeeIds || []).map(e => String(e._id || e));
           }
         });
-      } else {
-        // First time opening: populate from employee assignedShop or assignments
-        activeEmployees.forEach(emp => {
-          const homeShopId = String(emp.assignedShop?._id || emp.assignedShop || '');
-          if (homeShopId && rosters[homeShopId]) {
-            if (!rosters[homeShopId].includes(emp._id)) {
-              rosters[homeShopId].push(emp._id);
-            }
-          }
-        });
-
-        // Also check if any assignment exists in this rota
-        (rota?.assignments || []).forEach(a => {
+      } else if (rota?.assignments && rota.assignments.length > 0) {
+        // Rota exists with assignments but no shopRoster saved yet — rebuild from assignments
+        rota.assignments.forEach(a => {
           const sId = String(a.shopId?._id || a.shopId);
           const eId = String(a.employeeId?._id || a.employeeId);
           if (rosters[sId] && !rosters[sId].includes(eId)) {
@@ -168,6 +158,7 @@ export default function WeeklyRotaPlanner() {
           }
         });
       }
+      // else: brand new week — keep all rosters empty so admin adds workers manually
 
       setShopRosters(rosters);
 
