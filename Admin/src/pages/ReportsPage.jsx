@@ -477,12 +477,6 @@ export default function ReportsPage() {
             >
               <Download size={14} /> Export Excel
             </button>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => handleDownload('/reports/daily-attendance/pdf', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Daily_Attendance_${selectedDate}.pdf`)}
-            >
-              <Download size={14} /> Export PDF
-            </button>
           </div>
 
           {/* Records Table */}
@@ -621,12 +615,6 @@ export default function ReportsPage() {
             >
               <Download size={14} /> Export Excel
             </button>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => handleDownload('/reports/weekly-attendance/pdf', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Attendance_${selectedDate}.pdf`)}
-            >
-              <Download size={14} /> Export PDF
-            </button>
           </div>
 
           <div className="card">
@@ -713,12 +701,6 @@ export default function ReportsPage() {
               onClick={() => handleDownload('/reports/weekly-salary/excel', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Salary_${selectedDate}.xlsx`)}
             >
               <Download size={14} /> Export Excel
-            </button>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => handleDownload('/reports/weekly-salary/pdf', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Salary_${selectedDate}.pdf`)}
-            >
-              <Download size={14} /> Export PDF
             </button>
           </div>
 
