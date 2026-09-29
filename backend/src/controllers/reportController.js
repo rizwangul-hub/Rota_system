@@ -7,8 +7,10 @@ const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const LedgerTransaction = require('../models/LedgerTransaction');
 const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path = require('path');
+const {
+  usmanSignBase64,
+  sarfrazSignBase64
+} = require('../assets/signatureData');
 const {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
@@ -205,14 +207,8 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       req
     });
 
-    let usmanSign = null;
-    let sarfrazSign = null;
-    try {
-      usmanSign = fs.readFileSync(path.join(__dirname, '../assets/usmansign.png'));
-    } catch (e) { /* image not available */ }
-    try {
-      sarfrazSign = fs.readFileSync(path.join(__dirname, '../assets/sarfrazsign.png'));
-    } catch (e) { /* image not available */ }
+    const usmanSign = Buffer.from(usmanSignBase64, 'base64');
+    const sarfrazSign = Buffer.from(sarfrazSignBase64, 'base64');
 
     // Group records by shop
     const shopGroups = {};
