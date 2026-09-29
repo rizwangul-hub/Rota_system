@@ -65,9 +65,6 @@ export default function ReportsPage() {
       ]);
       if (shopsRes.data.success) setShops(shopsRes.data.shops || []);
       if (empRes.data.success) setEmployees(empRes.data.employees || []);
-      if (empRes.data.employees && empRes.data.employees.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(empRes.data.employees[0]._id);
-      }
     } catch (err) {
       console.error('Error fetching metadata:', err);
       setErrorMsg(!err.response
@@ -96,16 +93,20 @@ export default function ReportsPage() {
         });
         if (res.data.success) setWeeklySalaryData(res.data);
       } else if (activeTab === 'employee_monthly' && isAdmin) {
-        if (!selectedEmployee) return;
+        const empId = selectedEmployee || (employees.length > 0 ? employees[0]._id : null);
+        if (!empId) return;
+        if (!selectedEmployee) setSelectedEmployee(empId);
         const monthNum = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) + 1;
         const res = await axios.get(`${API_BASE_URL}/reports/employee-monthly`, {
-          params: { employeeId: selectedEmployee, month: monthNum, year: selectedYear }
+          params: { employeeId: empId, month: monthNum, year: selectedYear }
         });
         if (res.data.success) setMonthlyData(res.data);
       } else if (activeTab === 'employee_yearly' && isAdmin) {
-        if (!selectedEmployee) return;
+        const empId = selectedEmployee || (employees.length > 0 ? employees[0]._id : null);
+        if (!empId) return;
+        if (!selectedEmployee) setSelectedEmployee(empId);
         const res = await axios.get(`${API_BASE_URL}/reports/employee-yearly`, {
-          params: { employeeId: selectedEmployee, year: selectedYear }
+          params: { employeeId: empId, year: selectedYear }
         });
         if (res.data.success) setYearlyData(res.data);
       } else if (activeTab === 'bonus' && isAdmin) {
@@ -130,8 +131,10 @@ export default function ReportsPage() {
         if (payRes.data.success) setPaymentsData(payRes.data);
         if (sumRes.data.success) setCashBankSummary(sumRes.data.summary);
       } else if (activeTab === 'ledger' && isAdmin) {
-        if (!selectedEmployee) return;
-        const res = await axios.get(`${API_BASE_URL}/reports/ledger/${selectedEmployee}`, {
+        const empId = selectedEmployee || (employees.length > 0 ? employees[0]._id : null);
+        if (!empId) return;
+        if (!selectedEmployee) setSelectedEmployee(empId);
+        const res = await axios.get(`${API_BASE_URL}/reports/ledger/${empId}`, {
           params: { startDate: startDate || undefined, endDate: endDate || undefined }
         });
         if (res.data.success) setLedgerData(res.data);
@@ -192,6 +195,15 @@ export default function ReportsPage() {
   const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const yearOptions = [2025, 2026, 2027];
 
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    if (!['employee_monthly', 'employee_yearly', 'ledger'].includes(newTab)) {
+      setSelectedEmployee('');
+    } else if (!selectedEmployee && employees.length > 0) {
+      setSelectedEmployee(employees[0]._id);
+    }
+  };
+
   return (
     <div className="page-container">
       {/* Header */}
@@ -213,20 +225,20 @@ export default function ReportsPage() {
       <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e2e8f0', marginBottom: '20px', overflowX: 'auto', paddingBottom: '6px' }}>
         <button
           className={`btn ${activeTab === 'daily_attendance' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-          onClick={() => setActiveTab('daily_attendance')}
+          onClick={() => handleTabChange('daily_attendance')}
         >
           <Clock size={14} /> Daily Attendance
         </button>
         <button
           className={`btn ${activeTab === 'weekly_attendance' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-          onClick={() => setActiveTab('weekly_attendance')}
+          onClick={() => handleTabChange('weekly_attendance')}
         >
           <Calendar size={14} /> Weekly Attendance
         </button>
         {isAdmin && (
           <button
             className={`btn ${activeTab === 'weekly_salary' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-            onClick={() => setActiveTab('weekly_salary')}
+            onClick={() => handleTabChange('weekly_salary')}
           >
             <Banknote size={14} /> Weekly Salary
           </button>
@@ -234,7 +246,7 @@ export default function ReportsPage() {
         {isAdmin && (
           <button
             className={`btn ${activeTab === 'employee_monthly' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-            onClick={() => setActiveTab('employee_monthly')}
+            onClick={() => handleTabChange('employee_monthly')}
           >
             <Users size={14} /> Employee Monthly
           </button>
@@ -242,7 +254,7 @@ export default function ReportsPage() {
         {isAdmin && (
           <button
             className={`btn ${activeTab === 'employee_yearly' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-            onClick={() => setActiveTab('employee_yearly')}
+            onClick={() => handleTabChange('employee_yearly')}
           >
             <Layers size={14} /> Employee Yearly
           </button>
@@ -250,21 +262,21 @@ export default function ReportsPage() {
         {isAdmin && (
           <button
             className={`btn ${activeTab === 'bonus' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-            onClick={() => setActiveTab('bonus')}
+            onClick={() => handleTabChange('bonus')}
           >
             <Award size={14} /> Monthly Bonus
           </button>
         )}
         <button
           className={`btn ${activeTab === 'shop_labour' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-          onClick={() => setActiveTab('shop_labour')}
+          onClick={() => handleTabChange('shop_labour')}
         >
           <Building size={14} /> Shop Labour Hours
         </button>
         {isAdmin && (
           <button
             className={`btn ${activeTab === 'payments' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-            onClick={() => setActiveTab('payments')}
+            onClick={() => handleTabChange('payments')}
           >
             <CreditCard size={14} /> Salary Payments
           </button>
@@ -272,7 +284,7 @@ export default function ReportsPage() {
         {isAdmin && (
           <button
             className={`btn ${activeTab === 'ledger' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-            onClick={() => setActiveTab('ledger')}
+            onClick={() => handleTabChange('ledger')}
           >
             <FileText size={14} /> Salary Ledger
           </button>
