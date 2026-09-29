@@ -1004,14 +1004,7 @@ export default function ReportsPage() {
             >
               <Download size={14} /> Export Excel
             </a>
-            <a
-              href={`${API_BASE_URL}/reports/bonus/pdf?month=${selectedMonth}&year=${selectedYear}&employeeId=${selectedEmployee}&shopId=${selectedShop}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline btn-sm"
-            >
-              <Download size={14} /> Export PDF
-            </a>
+
           </div>
 
           <div className="card">
@@ -1088,14 +1081,7 @@ export default function ReportsPage() {
             >
               <Download size={14} /> Export Excel
             </a>
-            <a
-              href={`${API_BASE_URL}/reports/shop-labour/pdf?startDate=${startDate}&endDate=${endDate}&shopId=${selectedShop}&employeeId=${selectedEmployee}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline btn-sm"
-            >
-              <Download size={14} /> Export PDF
-            </a>
+
           </div>
 
           {labourData.data?.map((shop, sIdx) => (
@@ -1178,14 +1164,7 @@ export default function ReportsPage() {
             >
               <Download size={14} /> Export Excel
             </a>
-            <a
-              href={`${API_BASE_URL}/reports/payments/pdf?startDate=${startDate}&endDate=${endDate}&shopId=${selectedShop}&employeeId=${selectedEmployee}&paymentMethod=${paymentMethod}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline btn-sm"
-            >
-              <Download size={14} /> Export PDF
-            </a>
+
           </div>
 
           <div className="card">
@@ -1259,14 +1238,7 @@ export default function ReportsPage() {
               >
                 <Download size={14} /> Export Excel
               </a>
-              <a
-                href={`${API_BASE_URL}/reports/ledger/${selectedEmployee}/pdf`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-outline btn-sm"
-              >
-                <Download size={14} /> Export PDF
-              </a>
+
             </div>
           </div>
 

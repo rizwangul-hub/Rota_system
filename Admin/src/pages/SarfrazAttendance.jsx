@@ -290,7 +290,6 @@ export default function SarfrazAttendance() {
   };
 
   const downloadExcel = () => downloadAttendanceExport('excel');
-  const downloadPDF = () => downloadAttendanceExport('pdf');
 
   return (
     <div className="page-container">
@@ -358,13 +357,7 @@ export default function SarfrazAttendance() {
           >
             <Download size={15} /> Export Excel
           </button>
-          <button
-            className="btn btn-outline btn-sm"
-            onClick={downloadPDF}
-            title="Download landscape PDF summary"
-          >
-            <Download size={15} /> Export PDF
-          </button>
+
           <button
             className="btn btn-success btn-sm"
             onClick={promptCheckBatch}
