@@ -4,9 +4,12 @@ const AssignmentSchema = new mongoose.Schema({
   employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
   shopId: { type: mongoose.Schema.Types.ObjectId, ref: 'Shop', required: true },
   dateKey: { type: String, required: true },
-  startTime: { type: String, required: true },
-  endTime: { type: String, required: true },
-  scheduledHours: { type: Number, required: true, min: 0 },
+  startTime: { type: String, required: true, default: '09:00' },
+  endTime: { type: String, required: true, default: '17:00' },
+  scheduledHours: { type: Number, required: true, min: 0, default: 8 },
+  status: { type: String, default: 'AVAILABLE' },
+  note: { type: String, default: '' },
+  homeShopId: { type: mongoose.Schema.Types.ObjectId, ref: 'Shop', default: null },
   locked: { type: Boolean, default: false },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
@@ -32,6 +35,10 @@ const WeeklyRotaSchema = new mongoose.Schema({
   weekStart: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
   weekEnd: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
   assignments: { type: [AssignmentSchema], default: [] },
+  shopRoster: [{
+    shopId: { type: mongoose.Schema.Types.ObjectId, ref: 'Shop', required: true },
+    employeeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Employee' }]
+  }],
   staffingTargets: { type: [StaffingTargetSchema], default: [] },
   generationMethod: { type: String, enum: ['MANUAL', 'AI_TEXT', 'AI_VOICE'], default: 'MANUAL' },
   instructionText: { type: String, default: '' },

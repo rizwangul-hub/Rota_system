@@ -86,32 +86,26 @@ async function buildValidation(rota, source) {
     else if (shop.status !== 'Active' || !shop.isActive) errors.push(`${label}: shop is not active.`);
 
     const availabilityRecord = availabilityMap.get(`${id(assignment.employeeId)}:${assignment.dateKey}`);
-    if (!availabilityRecord || !availabilityRecord.confirmed || availabilityRecord.status === 'UNKNOWN') {
-      errors.push(`${label}: availability has not been confirmed.`);
-    } else if (availabilityRecord.status === 'UNAVAILABLE') {
-      errors.push(`${label}: employee is unavailable.`);
-    } else if (availabilityRecord.status !== 'AVAILABLE') {
-      errors.push(`${label}: employee availability is not valid.`);
-    } else if (availabilityRecord.intervals.length) {
+    if (availabilityRecord && availabilityRecord.status === 'UNAVAILABLE') {
+      warnings.push(`${label}: employee is marked unavailable.`);
+    } else if (availabilityRecord && availabilityRecord.intervals.length) {
       const start = minutes(assignment.startTime);
       const end = minutes(assignment.endTime);
       const covered = availabilityRecord.intervals.some(interval =>
         start >= minutes(interval.startTime) && end <= minutes(interval.endTime));
-      if (!covered) errors.push(`${label}: shift is outside the employee's confirmed availability.`);
+      if (!covered) warnings.push(`${label}: shift is outside employee's preferred availability window.`);
     }
 
     if (shop && dateInWeek(assignment.dateKey, week.weekStart)) {
       const day = new Date(`${assignment.dateKey}T00:00:00.000Z`).getUTCDay();
       const schedule = scheduleMap.get(`${id(shop._id)}:${day}`) || scheduleMap.get(`:${day}`);
       if (!schedule || !schedule.isActive) {
-        errors.push(`${label}: no active shop schedule exists.`);
+        warnings.push(`${label}: no standard shop schedule on file.`);
       } else {
         const opening = minutes(schedule.openingTime);
         const closing = minutes(schedule.closingTime);
-        if (opening === null || closing === null || closing <= opening) {
-          errors.push(`${label}: shop schedule has invalid opening hours.`);
-        } else if (minutes(assignment.startTime) < opening || minutes(assignment.endTime) > closing) {
-          errors.push(`${label}: shift must fit within shop hours (${schedule.openingTime}-${schedule.closingTime}).`);
+        if (opening !== null && closing !== null && (minutes(assignment.startTime) < opening || minutes(assignment.endTime) > closing)) {
+          warnings.push(`${label}: shift is outside standard shop hours (${schedule.openingTime}-${schedule.closingTime}).`);
         }
       }
     }
@@ -162,7 +156,7 @@ async function getWeekData(weekStart) {
   const week = getWeek(weekStart);
   const [rota, employees, shops, availability, schedules] = await Promise.all([
     WeeklyRota.findOne({ weekStart }).lean(),
-    Employee.find({ employmentStatus: 'Active' }).select('name employeeId employmentStatus').sort({ name: 1 }).lean(),
+    Employee.find({ employmentStatus: 'Active' }).select('name employeeId employmentStatus assignedShop').sort({ name: 1 }).lean(),
     Shop.find({ status: 'Active', isActive: true }).select('name code').sort({ name: 1 }).lean(),
     RotaAvailability.find({ dateKey: { $gte: week.weekStart, $lte: week.weekEnd } }).sort({ dateKey: 1 }).lean(),
     ShopSchedule.find({ $or: [{ shop: { $in: await Shop.find({ status: 'Active', isActive: true }).distinct('_id') } }, { shop: null }] }).lean()
@@ -217,15 +211,25 @@ async function persistDraft(req, res, input, generationMethod = input.generation
     const previous = rota.assignments.find(existing =>
       id(existing.employeeId) === id(assignment.employeeId) && existing.dateKey === assignment.dateKey
     );
-    const scheduledHours = (minutes(assignment.endTime) - minutes(assignment.startTime)) / 60;
+    const startTime = assignment.startTime || '09:00';
+    const endTime = assignment.endTime || '17:00';
+    const scheduledHours = (minutes(endTime) - minutes(startTime)) / 60;
     return {
       ...assignment,
+      startTime,
+      endTime,
+      scheduledHours: Math.max(0, scheduledHours),
+      status: assignment.status || 'AVAILABLE',
+      note: String(assignment.note || ''),
+      homeShopId: assignment.homeShopId || null,
       ...(previous?._id ? { _id: previous._id } : {}),
-      scheduledHours,
       createdBy: previous?.createdBy || req.user._id,
       updatedBy: req.user._id
     };
   });
+  if (Array.isArray(input.shopRoster)) {
+    rota.shopRoster = input.shopRoster;
+  }
   rota.staffingTargets = input.staffingTargets || [];
   rota.generationMethod = generationMethod;
   rota.instructionText = String(input.instructionText || '').slice(0, 5000);
