@@ -7,10 +7,8 @@ const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const LedgerTransaction = require('../models/LedgerTransaction');
 const PDFDocument = require('pdfkit');
-const {
-  usmanSignBase64,
-  sarfrazSignBase64
-} = require('../assets/signatureData');
+const fs = require('fs');
+const path = require('path');
 const {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
@@ -30,7 +28,9 @@ const {
   buildPaymentsExcel,
   buildPaymentsPDF,
   buildLedgerExcel,
-  buildLedgerPDF
+  buildLedgerPDF,
+  getShopColor,
+  sortDailyAttendanceRecords
 } = require('../utils/reports');
 const { getWeekRange, formatUKDate, getUKDateString } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
@@ -87,14 +87,16 @@ exports.getDailyAttendanceReport = async (req, res) => {
       .populate('shop')
       .sort({ shopName: 1, employeeName: 1 });
 
+    const sortedRecords = sortDailyAttendanceRecords(records);
+
     const shopDoc = shopId ? await Shop.findById(shopId) : null;
     const shopName = shopDoc ? shopDoc.name : 'All Shops';
 
     const responseRecords = req.user.role === 'ATTENDANCE_OPERATOR'
-      ? records.map(attendanceOperatorRecord)
+      ? sortedRecords.map(attendanceOperatorRecord)
       : req.user.role === 'ATTENDANCE_CHECKER'
-        ? records.map(attendanceCheckerRecord)
-        : records;
+        ? sortedRecords.map(attendanceCheckerRecord)
+        : sortedRecords;
     const whatsAppText = generateWhatsAppAttendanceText(formatUKDate(dateStr), responseRecords, shopName);
 
     const grouped = {};
@@ -156,7 +158,8 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
     }
 
     const records = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
-    const workbook = await buildDailyAttendanceExcel(records, formatUKDate(dateStr));
+    const sortedRecords = sortDailyAttendanceRecords(records);
+    const workbook = await buildDailyAttendanceExcel(sortedRecords, formatUKDate(dateStr));
     const shopDoc = shopId ? await Shop.findById(shopId).select('name') : null;
 
     await logAction({
@@ -207,12 +210,21 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       req
     });
 
-    const usmanSign = Buffer.from(usmanSignBase64, 'base64');
-    const sarfrazSign = Buffer.from(sarfrazSignBase64, 'base64');
+    let usmanSign = null;
+    let sarfrazSign = null;
+    try {
+      usmanSign = fs.readFileSync(path.join(__dirname, '../assets/usmansign.png'));
+    } catch (e) { /* image not available */ }
+    try {
+      sarfrazSign = fs.readFileSync(path.join(__dirname, '../assets/sarfrazsign.png'));
+    } catch (e) { /* image not available */ }
+
+    // Sort records: real shops first, absent records at the bottom
+    const sortedRecords = sortDailyAttendanceRecords(records);
 
     // Group records by shop
     const shopGroups = {};
-    records.forEach(r => {
+    sortedRecords.forEach(r => {
       const sName = r.status === 'Absent' ? 'ABSENT / OFF' : (r.shopName || 'Unknown Shop');
       if (!shopGroups[sName]) shopGroups[sName] = [];
       shopGroups[sName].push(r);
@@ -297,7 +309,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     };
 
     const drawSectionHeader = (shopName, isAbsentGroup, continued = false) => {
-      doc.rect(30, curY, PAGE_W, 22).fill(isAbsentGroup ? '#7f1d1d' : DARK);
+      const sc = getShopColor(isAbsentGroup ? 'ABSENT / OFF' : shopName);
+      const headerColor = isAbsentGroup ? '#7f1d1d' : sc.primary;
+      doc.rect(30, curY, PAGE_W, 22).fill(headerColor);
       doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10)
         .text(
           isAbsentGroup
@@ -310,9 +324,12 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       curY += 22;
     };
 
-    const drawColumnHeader = isAbsentGroup => {
-      doc.rect(30, curY, PAGE_W, 16).fill(isAbsentGroup ? '#fee2e2' : '#dbeafe');
-      doc.fillColor(isAbsentGroup ? '#991b1b' : DARK).font('Helvetica-Bold').fontSize(8);
+    const drawColumnHeader = (shopName, isAbsentGroup) => {
+      const sc = getShopColor(isAbsentGroup ? 'ABSENT / OFF' : shopName);
+      const subBg = isAbsentGroup ? '#fee2e2' : sc.lightBg;
+      const subFg = isAbsentGroup ? '#991b1b' : sc.text;
+      doc.rect(30, curY, PAGE_W, 16).fill(subBg);
+      doc.fillColor(subFg).font('Helvetica-Bold').fontSize(8);
       doc.text('#', 35, curY + 4, { width: 20 });
       doc.text('Worker', 58, curY + 4, { width: isAbsentGroup ? 190 : 157 });
       doc.text('Employee ID', isAbsentGroup ? 255 : 222, curY + 4, { width: isAbsentGroup ? 100 : 74 });
@@ -341,7 +358,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       }
 
       drawSectionHeader(shopName, isAbsentGroup);
-      drawColumnHeader(isAbsentGroup);
+      drawColumnHeader(shopName, isAbsentGroup);
 
       // Rows
       group.forEach((r, idx) => {
@@ -350,7 +367,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
           drawContinuationBanner();
           curY = 72;
           drawSectionHeader(shopName, isAbsentGroup, true);
-          drawColumnHeader(isAbsentGroup);
+          drawColumnHeader(shopName, isAbsentGroup);
         }
 
         const rowBg = idx % 2 === 0 ? '#ffffff' : LIGHT;

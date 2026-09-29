@@ -23,6 +23,21 @@ import {
   Info
 } from 'lucide-react';
 
+const SHOP_COLORS = {
+  Camden: { bg: '#f0fdfa', color: '#0f766e', border: '#5eead4' },
+  Chelsea: { bg: '#eef2ff', color: '#3730a3', border: '#a5b4fc' },
+  Edgware: { bg: '#faf5ff', color: '#6b21a8', border: '#d8b4fe' },
+  Southwark: { bg: '#fffbeb', color: '#92400e', border: '#fcd34d' },
+  Station: { bg: '#f0f9ff', color: '#0369a1', border: '#7dd3fc' },
+  Leebridge: { bg: '#fff1f2', color: '#9f1239', border: '#fda4af' },
+};
+
+function getShopBadgeStyle(shopName) {
+  if (!shopName) return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
+  const match = Object.keys(SHOP_COLORS).find(k => k.toLowerCase() === String(shopName).trim().toLowerCase());
+  return match ? SHOP_COLORS[match] : { bg: '#f1f5f9', color: '#334155', border: '#cbd5e1' };
+}
+
 async function getAttendanceExportErrorMessage(error, format) {
   const fallback = `Unable to export ${format.toUpperCase()} attendance report.`;
   const responseData = error.response?.data;
@@ -523,12 +538,22 @@ export default function SarfrazAttendance() {
               </tr>
             </thead>
             <tbody>
-              {records.map(r => {
+              {records.slice().sort((a, b) => {
+                const aAbsent = a.status === 'Absent';
+                const bAbsent = b.status === 'Absent';
+                if (aAbsent && !bAbsent) return 1;
+                if (!aAbsent && bAbsent) return -1;
+                if (!aAbsent && !bAbsent) {
+                  const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
+                  if (sDiff !== 0) return sDiff;
+                }
+                return (a.employeeName || '').localeCompare(b.employeeName || '');
+              }).map(r => {
                 const isChecked = ['Checked', 'Finalized'].includes(r.approvalStatus);
                 const canEdit = !isChecked || isAdmin;
 
                 return (
-                  <tr key={r._id} style={{ background: isChecked ? '#fafafa' : '#ffffff' }}>
+                  <tr key={r._id} style={{ background: isChecked ? '#fafafa' : r.status === 'Absent' ? '#fffafb' : '#ffffff' }}>
                     <td style={{ textAlign: 'center' }}>
                       <input
                         type="checkbox"
@@ -542,9 +567,33 @@ export default function SarfrazAttendance() {
                       <div style={{ fontSize: '11px', color: '#64748b' }}>{r.employeeId}</div>
                     </td>
                     <td>
-                      <span style={{ fontSize: '12px', fontWeight: 500 }}>
-                        {r.status === 'Absent' ? '—' : r.shopName}
-                      </span>
+                      {r.status === 'Absent' ? (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          backgroundColor: '#fef2f2',
+                          color: '#b91c1c',
+                          border: '1px solid #fecaca'
+                        }}>
+                          Absent / Off
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          backgroundColor: getShopBadgeStyle(r.shopName).bg,
+                          color: getShopBadgeStyle(r.shopName).color,
+                          border: `1px solid ${getShopBadgeStyle(r.shopName).border}`
+                        }}>
+                          {r.shopName || '—'}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span style={{ fontSize: '12px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>

@@ -76,6 +76,115 @@ function generateWhatsAppAttendanceText(dateStr, records, shopName = 'All Shops'
   return text;
 }
 
+// ── SHOP COLOR PALETTE & HELPERS ─────────────────────────
+const SHOP_COLORS = {
+  Camden: {
+    primary: '#0D9488',
+    lightBg: '#F0FDFA',
+    text: '#0F766E',
+    border: '#5EEAD4',
+    excelBg: 'FFF0FDFA',
+    excelText: 'FF0F766E',
+    excelBorder: 'FF5EEAD4'
+  },
+  Chelsea: {
+    primary: '#4338CA',
+    lightBg: '#EEF2FF',
+    text: '#3730A3',
+    border: '#A5B4FC',
+    excelBg: 'FFEEF2FF',
+    excelText: 'FF3730A3',
+    excelBorder: 'FFA5B4FC'
+  },
+  Edgware: {
+    primary: '#7E22CE',
+    lightBg: '#FAF5FF',
+    text: '#6B21A8',
+    border: '#D8B4FE',
+    excelBg: 'FFFAF5FF',
+    excelText: 'FF6B21A8',
+    excelBorder: 'FFD8B4FE'
+  },
+  Southwark: {
+    primary: '#D97706',
+    lightBg: '#FFFBEB',
+    text: '#92400E',
+    border: '#FCD34D',
+    excelBg: 'FFFFFBEB',
+    excelText: 'FF92400E',
+    excelBorder: 'FFFCD34D'
+  },
+  Station: {
+    primary: '#0284C7',
+    lightBg: '#F0F9FF',
+    text: '#0369A1',
+    border: '#7DD3FC',
+    excelBg: 'FFF0F9FF',
+    excelText: 'FF0369A1',
+    excelBorder: 'FF7DD3FC'
+  },
+  Leebridge: {
+    primary: '#E11D48',
+    lightBg: '#FFF1F2',
+    text: '#9F1239',
+    border: '#FDA4AF',
+    excelBg: 'FFFFF1F2',
+    excelText: 'FF9F1239',
+    excelBorder: 'FFFDA4AF'
+  },
+  'ABSENT / OFF': {
+    primary: '#991B1B',
+    lightBg: '#FEF2F2',
+    text: '#B91C1C',
+    border: '#FECACA',
+    excelBg: 'FFFEF2F2',
+    excelText: 'FFB91C1C',
+    excelBorder: 'FFFECACA'
+  },
+  Absent: {
+    primary: '#991B1B',
+    lightBg: '#FEF2F2',
+    text: '#B91C1C',
+    border: '#FECACA',
+    excelBg: 'FFFEF2F2',
+    excelText: 'FFB91C1C',
+    excelBorder: 'FFFECACA'
+  }
+};
+
+const FALLBACK_PALETTE = [
+  { primary: '#0891B2', lightBg: '#ECFEFF', text: '#0E7490', border: '#67E8F9', excelBg: 'FFECFEFF', excelText: 'FF0E7490', excelBorder: 'FF67E8F9' },
+  { primary: '#059669', lightBg: '#ECFDF5', text: '#047857', border: '#6EE7B7', excelBg: 'FFECFDF5', excelText: 'FF047857', excelBorder: 'FF6EE7B7' },
+  { primary: '#DB2777', lightBg: '#FDF2F8', text: '#BE185D', border: '#F472B6', excelBg: 'FFFDF2F8', excelText: 'FFBE185D', excelBorder: 'FFF472B6' },
+  { primary: '#EA580C', lightBg: '#FFF7ED', text: '#C2410C', border: '#FDBA74', excelBg: 'FFFFF7ED', excelText: 'FFC2410C', excelBorder: 'FFFDBA74' },
+  { primary: '#65A30D', lightBg: '#F7FEE7', text: '#4D7C0F', border: '#BEF264', excelBg: 'FFF7FEE7', excelText: 'FF4D7C0F', excelBorder: 'FFBEF264' }
+];
+
+function getShopColor(shopName) {
+  if (!shopName) return SHOP_COLORS.Absent;
+  const match = Object.keys(SHOP_COLORS).find(k => k.toLowerCase() === String(shopName).trim().toLowerCase());
+  if (match) return SHOP_COLORS[match];
+  let hash = 0;
+  for (let i = 0; i < shopName.length; i++) hash = shopName.charCodeAt(i) + ((hash << 5) - hash);
+  const idx = Math.abs(hash) % FALLBACK_PALETTE.length;
+  return FALLBACK_PALETTE[idx];
+}
+
+function sortDailyAttendanceRecords(records) {
+  if (!Array.isArray(records)) return [];
+  return [...records].sort((a, b) => {
+    const aAbsent = a.status === 'Absent';
+    const bAbsent = b.status === 'Absent';
+    if (aAbsent && !bAbsent) return 1;
+    if (!aAbsent && bAbsent) return -1;
+    if (!aAbsent && !bAbsent) {
+      const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
+      if (sDiff !== 0) return sDiff;
+    }
+    return (a.employeeName || '').localeCompare(b.employeeName || '');
+  });
+}
+
 /**
  * Generate Excel workbook for Daily Attendance
  */
@@ -88,8 +197,11 @@ async function buildDailyAttendanceExcel(records, dateStr) {
   const slate = 'FF475569';
   const border = 'FFCBD5E1';
 
-  const preparedBy = records.find(r => r.createdByName)?.createdByName || 'Usman';
-  const verifiedBy = records.find(r => r.checkedByName)?.checkedByName || 'Sarfraz Khan';
+  // Sort records: active shops first grouped by shop name, absent workers at the bottom
+  const sortedRecords = sortDailyAttendanceRecords(records);
+
+  const preparedBy = sortedRecords.find(r => r.createdByName)?.createdByName || 'Usman';
+  const verifiedBy = sortedRecords.find(r => r.checkedByName)?.checkedByName || 'Sarfraz Khan';
 
   // ── HEADER TITLE ──────────────────────────────────────────
   sheet.mergeCells('A1:J1');
@@ -128,7 +240,7 @@ async function buildDailyAttendanceExcel(records, dateStr) {
   headerRow.height = 30;
 
   // ── DATA ROWS ─────────────────────────────────────────────
-  records.forEach(r => {
+  sortedRecords.forEach(r => {
     const isAbsent = r.status === 'Absent';
     const row = sheet.addRow([
       r.dateString || dateStr,
@@ -166,6 +278,23 @@ async function buildDailyAttendanceExcel(records, dateStr) {
         wrapText: [2, 4, 10].includes(columnNumber)
       };
     });
+
+    // Shop Cell with distinct shop color
+    const shopCell = row.getCell(2);
+    if (!isAbsent && r.shopName) {
+      const sc = getShopColor(r.shopName);
+      shopCell.value = r.shopName;
+      shopCell.font = { name: 'Aptos', size: 9.5, bold: true, color: { argb: sc.excelText } };
+      shopCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sc.excelBg } };
+      shopCell.border = {
+        top: { style: 'thin', color: { argb: sc.excelBorder } },
+        bottom: { style: 'thin', color: { argb: sc.excelBorder } },
+        left: { style: 'thin', color: { argb: sc.excelBorder } },
+        right: { style: 'thin', color: { argb: sc.excelBorder } }
+      };
+      shopCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    }
+
     const statusCell = row.getCell(9);
     statusCell.value = isAbsent ? 'Absent / Off' : (r.status || 'Present');
     statusCell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: statusFont } };
@@ -1417,5 +1546,8 @@ module.exports = {
   buildPaymentsExcel,
   buildPaymentsPDF,
   buildLedgerExcel,
-  buildLedgerPDF
+  buildLedgerPDF,
+  SHOP_COLORS,
+  getShopColor,
+  sortDailyAttendanceRecords
 };
