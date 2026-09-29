@@ -206,15 +206,28 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       req
     });
 
-    // Signature image paths
+    // Signature image paths with embedded fallback for serverless
     const assetsDir = path.join(__dirname, '../assets');
     const usmanSignPath = path.join(assetsDir, 'usmansign.png');
     const sarfrazSignPath = path.join(assetsDir, 'sarfrazsign.png');
-    if (!fs.existsSync(usmanSignPath) || !fs.existsSync(sarfrazSignPath)) {
-      throw new Error('Attendance report signature assets are missing.');
+    let usmanSign;
+    let sarfrazSign;
+    try {
+      if (fs.existsSync(usmanSignPath)) {
+        usmanSign = fs.readFileSync(usmanSignPath);
+      }
+    } catch (_) {}
+    try {
+      if (fs.existsSync(sarfrazSignPath)) {
+        sarfrazSign = fs.readFileSync(sarfrazSignPath);
+      }
+    } catch (_) {}
+
+    if (!usmanSign || !sarfrazSign) {
+      const { usmanSignBase64, sarfrazSignBase64 } = require('../assets/signatureData');
+      if (!usmanSign) usmanSign = Buffer.from(usmanSignBase64, 'base64');
+      if (!sarfrazSign) sarfrazSign = Buffer.from(sarfrazSignBase64, 'base64');
     }
-    const usmanSign = fs.readFileSync(usmanSignPath);
-    const sarfrazSign = fs.readFileSync(sarfrazSignPath);
 
     // Group records by shop
     const shopGroups = {};
@@ -417,7 +430,11 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     doc.rect(30, curY, sigBoxW, 92).fillAndStroke('#ffffff', BORDER);
     doc.fillColor(SLATE).font('Helvetica').fontSize(8)
        .text('SUBMITTED BY (ATTENDANCE OPERATOR)', 36, curY + 6, { width: sigBoxW - 12 });
-    doc.image(usmanSign, 36, curY + 18, { fit: [130, 42] });
+    try {
+      doc.image(usmanSign, 36, curY + 18, { fit: [130, 42] });
+    } catch (e) {
+      console.warn('Failed to embed Usman signature:', e.message);
+    }
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9)
        .text('Usman', 36, curY + 64, { width: sigBoxW - 12 });
     doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
@@ -428,7 +445,11 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     doc.rect(rightX, curY, sigBoxW, 92).fillAndStroke('#ffffff', BORDER);
     doc.fillColor(SLATE).font('Helvetica').fontSize(8)
        .text('VERIFIED BY (ATTENDANCE CHECKER)', rightX + 6, curY + 6, { width: sigBoxW - 12 });
-    doc.image(sarfrazSign, rightX + 6, curY + 18, { fit: [130, 42] });
+    try {
+      doc.image(sarfrazSign, rightX + 6, curY + 18, { fit: [130, 42] });
+    } catch (e) {
+      console.warn('Failed to embed Sarfraz signature:', e.message);
+    }
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9)
        .text('Sarfraz Khan', rightX + 6, curY + 64, { width: sigBoxW - 12 });
     doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
