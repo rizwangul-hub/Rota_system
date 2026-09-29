@@ -153,6 +153,27 @@ async function run() {
       assert.equal(logged.includes('stack'), false);
     });
 
+    test('production logs identify a missing module without exposing the full exception', () => {
+      const originalEnvironment = process.env.NODE_ENV;
+      const originalConsoleError = console.error;
+      let loggedDetails = {};
+      process.env.NODE_ENV = 'production';
+      console.error = (_context, details) => { loggedDetails = details; };
+      try {
+        const error = new Error("Cannot find module '#standard-fonts/Helvetica'\nRequire stack:\nprivate path");
+        error.code = 'MODULE_NOT_FOUND';
+        logServerError('request failed', error);
+      } finally {
+        console.error = originalConsoleError;
+        if (originalEnvironment === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = originalEnvironment;
+      }
+      assert.equal(loggedDetails.code, 'MODULE_NOT_FOUND');
+      assert.equal(loggedDetails.missingModule, '#standard-fonts/Helvetica');
+      assert.equal(loggedDetails.message, undefined);
+      assert.equal(loggedDetails.stack, undefined);
+    });
+
     test('non-numeric, infinite, negative, and zero payment values are rejected', () => {
       for (const amount of ['NaN', Infinity, -1, 0]) {
         assert.equal(validatePaymentAmount(amount, 100).valid, false);
