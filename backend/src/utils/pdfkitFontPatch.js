@@ -1,10 +1,11 @@
 /**
  * pdfkitFontPatch.js
  *
- * On Vercel serverless, pdfkit's standard font files (Helvetica.cjs, etc.)
- * are not automatically bundled because they are loaded via dynamic require().
- * This patch intercepts those require() calls and redirects them to our
- * vendored copy in backend/src/assets/pdfkit-fonts/.
+ * On Vercel serverless, pdfkit's standard-fonts are not bundled because
+ * they are resolved via package.json "imports" (#standard-fonts/*) which
+ * Vercel's bundler strips from node_modules. This patch copies our vendored
+ * font files from backend/src/assets/pdfkit-fonts/ into pdfkit's expected
+ * location at runtime (before pdfkit is required).
  *
  * MUST be required before PDFDocument is instantiated.
  */
@@ -12,33 +13,72 @@ const Module = require('module');
 const path = require('path');
 const fs = require('fs');
 
+// Our vendored copy (always bundled via vercel.json includeFiles)
 const FONT_ASSETS_DIR = path.join(__dirname, '../assets/pdfkit-fonts');
 
-const _resolveFilename = Module._resolveFilename.bind(Module);
+// pdfkit's expected location for standard-fonts
+// Try multiple root paths since __dirname can vary in serverless
+const PDFKIT_ROOTS = [
+  path.join(__dirname, '../../node_modules/pdfkit'),
+  path.join(process.cwd(), 'node_modules/pdfkit'),
+  path.join(process.cwd(), 'backend/node_modules/pdfkit'),
+  '/var/task/node_modules/pdfkit',
+  '/var/task/backend/node_modules/pdfkit'
+];
 
-Module._resolveFilename = function (request, parent, isMain, options) {
-  // Intercept pdfkit standard-font requires: e.g. ".../pdfkit/js/standard-fonts/Helvetica.cjs"
-  const MARKER = path.join('pdfkit', 'js', 'standard-fonts');
-  if (request.includes('standard-fonts') || (parent && parent.filename && parent.filename.includes(MARKER))) {
-    // Extract just the filename portion
-    const basename = path.basename(request);
-    const candidate = path.join(FONT_ASSETS_DIR, basename);
-    if (fs.existsSync(candidate)) {
-      return candidate;
+function ensurePdfkitFonts() {
+  // Only run if our vendored fonts exist
+  if (!fs.existsSync(FONT_ASSETS_DIR)) return;
+
+  for (const root of PDFKIT_ROOTS) {
+    const targetFontsDir = path.join(root, 'js/standard-fonts');
+    const targetChunksDir = path.join(root, 'js/standard-fonts/chunks');
+
+    // Skip if the root doesn't exist
+    if (!fs.existsSync(root)) continue;
+
+    // Ensure target directories exist
+    try {
+      fs.mkdirSync(targetFontsDir, { recursive: true });
+      fs.mkdirSync(targetChunksDir, { recursive: true });
+    } catch (e) {
+      continue; // Can't write here, try next
     }
-    // Try chunks subdirectory
-    const chunksCandidate = path.join(FONT_ASSETS_DIR, 'chunks', basename);
-    if (fs.existsSync(chunksCandidate)) {
-      return chunksCandidate;
+
+    // Check if Helvetica.cjs already exists (already patched or originally there)
+    const helveticaPath = path.join(targetFontsDir, 'Helvetica.cjs');
+    if (fs.existsSync(helveticaPath)) continue; // already fine, skip
+
+    // Copy all font files from our vendored dir
+    try {
+      const fontFiles = fs.readdirSync(FONT_ASSETS_DIR);
+      for (const f of fontFiles) {
+        const src = path.join(FONT_ASSETS_DIR, f);
+        const stat = fs.statSync(src);
+        if (stat.isFile()) {
+          const dest = path.join(targetFontsDir, f);
+          if (!fs.existsSync(dest)) {
+            fs.copyFileSync(src, dest);
+          }
+        }
+      }
+      // Copy chunks
+      const chunksDir = path.join(FONT_ASSETS_DIR, 'chunks');
+      if (fs.existsSync(chunksDir)) {
+        const chunkFiles = fs.readdirSync(chunksDir);
+        for (const f of chunkFiles) {
+          const src = path.join(chunksDir, f);
+          const dest = path.join(targetChunksDir, f);
+          if (!fs.existsSync(dest)) {
+            fs.copyFileSync(src, dest);
+          }
+        }
+      }
+    } catch (e) {
+      // Silently continue if we can't write
     }
   }
-  // Also intercept chunks requires from within pdfkit fonts
-  if (parent && parent.filename && parent.filename.includes(FONT_ASSETS_DIR) && request.startsWith('./chunks/')) {
-    const chunkFile = path.basename(request);
-    const chunkPath = path.join(FONT_ASSETS_DIR, 'chunks', chunkFile);
-    if (fs.existsSync(chunkPath)) {
-      return chunkPath;
-    }
-  }
-  return _resolveFilename(request, parent, isMain, options);
-};
+}
+
+// Run the font copy immediately when this module is required
+ensurePdfkitFonts();
