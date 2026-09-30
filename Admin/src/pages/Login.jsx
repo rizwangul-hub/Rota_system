@@ -35,10 +35,6 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = (u, p) => {
-    setUsername(u);
-    setPassword(p);
-  };
 
   return (
     <div style={{
@@ -105,7 +101,7 @@ export default function Login() {
                 type="text"
                 className="form-input"
                 style={{ paddingLeft: '36px' }}
-                placeholder="e.g. admin, sarfraz, distributor"
+                placeholder="Enter your username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -158,41 +154,6 @@ export default function Login() {
           <span>Secure workforce management</span>
         </div>
 
-        {/* Quick Demo Access Roles */}
-        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '18px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '10px', textAlign: 'center' }}>
-            Quick Role Selection
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              style={{ justifyContent: 'space-between', fontSize: '12px' }}
-              onClick={() => handleQuickLogin('admin', 'password123')}
-            >
-              <span>💼 <strong>Admin</strong> (Full Access)</span>
-              <span style={{ color: '#2563eb', fontWeight: 600 }}>Select</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              style={{ justifyContent: 'space-between', fontSize: '12px' }}
-              onClick={() => handleQuickLogin('sarfraz', 'password123')}
-            >
-              <span>📋 <strong>Sarfraz Khan</strong> (Checker)</span>
-              <span style={{ color: '#2563eb', fontWeight: 600 }}>Select</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              style={{ justifyContent: 'space-between', fontSize: '12px' }}
-              onClick={() => handleQuickLogin('distributor', 'password123')}
-            >
-              <span>💵 <strong>Salary Distributor</strong> (Payout)</span>
-              <span style={{ color: '#2563eb', fontWeight: 600 }}>Select</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
