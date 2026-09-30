@@ -639,34 +639,129 @@ export default function WeeklyRotaPlanner() {
     }
   };
 
-  // ── Print: build a clean popup with only rota content ──────────────────────
-  const printRota = () => {
-    const printContent = document.getElementById('rota-print-area');
-    if (!printContent) { window.print(); return; }
-    const win = window.open('', '_blank', 'width=1200,height=800');
-    win.document.write(`
-      <!DOCTYPE html><html><head>
-      <title>Weekly Rota – ${weekStart}</title>
+  // ── Build the print HTML (shop-by-shop table, matches paper rota) ─────────
+  const buildRotaHtml = () => {
+    const DAY_LABELS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+    const formatDate = (iso) => {
+      const d = new Date(`${iso}T12:00:00Z`);
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    };
+
+    let html = `
       <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; font-size: 11px; padding: 16px; color: #0f172a; }
-        h2 { font-size: 16px; margin-bottom: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        th, td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: center; }
-        th { background: #f1f5f9; font-weight: 700; font-size: 10px; }
-        td:first-child { text-align: left; font-weight: 600; }
-        .off { color: #dc2626; font-style: italic; }
-        .loaned { color: #7c3aed; }
-        @media print { body { padding: 8px; } }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;font-size:9px;padding:12px;color:#0f172a;background:#fff}
+        h1{font-size:13px;text-align:center;margin-bottom:4px;font-weight:800;letter-spacing:.5px}
+        .subtitle{font-size:8px;text-align:center;color:#64748b;margin-bottom:12px}
+        .shop-block{margin-bottom:14px;border:1px solid #cbd5e1;border-radius:4px;overflow:hidden;page-break-inside:avoid}
+        .shop-title{background:#1e293b;color:#fff;text-align:center;font-size:10px;font-weight:800;padding:4px 8px;letter-spacing:.3px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #e2e8f0;padding:3px 4px;text-align:center;font-size:7.5px}
+        th{background:#f1f5f9;font-weight:700;color:#334155;font-size:7px}
+        td.name-col{text-align:left;font-weight:700;background:#f8fafc;min-width:65px;max-width:65px;font-size:8px}
+        .date-hdr{font-size:6.5px;color:#475569}
+        .day-hdr{font-size:6.5px;color:#334155;font-weight:800}
+        .avail{color:#059669}
+        .off{color:#dc2626;font-weight:700;font-style:italic}
+        .loaned{color:#7c3aed;font-weight:600}
+        .dash{color:#94a3b8}
+        .total-row td{background:#e2e8f0;font-weight:800;font-size:8px;color:#1e293b}
+        .alt-row{background:#f8fafc}
+        footer{text-align:center;font-size:7px;color:#94a3b8;margin-top:10px}
+        @media print{body{padding:6px}@page{size:A4 landscape;margin:12mm 10mm}}
       </style>
-      </head><body>
-      ${printContent.innerHTML}
-      </body></html>
-    `);
+      <h1>Weekly Staff Rota</h1>
+      <div class="subtitle">${formatDate(weekDays[0].dateKey)} &ndash; ${formatDate(weekDays[6].dateKey)}</div>
+    `;
+
+    shops.forEach(shop => {
+      const workerIds = shopRosters[shop._id] || [];
+      if (workerIds.length === 0) return;
+
+      html += `<div class="shop-block">
+        <div class="shop-title">${shop.name}</div>
+        <table>
+          <thead>
+            <tr>
+              <th class="name-col" style="background:#f1f5f9">Name</th>
+              ${weekDays.map(d => `<th class="date-hdr">${formatDate(d.dateKey).replace(/ \d{4}$/, '')}</th>`).join('')}
+            </tr>
+            <tr>
+              <th class="name-col" style="background:#f1f5f9"></th>
+              ${weekDays.map(d => `<th class="day-hdr">${DAY_LABELS[d.dayIndex]}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>`;
+
+      const totals = new Array(7).fill(0);
+      workerIds.forEach((empId, rowIdx) => {
+        const emp = employees.find(e => e._id === empId);
+        if (!emp) return;
+        html += `<tr class="${rowIdx % 2 === 1 ? 'alt-row' : ''}">
+          <td class="name-col">${emp.name}</td>`;
+
+        weekDays.forEach((d, i) => {
+          const key = `${shop._id}:${empId}:${d.dateKey}`;
+          const cell = cells[key];
+          if (!cell) {
+            html += `<td class="dash">&mdash;</td>`;
+          } else if (cell.status === 'OFF') {
+            html += `<td class="off">OFF</td>`;
+          } else if (cell.status === 'LOANED') {
+            html += `<td class="loaned">${cell.note || 'Loaned'}</td>`;
+          } else {
+            totals[i]++;
+            const noteStr = cell.note ? `<br><span style="font-size:6px;color:#047857">${cell.note}</span>` : '';
+            html += `<td class="avail">Available${noteStr}</td>`;
+          }
+        });
+        html += `</tr>`;
+      });
+
+      html += `<tr class="total-row">
+        <td class="name-col">Total</td>
+        ${totals.map(t => `<td>${t}</td>`).join('')}
+      </tr>`;
+
+      html += `</tbody></table></div>`;
+    });
+
+    html += `<footer>Generated by PIXX ROTA &middot; ${new Date().toLocaleDateString('en-GB')}</footer>`;
+    return html;
+  };
+
+  // ── Print: open popup with styled rota table ─────────────────────────────
+  const printRota = () => {
+    const win = window.open('', '_blank', 'width=1200,height=850');
+    if (!win) { alert('Pop-up blocked. Please allow pop-ups for this site.'); return; }
+    win.document.write(`<!DOCTYPE html><html><head><title>Weekly Rota – ${weekStart}</title></head><body>${buildRotaHtml()}</body></html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 500);
+    setTimeout(() => { win.print(); }, 600);
   };
+
+  // ── PDF: download from backend (authenticated) ────────────────────────────
+  const downloadPdf = async () => {
+    try {
+      const token = localStorage.getItem('pixx_token');
+      const response = await axios.get(`${API}/week/${weekStart}/export.pdf`, {
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Weekly_Rota_${weekStart}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      alert('Could not download PDF. Make sure the rota is saved first.');
+      console.error(err);
+    }
+  };
+
 
   // Calculate active totals per shop per day
   const getShopDayTotal = (shopId, dateKey) => {
@@ -803,14 +898,21 @@ export default function WeeklyRotaPlanner() {
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={printRota}
-            title="Print clean landscape weekly sheet"
+            title="Print clean weekly rota sheet"
           >
             <Printer size={15} /> Print
           </button>
           <button
             className="btn btn-outline btn-sm rota-btn-action"
+            onClick={downloadPdf}
+            title="Download PDF rota (shop-by-shop table)"
+          >
+            <Download size={15} /> PDF
+          </button>
+          <button
+            className="btn btn-outline btn-sm rota-btn-action"
             onClick={downloadExcel}
-            title="Download multi-shop formatted Excel sheet"
+            title="Download Excel spreadsheet"
           >
             <Download size={15} /> Excel
           </button>

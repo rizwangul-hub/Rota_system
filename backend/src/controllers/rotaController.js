@@ -625,27 +625,243 @@ exports.exportPdf = async (req, res) => {
   try {
     const employeeId = req.params.employeeId;
     if (employeeId) checkObjectId(employeeId, 'employeeId');
-    const data = await getExportData(req.params.weekStart, employeeId);
-    if (employeeId && !data.employeesById.has(employeeId)) throw new RotaError(404, 'Employee not found or has no shifts in this rota.');
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="rota-${employeeId ? 'employee-' : ''}${data.week.weekStart}.pdf"`);
-    doc.pipe(res);
-    doc.fontSize(18).text(`Weekly Rota: ${data.week.weekStart} to ${data.week.weekEnd}`);
-    doc.moveDown();
-    doc.fontSize(10);
-    for (const assignment of data.assignments) {
-      const employee = data.employeesById.get(id(assignment.employeeId));
-      const shop = data.shopsById.get(id(assignment.shopId));
-      doc.text(`${assignment.dateKey}  ${assignment.startTime}-${assignment.endTime}  ${employee?.name || ''} (${employee?.employeeId || ''})  ${shop?.name || ''}${assignment.locked ? '  [Locked]' : ''}`);
+
+    const weekStart = req.params.weekStart;
+    const week = getWeek(weekStart);
+    const rota = await WeeklyRota.findOne({ weekStart: week.weekStart })
+      .populate('shopRoster.shopId', 'name')
+      .populate('shopRoster.employeeIds', 'name')
+      .lean();
+    if (!rota) throw new RotaError(404, 'No rota exists for this week.');
+
+    // Fetch all shops in order
+    const allShops = await Shop.find({ isActive: true }).select('name').lean();
+
+    // Build a lookup: assignmentKey = `homeShopId:employeeId:dateKey` → assignment
+    const cellMap = {};
+    for (const a of (rota.assignments || [])) {
+      const hId = id(a.homeShopId || a.shopId);
+      const eId = id(a.employeeId);
+      const key = `${hId}:${eId}:${a.dateKey}`;
+      cellMap[key] = a;
     }
+
+    // Build shopRoster lookup
+    const rosterMap = {};
+    for (const sr of (rota.shopRoster || [])) {
+      const sId = id(sr.shopId?._id || sr.shopId);
+      rosterMap[sId] = {
+        shopName: sr.shopId?.name || '',
+        employees: (sr.employeeIds || []).map(e => ({ _id: id(e._id || e), name: e.name || '' }))
+      };
+    }
+
+    // Build shopsById for cell lookup labels (loaned shop names)
+    const shopsById = {};
+    allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
+
+    // Week days: Sun → Sat
+    const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    const DAY_LABELS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+    const weekDates = [];
+    const base = new Date(`${week.weekStart}T12:00:00.000Z`);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const formatted = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+      weekDates.push({ iso, formatted, day: DAYS[i], dayLabel: DAY_LABELS[i] });
+    }
+
+    // ── PDF setup ─────────────────────────────────────────────────────────────
+    const PAGE_W = 841.89; // A4 landscape width
+    const PAGE_H = 595.28; // A4 landscape height
+    const MARGIN = 24;
+    const doc = new PDFDocument({ margin: MARGIN, size: 'A4', layout: 'landscape' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Weekly_Rota_${weekStart}.pdf"`);
+    doc.pipe(res);
+
+    const usableW = PAGE_W - MARGIN * 2;
+    const NAME_COL = 72;
+    const DAY_COL = (usableW - NAME_COL) / 7;
+
+    const COLORS = {
+      headerBg:    '#1e293b',
+      headerText:  '#ffffff',
+      shopBg:      '#f8fafc',
+      shopText:    '#1e293b',
+      dateBg:      '#f1f5f9',
+      dateText:    '#334155',
+      offText:     '#dc2626',
+      loanText:    '#7c3aed',
+      availText:   '#059669',
+      rowAlt:      '#f8fafc',
+      totalBg:     '#e2e8f0',
+      totalText:   '#1e293b',
+      border:      '#cbd5e1',
+      white:       '#ffffff',
+    };
+
+    let y = MARGIN;
+
+    // ── Helper: draw a full-width horizontal line ────────────────────────────
+    const hLine = (yPos, color = COLORS.border) => {
+      doc.strokeColor(color).lineWidth(0.4).moveTo(MARGIN, yPos).lineTo(MARGIN + usableW, yPos).stroke();
+    };
+
+    // ── Helper: draw a cell rect ─────────────────────────────────────────────
+    const fillRect = (x, yPos, w, h, bg) => {
+      doc.rect(x, yPos, w, h).fillColor(bg).fill();
+    };
+
+    // ── Helper: draw text centred in a cell ──────────────────────────────────
+    const cellText = (text, x, yPos, w, h, color, size, bold = false, align = 'center') => {
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica')
+         .fontSize(size)
+         .fillColor(color)
+         .text(text, x + 2, yPos + 2, { width: w - 4, height: h - 2, align, lineBreak: false });
+    };
+
+    // ── Page header ──────────────────────────────────────────────────────────
+    const drawPageHeader = () => {
+      const H = 22;
+      fillRect(MARGIN, y, usableW, H, COLORS.headerBg);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.headerText)
+         .text(`Weekly Staff Rota  ·  ${weekDates[0].formatted} – ${weekDates[6].formatted}`,
+                MARGIN + 4, y + 6, { width: usableW - 8, align: 'center' });
+      y += H;
+      // Date header row
+      fillRect(MARGIN, y, NAME_COL, 18, COLORS.dateBg);
+      for (let i = 0; i < 7; i++) {
+        const x = MARGIN + NAME_COL + i * DAY_COL;
+        fillRect(x, y, DAY_COL, 18, COLORS.dateBg);
+        doc.font('Helvetica-Bold').fontSize(6.5).fillColor(COLORS.dateText)
+           .text(weekDates[i].formatted, x + 1, y + 2, { width: DAY_COL - 2, align: 'center', lineBreak: false });
+      }
+      y += 18;
+      hLine(y);
+    };
+
+    drawPageHeader();
+
+    // ── Draw each shop section ───────────────────────────────────────────────
+    const shopOrder = allShops.map(s => id(s._id)).filter(sid => rosterMap[sid]);
+    // also add shops from rosterMap not in allShops
+    Object.keys(rosterMap).forEach(sid => { if (!shopOrder.includes(sid)) shopOrder.push(sid); });
+
+    for (const shopId of shopOrder) {
+      const roster = rosterMap[shopId];
+      if (!roster || roster.employees.length === 0) continue;
+
+      const ROW_H   = 14;
+      const HEAD_H  = 16;
+      const TOTAL_H = 13;
+      const shopBlockH = HEAD_H + ROW_H + ROW_H + roster.employees.length * ROW_H + TOTAL_H;
+
+      // Page break check
+      if (y + shopBlockH > PAGE_H - MARGIN - 10) {
+        doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+        y = MARGIN;
+        drawPageHeader();
+      }
+
+      // ── Shop title row ───────────────────────────────────────────────────
+      fillRect(MARGIN, y, usableW, HEAD_H, COLORS.dateBg);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.shopText)
+         .text(roster.shopName, MARGIN, y + 4, { width: usableW, align: 'center', lineBreak: false });
+      hLine(y); hLine(y + HEAD_H);
+      y += HEAD_H;
+
+      // ── Sub-header: Name + date columns ─────────────────────────────────
+      fillRect(MARGIN, y, NAME_COL, ROW_H, COLORS.dateBg);
+      cellText('Name', MARGIN, y, NAME_COL, ROW_H, COLORS.shopText, 6.5, true, 'left');
+      for (let i = 0; i < 7; i++) {
+        const x = MARGIN + NAME_COL + i * DAY_COL;
+        fillRect(x, y, DAY_COL, ROW_H, COLORS.dateBg);
+        cellText(weekDates[i].formatted.replace(/ \d{4}$/, ''), x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, false);
+      }
+      hLine(y + ROW_H);
+      y += ROW_H;
+
+      // ── Day-name row ─────────────────────────────────────────────────────
+      fillRect(MARGIN, y, NAME_COL, ROW_H, COLORS.dateBg);
+      for (let i = 0; i < 7; i++) {
+        const x = MARGIN + NAME_COL + i * DAY_COL;
+        fillRect(x, y, DAY_COL, ROW_H, COLORS.dateBg);
+        cellText(weekDates[i].dayLabel, x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, true);
+      }
+      hLine(y + ROW_H);
+      y += ROW_H;
+
+      // ── Staff rows ───────────────────────────────────────────────────────
+      const totals = new Array(7).fill(0);
+      roster.employees.forEach((emp, rowIdx) => {
+        const rowBg = rowIdx % 2 === 0 ? COLORS.white : COLORS.rowAlt;
+        fillRect(MARGIN, y, NAME_COL, ROW_H, rowBg);
+        cellText(emp.name, MARGIN + 2, y, NAME_COL - 4, ROW_H, COLORS.shopText, 6, true, 'left');
+
+        for (let i = 0; i < 7; i++) {
+          const x = MARGIN + NAME_COL + i * DAY_COL;
+          const key = `${shopId}:${emp._id}:${weekDates[i].iso}`;
+          const cell = cellMap[key];
+          fillRect(x, y, DAY_COL, ROW_H, rowBg);
+
+          let label = '—';
+          let color = '#94a3b8';
+          if (cell) {
+            if (cell.status === 'OFF') {
+              label = 'OFF'; color = COLORS.offText;
+            } else if (cell.status === 'LOANED') {
+              label = cell.note || 'Loaned'; color = COLORS.loanText;
+            } else {
+              // AVAILABLE
+              label = cell.note ? `Avail. ${cell.note}` : 'Available';
+              color = COLORS.availText;
+              totals[i]++;
+            }
+          }
+          cellText(label, x, y, DAY_COL, ROW_H, color, 5.5, cell?.status === 'OFF');
+        }
+        // Vertical grid lines for this row
+        doc.strokeColor(COLORS.border).lineWidth(0.3);
+        for (let i = 0; i <= 7; i++) {
+          const lx = i === 0 ? MARGIN + NAME_COL : MARGIN + NAME_COL + i * DAY_COL;
+          doc.moveTo(lx, y).lineTo(lx, y + ROW_H).stroke();
+        }
+        hLine(y + ROW_H);
+        y += ROW_H;
+      });
+
+      // ── Totals row ───────────────────────────────────────────────────────
+      fillRect(MARGIN, y, NAME_COL, TOTAL_H, COLORS.totalBg);
+      cellText('Total', MARGIN + 2, y, NAME_COL, TOTAL_H, COLORS.totalText, 6, true, 'left');
+      for (let i = 0; i < 7; i++) {
+        const x = MARGIN + NAME_COL + i * DAY_COL;
+        fillRect(x, y, DAY_COL, TOTAL_H, COLORS.totalBg);
+        cellText(String(totals[i]), x, y, DAY_COL, TOTAL_H, COLORS.totalText, 6.5, true);
+      }
+      hLine(y); hLine(y + TOTAL_H);
+      // outer border
+      doc.rect(MARGIN, y - roster.employees.length * ROW_H - HEAD_H - 2 * ROW_H, usableW, roster.employees.length * ROW_H + HEAD_H + 2 * ROW_H + TOTAL_H)
+         .strokeColor(COLORS.border).lineWidth(0.6).stroke();
+      y += TOTAL_H + 8; // gap between shops
+    }
+
+    // ── Footer ───────────────────────────────────────────────────────────────
+    const footerY = PAGE_H - MARGIN - 10;
+    doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
+       .text(`Generated by PIXX ROTA  ·  ${new Date().toLocaleDateString('en-GB')}`, MARGIN, footerY, { width: usableW, align: 'center' });
+
     await logAction({
       user: req.user,
       action: 'ROTA_EXPORTED',
       recordType: 'WeeklyRota',
-      details: `Exported ${employeeId ? `employee ${employeeId} ` : ''}rota for ${data.week.weekStart} as PDF.`,
+      details: `Exported rota for ${weekStart} as PDF.`,
       req
     });
+
     doc.end();
     return undefined;
   } catch (error) { return handleError(res, error); }
