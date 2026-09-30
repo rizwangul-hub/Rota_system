@@ -608,11 +608,11 @@ export default function ReportsPage() {
               <div className="stat-val" style={{ color: '#d97706' }}>{Number(weeklyAttendanceData.summary?.totalWorkedHours || 0).toFixed(1)}h</div>
               <div style={{ fontSize: '12px', color: '#64748b' }}>Scheduled: {Number(weeklyAttendanceData.summary?.totalScheduledHours || 0).toFixed(1)}h</div>
             </div>
-            <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
+            {isAdmin && <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
               <div className="stat-lbl">Total Attendance Pay</div>
               <div className="stat-val" style={{ color: '#2563eb' }}>£{(weeklyAttendanceData.summary?.totalAttendancePay || 0).toFixed(2)}</div>
               <div style={{ fontSize: '12px', color: '#64748b' }}>Deductions: £{(weeklyAttendanceData.summary?.totalLateDeductions || 0).toFixed(2)}</div>
-            </div>
+            </div>}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
@@ -639,8 +639,8 @@ export default function ReportsPage() {
                     <th>Absent</th>
                     <th>Hours Worked</th>
                     <th>Late (m)</th>
-                    <th>Late Ded (£)</th>
-                    <th>Attendance Pay (£)</th>
+                    {isAdmin && <th>Late Ded (£)</th>}
+                    {isAdmin && <th>Attendance Pay (£)</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -656,13 +656,13 @@ export default function ReportsPage() {
                       <td style={{ color: '#dc2626' }}>{r.absentDays}</td>
                       <td>{r.actualHours}h</td>
                       <td>{r.lateMinutes}m</td>
-                      <td style={{ color: r.lateDeduction > 0 ? '#dc2626' : 'inherit' }}>£{(r.lateDeduction || 0).toFixed(2)}</td>
-                      <td style={{ fontWeight: 700, color: '#2563eb' }}>£{(r.attendancePay || 0).toFixed(2)}</td>
+                      {isAdmin && <td style={{ color: r.lateDeduction > 0 ? '#dc2626' : 'inherit' }}>£{(r.lateDeduction || 0).toFixed(2)}</td>}
+                      {isAdmin && <td style={{ fontWeight: 700, color: '#2563eb' }}>£{(r.attendancePay || 0).toFixed(2)}</td>}
                     </tr>
                   ))}
                   {(!weeklyAttendanceData.records || weeklyAttendanceData.records.length === 0) && (
                     <tr>
-                      <td colSpan="12" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={isAdmin ? 12 : 10} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly attendance records found for this period.
                       </td>
                     </tr>
@@ -1070,11 +1070,11 @@ export default function ReportsPage() {
               <div className="stat-val" style={{ color: '#2563eb' }}>{(labourData.grandTotals?.totalActualHours || 0).toFixed(1)}h</div>
               <div style={{ fontSize: '12px', color: '#64748b' }}>Scheduled: {(labourData.grandTotals?.totalScheduledHours || 0).toFixed(1)}h</div>
             </div>
-            <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
+            {isAdmin && <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
               <div className="stat-lbl">Attendance Wage Cost</div>
               <div className="stat-val" style={{ color: '#059669' }}>£{(labourData.grandTotals?.totalWageCost || 0).toFixed(2)}</div>
               <div style={{ fontSize: '12px', color: '#64748b' }}>Working Days: {labourData.grandTotals?.totalWorkingDays || 0}</div>
-            </div>
+            </div>}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
@@ -1094,7 +1094,7 @@ export default function ReportsPage() {
                   🏬 {shop.shopName} ({shop.employeeCount} staff)
                 </h3>
                 <span style={{ fontSize: '13px', fontWeight: 600, color: '#2563eb' }}>
-                  Total Hours: {shop.totalHours}h | Wage Cost: £{shop.totalWageCost.toFixed(2)}
+                  Total Hours: {shop.totalHours}h{isAdmin ? ` | Wage Cost: £${shop.totalWageCost.toFixed(2)}` : ''}
                 </span>
               </div>
               <div className="table-responsive">
@@ -1107,7 +1107,7 @@ export default function ReportsPage() {
                       <th>Scheduled (h)</th>
                       <th>Actual Worked (h)</th>
                       <th>Late (m)</th>
-                      <th>Wage Cost (£)</th>
+                      {isAdmin && <th>Wage Cost (£)</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -1119,7 +1119,7 @@ export default function ReportsPage() {
                         <td>{e.scheduledHours}h</td>
                         <td style={{ fontWeight: 600 }}>{e.hours}h</td>
                         <td>{e.lateMinutes}m</td>
-                        <td style={{ fontWeight: 700, color: '#2563eb' }}>£{e.wageCost.toFixed(2)}</td>
+                        {isAdmin && <td style={{ fontWeight: 700, color: '#2563eb' }}>£{e.wageCost.toFixed(2)}</td>}
                       </tr>
                     ))}
                   </tbody>

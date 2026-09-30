@@ -496,7 +496,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
              .text(r.employeeName || 'Unknown', MARGIN_LEFT + 24, curY + 5.5, { width: 165, lineBreak: false });
 
           doc.fillColor('#64748b').font('Helvetica').fontSize(7)
-             .text(r.shopName || 'Not Assigned', MARGIN_LEFT + 195, curY + 5.5, { width: 130, lineBreak: false });
+             .text('Not Assigned', MARGIN_LEFT + 195, curY + 5.5, { width: 130, lineBreak: false });
 
           const pillX = MARGIN_LEFT + 340;
           const pillY = curY + 3;
@@ -646,14 +646,23 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
       totalLateDeductions: Number(records.reduce((sum, r) => sum + r.lateDeduction, 0).toFixed(2)),
       totalAttendancePay: Number(records.reduce((sum, r) => sum + r.attendancePay, 0).toFixed(2))
     };
+    const isAdmin = req.user.role === 'ADMIN';
+    const responseSummary = isAdmin
+      ? summary
+      : Object.fromEntries(Object.entries(summary).filter(([key]) =>
+        !['totalLateDeductions', 'totalAttendancePay'].includes(key)
+      ));
+    const responseRecords = isAdmin
+      ? records
+      : records.map(({ lateDeduction, attendancePay, ...record }) => record);
 
     res.json({
       success: true,
       weekLabel: targetWeekLabel,
       startDateString: week.startDateString,
       endDateString: week.endDateString,
-      summary,
-      records
+      summary: responseSummary,
+      records: responseRecords
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to generate weekly attendance report.');
@@ -720,7 +729,7 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
       totalAttendancePay: records.reduce((sum, r) => sum + r.attendancePay, 0)
     };
 
-    const workbook = await buildWeeklyAttendanceExcel(records, targetWeekLabel, summary);
+    const workbook = await buildWeeklyAttendanceExcel(records, targetWeekLabel, summary, req.user.role === 'ADMIN');
 
     await logAction({
       user: req.user,
@@ -801,7 +810,14 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
       req
     });
 
-    buildWeeklyAttendancePDF(res, records, targetWeekLabel, summary, req.user?.name || 'Admin');
+    buildWeeklyAttendancePDF(
+      res,
+      records,
+      targetWeekLabel,
+      summary,
+      req.user?.name || 'Admin',
+      req.user.role === 'ADMIN'
+    );
   } catch (error) {
     return sendServerError(res, error, 'Failed to export weekly attendance PDF.');
   }
@@ -1787,19 +1803,25 @@ exports.getShopLabourHours = async (req, res) => {
       employees: Object.values(s.employees)
     }));
 
+    const isAdmin = req.user.role === 'ADMIN';
     const grandTotals = {
       totalWorkingDays: result.reduce((sum, s) => sum + s.totalWorkingDays, 0),
       totalScheduledHours: Number(result.reduce((sum, s) => sum + s.totalScheduledHours, 0).toFixed(2)),
       totalActualHours: Number(result.reduce((sum, s) => sum + s.totalHours, 0).toFixed(2)),
       totalLateMinutes: result.reduce((sum, s) => sum + s.totalLateMinutes, 0),
-      totalWageCost: Number(result.reduce((sum, s) => sum + s.totalWageCost, 0).toFixed(2))
+      ...(isAdmin && {
+        totalWageCost: Number(result.reduce((sum, s) => sum + s.totalWageCost, 0).toFixed(2))
+      })
     };
 
     res.json({
       success: true,
       count: result.length,
       grandTotals,
-      data: result
+      data: isAdmin ? result : result.map(({ totalWageCost, employees, ...shop }) => ({
+        ...shop,
+        employees: employees.map(({ wageCost, ...employee }) => employee)
+      }))
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to retrieve shop labour hours.');
@@ -1838,11 +1860,13 @@ exports.getMonthlyShopLabourSummary = async (req, res) => {
       const attendancePay = Number(attendances.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2));
 
       // Finalized salary cost where available
-      const salaries = await WeeklySalary.find({
-        shop: shop._id,
-        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-        weekEndDate: { $gte: monthStart, $lte: monthEnd }
-      });
+      const salaries = req.user.role === 'ADMIN'
+        ? await WeeklySalary.find({
+          shop: shop._id,
+          status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
+          weekEndDate: { $gte: monthStart, $lte: monthEnd }
+        })
+        : [];
       const finalizedSalaryCost = Number(salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2));
 
       shopSummaries.push({
@@ -1858,21 +1882,27 @@ exports.getMonthlyShopLabourSummary = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user.role === 'ADMIN';
+    const responseShops = isAdmin
+      ? shopSummaries
+      : shopSummaries.map(({ lateDeductions, attendancePay, finalizedSalaryCost, ...shop }) => shop);
     const grandTotals = {
       totalEmployees: shopSummaries.reduce((sum, s) => sum + s.employees, 0),
       totalWorkingDays: shopSummaries.reduce((sum, s) => sum + s.workingDays, 0),
       totalScheduledHours: Number(shopSummaries.reduce((sum, s) => sum + s.scheduledHours, 0).toFixed(2)),
       totalActualHours: Number(shopSummaries.reduce((sum, s) => sum + s.actualHours, 0).toFixed(2)),
-      totalLateDeductions: Number(shopSummaries.reduce((sum, s) => sum + s.lateDeductions, 0).toFixed(2)),
-      totalAttendancePay: Number(shopSummaries.reduce((sum, s) => sum + s.attendancePay, 0).toFixed(2)),
-      totalFinalizedSalaryCost: Number(shopSummaries.reduce((sum, s) => sum + s.finalizedSalaryCost, 0).toFixed(2))
+      ...(isAdmin && {
+        totalLateDeductions: Number(shopSummaries.reduce((sum, s) => sum + s.lateDeductions, 0).toFixed(2)),
+        totalAttendancePay: Number(shopSummaries.reduce((sum, s) => sum + s.attendancePay, 0).toFixed(2)),
+        totalFinalizedSalaryCost: Number(shopSummaries.reduce((sum, s) => sum + s.finalizedSalaryCost, 0).toFixed(2))
+      })
     };
 
     res.json({
       success: true,
       month: targetMonth,
       year: targetYear,
-      shopSummaries,
+      shopSummaries: responseShops,
       grandTotals
     });
   } catch (error) {
@@ -1919,7 +1949,7 @@ exports.exportShopLabourExcel = async (req, res) => {
     }));
 
     const periodLabel = startDate && endDate ? `${startDate} to ${endDate}` : 'All Dates';
-    const workbook = await buildShopLabourExcel(shopData, periodLabel);
+    const workbook = await buildShopLabourExcel(shopData, periodLabel, req.user.role === 'ADMIN');
 
     await logAction({
       user: req.user,
@@ -1986,7 +2016,7 @@ exports.exportShopLabourPDF = async (req, res) => {
       req
     });
 
-    buildShopLabourPDF(res, shopData, periodLabel, req.user?.name || 'Admin');
+    buildShopLabourPDF(res, shopData, periodLabel, req.user?.name || 'Admin', req.user.role === 'ADMIN');
   } catch (error) {
     return sendServerError(res, error, 'Failed to export Shop Labour PDF.');
   }

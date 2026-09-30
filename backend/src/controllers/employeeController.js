@@ -73,9 +73,9 @@ exports.getAllEmployees = async (req, res) => {
   try {
     const { shop, status, search, sortBy = 'name', sortOrder = 'asc' } = req.query;
     const query = {};
-    const isAttendanceOperator = req.user.role === 'ATTENDANCE_OPERATOR';
+    const isAttendanceStaff = ['ATTENDANCE_OPERATOR', 'ATTENDANCE_CHECKER'].includes(req.user.role);
 
-    if (shop && !isAttendanceOperator) query.assignedShop = shop;
+    if (shop && !isAttendanceStaff) query.assignedShop = shop;
     if (status) query.employmentStatus = status;
     if (search) {
       query.$or = [
@@ -86,7 +86,7 @@ exports.getAllEmployees = async (req, res) => {
 
     const sortOptions = {};
     const order = sortOrder === 'desc' ? -1 : 1;
-    if (isAttendanceOperator) {
+    if (isAttendanceStaff) {
       sortOptions.name = 1;
     } else if (sortBy === 'wage' || sortBy === 'dailyWage') {
       sortOptions.dailyWage = order;
@@ -99,7 +99,7 @@ exports.getAllEmployees = async (req, res) => {
     }
 
     const employees = await Employee.find(query).populate('assignedShop').sort(sortOptions);
-    const responseEmployees = isAttendanceOperator
+    const responseEmployees = isAttendanceStaff
       ? employees.map(employeeAttendanceRosterEntry)
       : employees;
     res.json({ success: true, count: responseEmployees.length, employees: responseEmployees });
@@ -114,7 +114,7 @@ exports.getEmployeeById = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
     res.json({
       success: true,
-      employee: req.user.role === 'ATTENDANCE_OPERATOR'
+      employee: ['ATTENDANCE_OPERATOR', 'ATTENDANCE_CHECKER'].includes(req.user.role)
         ? employeeAttendanceRosterEntry(employee)
         : employee
     });
@@ -280,8 +280,8 @@ exports.toggleEmployeeStatus = async (req, res) => {
 
 exports.getEmployeeProfile = async (req, res) => {
   try {
-    if (req.user.role === 'ATTENDANCE_OPERATOR') {
-      return res.status(403).json({ success: false, message: 'Employee payroll profiles are not available to attendance operators.' });
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Employee payroll profiles are available to administrators only.' });
     }
     const { id } = req.params;
     const employee = await Employee.findById(id).populate('assignedShop');

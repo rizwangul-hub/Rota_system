@@ -51,7 +51,7 @@ router.get(
 router.get(
   '/weekly-staff',
   authenticate,
-  authorize('ADMIN', 'ATTENDANCE_CHECKER'),
+  authorize('ADMIN'),
   reportController.getWeeklyStaffReport
 );
 

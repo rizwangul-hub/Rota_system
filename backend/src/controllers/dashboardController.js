@@ -5,6 +5,7 @@ const Attendance = require('../models/Attendance');
 const WeeklySalary = require('../models/WeeklySalary');
 const Bonus = require('../models/Bonus');
 const { getWeekRange, formatUKDate } = require('../utils/calc');
+const { attendanceCheckerRecord } = require('../utils/attendanceViews');
 
 exports.getAdminDashboard = async (req, res) => {
   try {
@@ -96,15 +97,13 @@ exports.getCheckerDashboard = async (req, res) => {
       present: pendingRecords.filter(r => r.status === 'Present').length,
       late: pendingRecords.filter(r => r.status === 'Late').length,
       half: pendingRecords.filter(r => r.status === 'Half').length,
-      absent: pendingRecords.filter(r => r.status === 'Absent').length,
-      totalWages: Number(pendingRecords.reduce((sum, r) => sum + (r.attendancePay || 0), 0).toFixed(2)),
-      totalDeductions: Number(pendingRecords.reduce((sum, r) => sum + (r.lateDeduction || 0), 0).toFixed(2))
+      absent: pendingRecords.filter(r => r.status === 'Absent').length
     };
 
     res.json({
       success: true,
       stats,
-      pendingRecords
+      pendingRecords: pendingRecords.map(attendanceCheckerRecord)
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to retrieve checker dashboard.');

@@ -5,12 +5,12 @@ const Shop = require('../models/Shop');
 const SystemSetting = require('../models/SystemSetting');
 const { calculateAttendanceRecord, formatUKDate, getUKDateString } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
-const { attendanceOperatorRecord } = require('../utils/attendanceViews');
+const { attendanceOperatorRecord, attendanceCheckerRecord } = require('../utils/attendanceViews');
 
 function attendanceResponse(req, record) {
-  return req.user.role === 'ATTENDANCE_OPERATOR'
-    ? attendanceOperatorRecord(record)
-    : record;
+  if (req.user.role === 'ATTENDANCE_OPERATOR') return attendanceOperatorRecord(record);
+  if (req.user.role === 'ATTENDANCE_CHECKER') return attendanceCheckerRecord(record);
+  return record;
 }
 
 // Helper to get configured grace period
@@ -398,7 +398,11 @@ exports.getPendingAttendance = async (req, res) => {
       .populate('shop')
       .sort({ date: -1, shopName: 1, employeeName: 1 });
 
-    res.json({ success: true, count: records.length, records });
+    res.json({
+      success: true,
+      count: records.length,
+      records: records.map(record => attendanceResponse(req, record))
+    });
   } catch (error) {
     return sendServerError(res, error, 'Error retrieving pending attendance.');
   }

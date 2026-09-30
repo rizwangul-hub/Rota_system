@@ -637,11 +637,12 @@ async function buildEmployeeMonthlyExcel(employeeName, monthLabel, weeklyBreakdo
 /**
  * Generate Excel workbook for Weekly Attendance Report
  */
-async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
+async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}, includeFinancials = true) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Weekly Attendance');
 
-  sheet.mergeCells('A1:M1');
+  const columnCount = includeFinancials ? 13 : 11;
+  sheet.mergeCells(1, 1, 1, columnCount);
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Weekly Attendance Report (${weekLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -651,7 +652,8 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
 
   const headers = [
     'Shop', 'Employee ID', 'Employee Name', 'Work Days', 'Present', 'Late', 'Half', 'Absent',
-    'Sched Hours', 'Worked Hours', 'Late (min)', 'Late Ded (£)', 'Attendance Pay (£)'
+    'Sched Hours', 'Worked Hours', 'Late (min)',
+    ...(includeFinancials ? ['Late Ded (£)', 'Attendance Pay (£)'] : [])
   ];
   sheet.addRow([]);
   const headerRow = sheet.addRow(headers);
@@ -674,8 +676,12 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
       Number((r.scheduledHours || 0).toFixed(2)),
       Number((r.actualHours || 0).toFixed(2)),
       r.lateMinutes || 0,
-      Number((r.lateDeduction || 0).toFixed(2)),
-      Number((r.attendancePay || 0).toFixed(2))
+      ...(includeFinancials
+        ? [
+            Number((r.lateDeduction || 0).toFixed(2)),
+            Number((r.attendancePay || 0).toFixed(2))
+          ]
+        : [])
     ]);
   });
 
@@ -692,8 +698,12 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
     Number((summary.totalScheduledHours || 0).toFixed(2)),
     Number((summary.totalWorkedHours || 0).toFixed(2)),
     summary.totalLateMinutes || 0,
-    Number((summary.totalLateDeductions || 0).toFixed(2)),
-    Number((summary.totalAttendancePay || 0).toFixed(2))
+    ...(includeFinancials
+      ? [
+          Number((summary.totalLateDeductions || 0).toFixed(2)),
+          Number((summary.totalAttendancePay || 0).toFixed(2))
+        ]
+      : [])
   ]);
   sumRow.eachCell(cell => {
     cell.font = { name: 'Arial', size: 10, bold: true };
@@ -709,7 +719,7 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
 /**
  * Generate PDF for Weekly Attendance Report
  */
-function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generatedBy = 'Admin') {
+function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generatedBy = 'Admin', includeFinancials = true) {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Weekly_Attendance_${weekLabel.replace(/[\/–\s]/g, '_')}.pdf"`);
@@ -733,8 +743,10 @@ function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generat
   doc.text('Sched (h)', 445, y);
   doc.text('Worked (h)', 510, y);
   doc.text('Late (m)', 580, y);
-  doc.text('Late Ded (£)', 640, y);
-  doc.text('Attendance Pay (£)', 720, y);
+  if (includeFinancials) {
+    doc.text('Late Ded (£)', 640, y);
+    doc.text('Attendance Pay (£)', 720, y);
+  }
 
   doc.moveTo(25, y + 13).lineTo(815, y + 13).stroke();
   doc.font('Helvetica').fontSize(8);
@@ -753,19 +765,19 @@ function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generat
     doc.text(`${(r.scheduledHours || 0).toFixed(1)}h`, 445, y);
     doc.text(`${(r.actualHours || 0).toFixed(1)}h`, 510, y);
     doc.text(`${r.lateMinutes || 0}m`, 580, y);
-    doc.text(`£${(r.lateDeduction || 0).toFixed(2)}`, 640, y);
-    doc.text(`£${(r.attendancePay || 0).toFixed(2)}`, 720, y);
+    if (includeFinancials) {
+      doc.text(`£${(r.lateDeduction || 0).toFixed(2)}`, 640, y);
+      doc.text(`£${(r.attendancePay || 0).toFixed(2)}`, 720, y);
+    }
     y += 14;
   });
 
   const summaryY = Math.min(y + 10, 530);
   doc.rect(25, summaryY, 790, 26).fillAndStroke('#f8fafc', '#cbd5e1');
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8.5);
-  doc.text(
-    `TOTALS: Staff: ${records.length} | Working Days: ${summary.totalWorkingDays || 0} | Worked Hours: ${(summary.totalWorkedHours || 0).toFixed(1)}h | Late Deductions: £${(summary.totalLateDeductions || 0).toFixed(2)} | Net Attendance Pay: £${(summary.totalAttendancePay || 0).toFixed(2)}`,
-    35,
-    summaryY + 8
-  );
+  const totals = `TOTALS: Staff: ${records.length} | Working Days: ${summary.totalWorkingDays || 0} | Worked Hours: ${(summary.totalWorkedHours || 0).toFixed(1)}h`;
+  const financialTotals = ` | Late Deductions: £${(summary.totalLateDeductions || 0).toFixed(2)} | Net Attendance Pay: £${(summary.totalAttendancePay || 0).toFixed(2)}`;
+  doc.text(`${totals}${includeFinancials ? financialTotals : ''}`, 35, summaryY + 8);
 
   doc.end();
 }
@@ -1178,11 +1190,12 @@ function buildBonusPDF(res, bonuses, month, year, totals = {}, generatedBy = 'Ad
 /**
  * Generate Excel workbook for Shop Labour Hours Report
  */
-async function buildShopLabourExcel(shopData, periodLabel = '') {
+async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost = true) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Shop Labour Hours');
 
-  sheet.mergeCells('A1:H1');
+  const columnCount = includeWageCost ? 8 : 7;
+  sheet.mergeCells(1, 1, 1, columnCount);
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Shop Labour Hours Report (${periodLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1192,7 +1205,8 @@ async function buildShopLabourExcel(shopData, periodLabel = '') {
 
   const headers = [
     'Shop Location', 'Employee ID', 'Employee Name', 'Work Days',
-    'Scheduled Hours', 'Actual Hours Worked', 'Late (min)', 'Attendance Pay (£)'
+    'Scheduled Hours', 'Actual Hours Worked', 'Late (min)',
+    ...(includeWageCost ? ['Attendance Pay (£)'] : [])
   ];
   sheet.addRow([]);
   const headerRow = sheet.addRow(headers);
@@ -1220,7 +1234,7 @@ async function buildShopLabourExcel(shopData, periodLabel = '') {
         Number((e.scheduledHours || 0).toFixed(2)),
         Number((e.hours || 0).toFixed(2)),
         e.lateMinutes || 0,
-        Number((e.wageCost || 0).toFixed(2))
+        ...(includeWageCost ? [Number((e.wageCost || 0).toFixed(2))] : [])
       ]);
     });
   });
@@ -1233,7 +1247,7 @@ async function buildShopLabourExcel(shopData, periodLabel = '') {
     Number(grandSched.toFixed(2)),
     Number(grandActual.toFixed(2)),
     grandLate,
-    Number(grandCost.toFixed(2))
+    ...(includeWageCost ? [Number(grandCost.toFixed(2))] : [])
   ]);
   sumRow.eachCell(cell => {
     cell.font = { name: 'Arial', size: 10, bold: true };
@@ -1249,14 +1263,17 @@ async function buildShopLabourExcel(shopData, periodLabel = '') {
 /**
  * Generate PDF for Shop Labour Hours Report
  */
-function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy = 'Admin') {
+function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy = 'Admin', includeWageCost = true) {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Shop_Labour_Hours_${periodLabel.replace(/\s+/g, '_')}.pdf"`);
   doc.pipe(res);
 
   doc.fontSize(16).font('Helvetica-Bold').text('PixxTechnologies UK', { align: 'center' });
-  doc.fontSize(12).font('Helvetica').text(`Shop Labour Hours & Wage Cost Report (${periodLabel})`, { align: 'center' });
+  doc.fontSize(12).font('Helvetica').text(
+    `Shop Labour Hours${includeWageCost ? ' & Wage Cost' : ''} Report (${periodLabel})`,
+    { align: 'center' }
+  );
   doc.fontSize(10).font('Helvetica-Oblique').text(
     `Generated By: ${generatedBy} | Date: ${new Date().toLocaleDateString('en-GB')}`,
     { align: 'center' }
@@ -1272,7 +1289,7 @@ function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy = 'Admi
   doc.text('Sched Hours', 420, y);
   doc.text('Actual Hours', 510, y);
   doc.text('Late (min)', 600, y);
-  doc.text('Attendance Pay (£)', 690, y);
+  if (includeWageCost) doc.text('Attendance Pay (£)', 690, y);
 
   doc.moveTo(25, y + 13).lineTo(815, y + 13).stroke();
   doc.font('Helvetica').fontSize(8);
@@ -1298,7 +1315,7 @@ function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy = 'Admi
       doc.text(`${(e.scheduledHours || 0).toFixed(1)}h`, 420, y);
       doc.text(`${(e.hours || 0).toFixed(1)}h`, 510, y);
       doc.text(`${e.lateMinutes || 0}m`, 600, y);
-      doc.text(`£${(e.wageCost || 0).toFixed(2)}`, 690, y);
+      if (includeWageCost) doc.text(`£${(e.wageCost || 0).toFixed(2)}`, 690, y);
       y += 14;
     });
   });
@@ -1306,11 +1323,9 @@ function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy = 'Admi
   const summaryY = Math.min(y + 10, 520);
   doc.rect(25, summaryY, 790, 26).fillAndStroke('#f8fafc', '#cbd5e1');
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8.5);
-  doc.text(
-    `TOTALS: Working Days: ${grandDays} | Sched Hours: ${grandSched.toFixed(1)}h | Actual Worked: ${grandActual.toFixed(1)}h | TOTAL ATTENDANCE WAGE COST: £${grandCost.toFixed(2)}`,
-    35,
-    summaryY + 8
-  );
+  const totals = `TOTALS: Working Days: ${grandDays} | Sched Hours: ${grandSched.toFixed(1)}h | Actual Worked: ${grandActual.toFixed(1)}h`;
+  const wageTotal = ` | TOTAL ATTENDANCE WAGE COST: £${grandCost.toFixed(2)}`;
+  doc.text(`${totals}${includeWageCost ? wageTotal : ''}`, 35, summaryY + 8);
 
   doc.end();
 }

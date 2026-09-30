@@ -21,14 +21,18 @@ const reportRoutes = require('../routes/reportRoutes');
 const employeeController = require('../controllers/employeeController');
 const attendanceController = require('../controllers/attendanceController');
 const reportController = require('../controllers/reportController');
+const dashboardController = require('../controllers/dashboardController');
 const {
   attendanceOperatorRecord,
+  attendanceCheckerRecord,
   employeeAttendanceRosterEntry
 } = require('../utils/attendanceViews');
 const {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
-  buildDailyAttendanceExcel
+  buildDailyAttendanceExcel,
+  buildWeeklyAttendanceExcel,
+  buildShopLabourExcel
 } = require('../utils/reports');
 
 let passed = 0;
@@ -142,6 +146,16 @@ async function run() {
       }
       assert.deepEqual(response.employee, { _id: 'emp-1', name: 'Alex Worker', employeeId: 'EMP-01' });
       assert.deepEqual(response.shop, { _id: 'shop-1', name: 'Main Shop' });
+    });
+
+    test('checker attendance serializer retains review details but removes all wage fields', () => {
+      const response = attendanceCheckerRecord(financeFixture);
+      for (const key of ['dailyWage', 'hourlyWage', 'lateDeduction', 'attendancePay', 'secretInternalField']) {
+        assert.equal(Object.hasOwn(response, key), false, `${key} must be omitted`);
+      }
+      assert.equal(response.actualHours, 7.83);
+      assert.equal(response.lateMinutes, 10);
+      assert.deepEqual(response.employee, { _id: 'emp-1', name: 'Alex Worker', employeeId: 'EMP-01' });
     });
 
     test('operator roster serializer returns only safe worker identity and status', () => {
@@ -278,7 +292,7 @@ async function run() {
       const values = sheet.getSheetValues().flat().map(value => String(value ?? ''));
       const allText = values.join('|');
       assert.deepEqual(sheet.getRow(3).values.slice(1), [
-        'Date', 'Shop', 'Employee ID', 'Worker Name', 'Shift Start', 'Shift End',
+        'Shop', 'Worker Name', 'Shift Start', 'Shift End',
         'Arrival', 'Leave', 'Status', 'Remarks'
       ]);
       for (const value of ['987.65', '123.45', '12.34', '975.31', 'Wage', 'Deduction', 'Pay']) {
@@ -286,23 +300,23 @@ async function run() {
       }
       assert.equal(allText.includes('SUBMITTED BY (ATTENDANCE OPERATOR)'), true);
       assert.equal(allText.includes('VERIFIED BY (ATTENDANCE CHECKER)'), true);
-      assert.equal(sheet.getCell('B5').value, '');
+      assert.equal(sheet.getCell('B5').value, 'Absent Worker');
+      assert.equal(sheet.getCell('C5').value, '');
+      assert.equal(sheet.getCell('D5').value, '');
       assert.equal(sheet.getCell('E5').value, '');
       assert.equal(sheet.getCell('F5').value, '');
-      assert.equal(sheet.getCell('G5').value, '');
-      assert.equal(sheet.getCell('H5').value, '');
-      assert.equal(sheet.getCell('I5').value, 'Absent / Off');
-      assert.equal(sheet.getCell('G4').value, '9:10 AM');
-      assert.equal(sheet.getCell('H4').value, '5:00 PM');
+      assert.equal(sheet.getCell('G5').value, 'Absent / Off');
+      assert.equal(sheet.getCell('E4').value, '9:10 AM');
+      assert.equal(sheet.getCell('F4').value, '5:00 PM');
       assert.equal(sheet.getCell('A1').value, 'PIXX ROTA  |  DAILY ATTENDANCE');
       assert.match(sheet.getCell('A2').value, /12-hour format/);
       assert.equal(sheet.views[0].state, 'frozen');
       assert.equal(sheet.views[0].ySplit, 3);
-      assert.equal(sheet.autoFilter, 'A3:J5');
-      assert.equal(sheet.getCell('I4').fill.fgColor.argb, 'FFFFF7ED');
-      assert.equal(sheet.getCell('I5').fill.fgColor.argb, 'FFFEF2F2');
+      assert.equal(sheet.autoFilter, 'A3:H5');
+      assert.equal(sheet.getCell('G4').fill.fgColor.argb, 'FFFFF7ED');
+      assert.equal(sheet.getCell('G5').fill.fgColor.argb, 'FFFEF2F2');
       assert.equal(sheet.pageSetup.orientation, 'landscape');
-      assert.equal(sheet.getColumn(10).width, 30);
+      assert.equal(sheet.getColumn(8).width, 32);
     });
 
     test('Vercel backend configurations include daily report signature assets', () => {
@@ -366,6 +380,7 @@ async function run() {
       assert.equal(check(excelAuth, 'ATTENDANCE_CHECKER').nextCalled, true);
       assert.equal(check(pdfAuth, 'ADMIN').nextCalled, true);
       assert.equal(check(routeAuthorization('/weekly-salary'), 'ATTENDANCE_CHECKER').statusCode, 403);
+      assert.equal(check(routeAuthorization('/weekly-staff'), 'ATTENDANCE_CHECKER').statusCode, 403);
     });
 
     await testAsync('operator employee list ignores assigned-shop and wage-based sorting requests', async () => {
@@ -399,11 +414,94 @@ async function run() {
       });
     });
 
+    await testAsync('checker employee list and details omit wage and wage-history fields', async () => {
+      const employeeFixture = {
+        _id: 'emp-1',
+        name: 'Alex Worker',
+        employeeId: 'EMP-01',
+        employmentStatus: 'Active',
+        dailyWage: 987.65,
+        wageHistory: [{ wage: 987.65 }],
+        assignedShop: 'shop-1'
+      };
+      replaceMethod(Employee, 'find', () => ({
+        populate() {
+          return {
+            sort: async () => [employeeFixture]
+          };
+        }
+      }), restores);
+      replaceMethod(Employee, 'findById', () => ({
+        populate: async () => employeeFixture
+      }), restores);
+      const listResponse = responseRecorder();
+      await employeeController.getAllEmployees({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        query: { sortBy: 'dailyWage', sortOrder: 'desc' }
+      }, listResponse);
+      const detailResponse = responseRecorder();
+      await employeeController.getEmployeeById({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        params: { id: 'emp-1' }
+      }, detailResponse);
+
+      for (const employee of [listResponse.body.employees[0], detailResponse.body.employee]) {
+        assert.deepEqual(employee, {
+          _id: 'emp-1',
+          name: 'Alex Worker',
+          employeeId: 'EMP-01',
+          employmentStatus: 'Active'
+        });
+      }
+    });
+
     await testAsync('operator cannot access payroll employee profiles', async () => {
       const res = responseRecorder();
       await employeeController.getEmployeeProfile({ user: { role: 'ATTENDANCE_OPERATOR' }, params: { id: 'emp-1' } }, res);
       assert.equal(res.statusCode, 403);
       assert.equal(res.body.success, false);
+    });
+
+    await testAsync('checker cannot access employee payroll profiles', async () => {
+      const res = responseRecorder();
+      await employeeController.getEmployeeProfile({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        params: { id: 'emp-1' }
+      }, res);
+      assert.equal(res.statusCode, 403);
+      assert.equal(res.body.success, false);
+    });
+
+    await testAsync('pending attendance and checker dashboard omit all wage amounts', async () => {
+      const records = [{
+        ...financeFixture,
+        toObject() { return { ...this }; }
+      }];
+      replaceMethod(Attendance, 'find', query => {
+        if (query.approvalStatus === 'Pending Review') {
+          return {
+            populate() { return this; },
+            sort: async () => records
+          };
+        }
+        return Promise.resolve(records);
+      }, restores);
+      const pendingResponse = responseRecorder();
+      await attendanceController.getPendingAttendance({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        query: {}
+      }, pendingResponse);
+      assert.equal(Object.hasOwn(pendingResponse.body.records[0], 'attendancePay'), false);
+      assert.equal(Object.hasOwn(pendingResponse.body.records[0], 'dailyWage'), false);
+
+      const dashboardResponse = responseRecorder();
+      await dashboardController.getCheckerDashboard({
+        user: { role: 'ATTENDANCE_CHECKER' }
+      }, dashboardResponse);
+      assert.equal(Object.hasOwn(dashboardResponse.body.stats, 'totalWages'), false);
+      assert.equal(Object.hasOwn(dashboardResponse.body.stats, 'totalDeductions'), false);
+      assert.equal(Object.hasOwn(dashboardResponse.body.pendingRecords[0], 'attendancePay'), false);
+      assert.equal(Object.hasOwn(dashboardResponse.body.pendingRecords[0], 'dailyWage'), false);
     });
 
     await testAsync('daily attendance report redacts financial values and totals for operators', async () => {
@@ -459,6 +557,98 @@ async function run() {
       assert.equal(res.body.records[0].timeReached, '09:10');
       assert.equal(res.body.records[0].status, 'Late');
       assert.match(res.body.whatsAppText, /Alex Worker/);
+    });
+
+    await testAsync('weekly attendance report omits employee and aggregate wages for checkers', async () => {
+      const records = [{ ...financeFixture }];
+      replaceMethod(Attendance, 'find', () => ({
+        sort: async () => records
+      }), restores);
+      const res = responseRecorder();
+      await reportController.getWeeklyAttendanceReport({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        query: { date: '2026-04-05' }
+      }, res);
+      assert.equal(res.body.success, true);
+      assert.equal(Object.hasOwn(res.body.summary, 'totalAttendancePay'), false);
+      assert.equal(Object.hasOwn(res.body.summary, 'totalLateDeductions'), false);
+      assert.equal(Object.hasOwn(res.body.records[0], 'attendancePay'), false);
+      assert.equal(Object.hasOwn(res.body.records[0], 'lateDeduction'), false);
+      assert.equal(res.body.records[0].actualHours, 7.83);
+    });
+
+    await testAsync('shop labour reports omit wage data from checker responses', async () => {
+      const attendanceRows = [{
+        ...financeFixture,
+        shop: 'shop-1',
+        employee: 'emp-1',
+        toString() { return this._id; }
+      }];
+      replaceMethod(Attendance, 'find', () => ({
+        sort: async () => attendanceRows,
+        then(resolve, reject) {
+          return Promise.resolve(attendanceRows).then(resolve, reject);
+        }
+      }), restores);
+      const labourResponse = responseRecorder();
+      await reportController.getShopLabourHours({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        query: {}
+      }, labourResponse);
+      assert.equal(Object.hasOwn(labourResponse.body.grandTotals, 'totalWageCost'), false);
+      assert.equal(Object.hasOwn(labourResponse.body.data[0], 'totalWageCost'), false);
+      assert.equal(Object.hasOwn(labourResponse.body.data[0].employees[0], 'wageCost'), false);
+      assert.equal(labourResponse.body.data[0].employees[0].hours, 7.83);
+
+      replaceMethod(Shop, 'find', () => ({
+        sort: async () => [{ _id: 'shop-1', name: 'Main Shop' }]
+      }), restores);
+      replaceMethod(WeeklySalary, 'find', async () => {
+        assert.fail('Checker monthly labour summary must not query salary records.');
+      }, restores);
+      const monthlyResponse = responseRecorder();
+      await reportController.getMonthlyShopLabourSummary({
+        user: { role: 'ATTENDANCE_CHECKER' },
+        query: { month: '4', year: '2026' }
+      }, monthlyResponse);
+      assert.equal(Object.hasOwn(monthlyResponse.body.shopSummaries[0], 'attendancePay'), false);
+      assert.equal(Object.hasOwn(monthlyResponse.body.shopSummaries[0], 'finalizedSalaryCost'), false);
+      assert.equal(Object.hasOwn(monthlyResponse.body.grandTotals, 'totalFinalizedSalaryCost'), false);
+    });
+
+    await testAsync('checker attendance workbooks contain no wage columns or amounts', async () => {
+      const weekly = await buildWeeklyAttendanceExcel([{
+        employeeName: 'Alex Worker',
+        attendancePay: 975.31,
+        lateDeduction: 12.34
+      }], 'Week', { totalAttendancePay: 975.31, totalLateDeductions: 12.34 }, false);
+      const weeklyBuffer = await weekly.xlsx.writeBuffer();
+      const weeklyCopy = new ExcelJS.Workbook();
+      await weeklyCopy.xlsx.load(weeklyBuffer);
+      const weeklyText = weeklyCopy.getWorksheet('Weekly Attendance').getSheetValues().flat().join(' ');
+      assert.equal(weeklyText.includes('Attendance Pay (£)'), false);
+      assert.equal(weeklyText.includes('12.34'), false);
+      assert.equal(weeklyText.includes('975.31'), false);
+      const adminWeekly = await buildWeeklyAttendanceExcel([{
+        attendancePay: 975.31
+      }], 'Week', { totalAttendancePay: 975.31 });
+      const adminWeeklyBuffer = await adminWeekly.xlsx.writeBuffer();
+      const adminWeeklyCopy = new ExcelJS.Workbook();
+      await adminWeeklyCopy.xlsx.load(adminWeeklyBuffer);
+      const adminWeeklyText = adminWeeklyCopy.getWorksheet('Weekly Attendance').getSheetValues().flat().join(' ');
+      assert.equal(adminWeeklyText.includes('Attendance Pay (£)'), true);
+      assert.equal(adminWeeklyText.includes('975.31'), true);
+
+      const labour = await buildShopLabourExcel([{
+        shopName: 'Main Shop',
+        employees: [{ employeeName: 'Alex Worker', wageCost: 975.31 }]
+      }], 'Period', false);
+      const labourBuffer = await labour.xlsx.writeBuffer();
+      const labourCopy = new ExcelJS.Workbook();
+      await labourCopy.xlsx.load(labourBuffer);
+      const labourText = labourCopy.getWorksheet('Shop Labour Hours').getSheetValues().flat().join(' ');
+      assert.equal(labourText.includes('Attendance Pay (£)'), false);
+      assert.equal(labourText.includes('975.31'), false);
     });
 
     await testAsync('monthly Excel export generates a valid authenticated report file', async () => {
@@ -802,8 +992,9 @@ async function run() {
         [...tokens.matchAll(/<([0-9a-f]+)>/gi)].map((token) => Buffer.from(token[1], 'hex').toString('latin1')).join('')
       );
       assert.match(res.headers['content-disposition'], /PIXX_Attendance_All-Shops_2026-04-05\.pdf/);
-      assert.match(extractedText, /Daily Worker Attendance/);
-      assert.match(extractedText, /ABSENT \/ OFF DUTY - NO SHOP ASSIGNED/);
+      assert.match(extractedText, /Daily Workforce Attendance/);
+      assert.match(extractedText, /ABSENT \/ OFF DUTY/);
+      assert.match(extractedText, /Not Assigned/);
       assert.match(extractedText, /Absent Worker/);
       assert.match(extractedText, /CONTINUED/);
       assert.match(extractedText, /5:00 PM/);
@@ -812,7 +1003,7 @@ async function run() {
         assert.equal(extractedText.includes(value), false, `${value} must not appear for an absent worker`);
       }
       assert.ok((pdf.match(/\/Subtype\s*\/Image/g) || []).length >= 2, 'The PDF must embed both saved signature images.');
-      assert.match(pdf, /\/MediaBox \[0 0 841\.89 595\.28\]/);
+      assert.match(pdf, /\/MediaBox \[0 0 595\.28 841\.89\]/);
       for (const value of ['987.65', '123.45', '12.34', '975.31', 'Wage', 'Deduction', 'Attendance Pay']) {
         assert.equal(extractedText.includes(value), false, `${value} must not appear in the PDF`);
       }
