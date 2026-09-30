@@ -210,14 +210,22 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       req
     });
 
-    let usmanSign = null;
-    let sarfrazSign = null;
-    try {
-      usmanSign = fs.readFileSync(path.join(__dirname, '../assets/usmansign.png'));
-    } catch (e) { /* image not available */ }
-    try {
-      sarfrazSign = fs.readFileSync(path.join(__dirname, '../assets/sarfrazsign.png'));
-    } catch (e) { /* image not available */ }
+    const findAsset = (filename) => {
+      const candidates = [
+        path.join(__dirname, '../assets', filename),
+        path.join(process.cwd(), 'backend/src/assets', filename),
+        path.join(process.cwd(), 'src/assets', filename),
+        path.join(__dirname, 'assets', filename)
+      ];
+      for (const p of candidates) {
+        try {
+          if (fs.existsSync(p)) return fs.readFileSync(p);
+        } catch {}
+      }
+      return null;
+    };
+    const usmanSign = findAsset('usmansign.png');
+    const sarfrazSign = findAsset('sarfrazsign.png');
 
     // Sort records: real shops first, absent records at the bottom
     const sortedRecords = sortDailyAttendanceRecords(records);
@@ -249,12 +257,8 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       autoFirstPage: true
     });
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${attendanceReportFilename(shopDoc?.name || 'All-Shops', dateStr, 'pdf')}"`
-    );
-    doc.pipe(res);
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
 
     const PAGE_W = 555.28;
     const MARGIN_LEFT = 20;
@@ -569,10 +573,23 @@ exports.exportDailyAttendancePDF = async (req, res) => {
          { width: PAGE_W, align: 'center', lineBreak: false }
        );
 
-    doc.end();
-    return undefined;
+    await new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+      doc.end();
+    });
+
+    const pdfBuffer = Buffer.concat(chunks);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${attendanceReportFilename(shopDoc?.name || 'All-Shops', dateStr, 'pdf')}"`
+    );
+    return res.status(200).send(pdfBuffer);
   } catch (error) {
-    return sendServerError(res, error, 'Failed to generate PDF.');
+    console.error('Daily attendance PDF export failed:', error);
+    return sendServerError(res, error, 'Failed to generate PDF: ' + (error?.message || 'Server error'));
   }
 };
 
