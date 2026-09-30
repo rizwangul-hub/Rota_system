@@ -617,8 +617,56 @@ export default function WeeklyRotaPlanner() {
     }
   };
 
-  const printRota = () => window.print();
-  const downloadExcel = () => window.open(`${API}/week/${weekStart}/export.xlsx`, '_blank');
+  // ── Excel: use axios so the Authorization header is included ──────────────
+  const downloadExcel = async () => {
+    try {
+      const token = localStorage.getItem('pixx_token');
+      const response = await axios.get(`${API}/week/${weekStart}/export.xlsx`, {
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const url = URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Rota_${weekStart}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      alert('Could not download Excel. Make sure the rota is saved first.');
+      console.error(err);
+    }
+  };
+
+  // ── Print: build a clean popup with only rota content ──────────────────────
+  const printRota = () => {
+    const printContent = document.getElementById('rota-print-area');
+    if (!printContent) { window.print(); return; }
+    const win = window.open('', '_blank', 'width=1200,height=800');
+    win.document.write(`
+      <!DOCTYPE html><html><head>
+      <title>Weekly Rota – ${weekStart}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; font-size: 11px; padding: 16px; color: #0f172a; }
+        h2 { font-size: 16px; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #cbd5e1; padding: 5px 8px; text-align: center; }
+        th { background: #f1f5f9; font-weight: 700; font-size: 10px; }
+        td:first-child { text-align: left; font-weight: 600; }
+        .off { color: #dc2626; font-style: italic; }
+        .loaned { color: #7c3aed; }
+        @media print { body { padding: 8px; } }
+      </style>
+      </head><body>
+      ${printContent.innerHTML}
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 500);
+  };
 
   // Calculate active totals per shop per day
   const getShopDayTotal = (shopId, dateKey) => {
@@ -1105,7 +1153,7 @@ export default function WeeklyRotaPlanner() {
             <div>Loading weekly rota schedule…</div>
           </div>
         ) : (
-          <div className="rota-shops-container">
+          <div id="rota-print-area" className="rota-shops-container">
             {shops.map(shop => {
               const style = getShopStyle(shop.name);
               const workerIds = shopRosters[shop._id] || [];

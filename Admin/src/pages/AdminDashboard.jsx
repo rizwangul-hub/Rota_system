@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import {
@@ -7,31 +7,62 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+// Module-level cache — survives React navigation (component unmount/remount)
+// Data is kept until the page is fully refreshed in the browser
+const _cache = { data: null, summaryData: null, fetchedAt: null };
+const CACHE_TTL_MS = 5 * 60 * 1000; // Re-fetch in background after 5 minutes
+
 export default function AdminDashboard() {
-  const [data, setData] = useState(null);
-  const [summaryData, setSummaryData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Initialise from cache so there is NO loading flash on revisit
+  const [data, setData]             = useState(_cache.data);
+  const [summaryData, setSummaryData] = useState(_cache.summaryData);
+  const [loading, setLoading]       = useState(!_cache.data); // false if already cached
+  const [error, setError]           = useState('');
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    fetchDashboard();
+    isMounted.current = true;
+
+    const cacheAge = _cache.fetchedAt ? Date.now() - _cache.fetchedAt : Infinity;
+    const needsFresh = cacheAge > CACHE_TTL_MS;
+
+    if (_cache.data && !needsFresh) {
+      // Cache is fresh — nothing to do, data already shown instantly
+      return;
+    }
+
+    // First load or stale cache: fetch (silently if we already have cached data)
+    fetchDashboard(/* silent = */ !!_cache.data);
+
+    return () => { isMounted.current = false; };
   }, []);
 
-  const fetchDashboard = async () => {
-    setLoading(true);
+  const fetchDashboard = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const [dashRes, sumRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/dashboard/admin`),
         axios.get(`${API_BASE_URL}/reports/summary`)
       ]);
-      if (dashRes.data.success) setData(dashRes.data.data);
-      if (sumRes.data.success) setSummaryData(sumRes.data);
+      if (!isMounted.current) return; // navigated away — discard
+      const newData        = dashRes.data.success ? dashRes.data.data : _cache.data;
+      const newSummaryData = sumRes.data.success  ? sumRes.data       : _cache.summaryData;
+      // Update cache
+      _cache.data        = newData;
+      _cache.summaryData = newSummaryData;
+      _cache.fetchedAt   = Date.now();
+      setData(newData);
+      setSummaryData(newSummaryData);
     } catch (err) {
+      if (!isMounted.current) return;
       console.error('Failed to load dashboard:', err);
-      setError('Unable to load executive dashboard data. Please check connection and try again.');
+      // Only show error when we have no data at all
+      if (!_cache.data) {
+        setError('Unable to load executive dashboard data. Please check connection and try again.');
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
 
@@ -61,7 +92,7 @@ export default function AdminDashboard() {
         <div className="error-state">
           <div className="error-state-title">Dashboard Loading Error</div>
           <div className="error-state-desc">{error}</div>
-          <button className="btn btn-primary btn-sm" onClick={fetchDashboard}>
+          <button className="btn btn-primary btn-sm" onClick={() => fetchDashboard(false)}>
             Try Again
           </button>
         </div>

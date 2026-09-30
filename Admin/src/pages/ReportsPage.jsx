@@ -996,14 +996,12 @@ export default function ReportsPage() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
-            <a
-              href={`${API_BASE_URL}/reports/bonus/excel?month=${selectedMonth}&year=${selectedYear}&employeeId=${selectedEmployee}&shopId=${selectedShop}`}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => handleDownload('/reports/bonus/excel', { month: selectedMonth, year: selectedYear, employeeId: selectedEmployee, shopId: selectedShop }, `Bonus_${selectedMonth}_${selectedYear}.xlsx`)}
               className="btn btn-outline btn-sm"
             >
               <Download size={14} /> Export Excel
-            </a>
+            </button>
 
           </div>
 
@@ -1073,14 +1071,12 @@ export default function ReportsPage() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
-            <a
-              href={`${API_BASE_URL}/reports/shop-labour/excel?startDate=${startDate}&endDate=${endDate}&shopId=${selectedShop}&employeeId=${selectedEmployee}`}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => handleDownload('/reports/shop-labour/excel', { startDate, endDate, shopId: selectedShop, employeeId: selectedEmployee }, `Shop_Labour_${startDate}_${endDate}.xlsx`)}
               className="btn btn-outline btn-sm"
             >
               <Download size={14} /> Export Excel
-            </a>
+            </button>
 
           </div>
 
@@ -1156,14 +1152,12 @@ export default function ReportsPage() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
-            <a
-              href={`${API_BASE_URL}/reports/payments/excel?startDate=${startDate}&endDate=${endDate}&shopId=${selectedShop}&employeeId=${selectedEmployee}&paymentMethod=${paymentMethod}`}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => handleDownload('/reports/payments/excel', { startDate, endDate, shopId: selectedShop, employeeId: selectedEmployee, paymentMethod }, `Payments_${startDate}_${endDate}.xlsx`)}
               className="btn btn-outline btn-sm"
             >
               <Download size={14} /> Export Excel
-            </a>
+            </button>
 
           </div>
 
@@ -1230,14 +1224,12 @@ export default function ReportsPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <a
-                href={`${API_BASE_URL}/reports/ledger/${selectedEmployee}/excel`}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                onClick={() => handleDownload(`/reports/ledger/${selectedEmployee}/excel`, {}, `Ledger_${selectedEmployee}.xlsx`)}
                 className="btn btn-outline btn-sm"
               >
                 <Download size={14} /> Export Excel
-              </a>
+              </button>
 
             </div>
           </div>
