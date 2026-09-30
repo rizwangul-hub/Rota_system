@@ -205,7 +205,7 @@ async function buildDailyAttendanceExcel(records, dateStr) {
   const verifiedBy = sortedRecords.find(r => r.checkedByName)?.checkedByName || 'Sarfraz Khan';
 
   // ── HEADER TITLE (PROMINENT MOBILE BANNER) ──────────────────
-  sheet.mergeCells('A1:J1');
+  sheet.mergeCells('A1:H1');
   const titleCell = sheet.getCell('A1');
   titleCell.value = 'PIXX ROTA  |  DAILY ATTENDANCE';
   titleCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -214,17 +214,18 @@ async function buildDailyAttendanceExcel(records, dateStr) {
   sheet.getRow(1).height = 38;
 
   // ── SUBTITLE / METADATA BAR ────────────────────────────────
-  sheet.mergeCells('A2:J2');
+  sheet.mergeCells('A2:H2');
   const subtitleCell = sheet.getCell('A2');
-  subtitleCell.value = `Attendance register  •  ${dateStr}  •  Times shown in 12-hour format  •  Prepared: ${preparedBy}  •  Verified: ${verifiedBy}`;
+  subtitleCell.value = `Date: ${dateStr}  •  Times in 12-hour format  •  Prepared by: ${preparedBy}  •  Verified by: ${verifiedBy}`;
   subtitleCell.font = { name: 'Calibri', size: 9.5, color: { argb: slate }, italic: true };
   subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
   subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   sheet.getRow(2).height = 25;
 
-  // ── TABLE COLUMNS (TOUCH-FRIENDLY & HIGH-CONTRAST) ─────────
+  // ── TABLE COLUMNS — 8 cols: Shop, Worker Name, Shift Start, Shift End, Arrival, Leave, Status, Remarks
+  //    Col:  1=Shop  2=Worker Name  3=Shift Start  4=Shift End  5=Arrival  6=Leave  7=Status  8=Remarks
   const headers = [
-    'Date', 'Shop', 'Employee ID', 'Worker Name', 'Shift Start', 'Shift End',
+    'Shop', 'Worker Name', 'Shift Start', 'Shift End',
     'Arrival', 'Leave', 'Status', 'Remarks'
   ];
   const headerRow = sheet.addRow(headers);
@@ -232,7 +233,7 @@ async function buildDailyAttendanceExcel(records, dateStr) {
     cell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: blue } };
     cell.alignment = {
-      horizontal: [1, 3, 5, 6, 7, 8, 9].includes(columnNumber) ? 'center' : 'left',
+      horizontal: [3, 4, 5, 6, 7].includes(columnNumber) ? 'center' : 'left',
       vertical: 'middle',
       wrapText: true
     };
@@ -245,99 +246,90 @@ async function buildDailyAttendanceExcel(records, dateStr) {
   });
   headerRow.height = 32;
 
-  // ── DATA ROWS (CRISP CELL BORDERS & TOUCH HEIGHT) ──────────
+  // ── DATA ROWS ──────────────────────────────────────────────
   sortedRecords.forEach(r => {
     const isAbsent = r.status === 'Absent';
     const row = sheet.addRow([
-      r.dateString || dateStr,
-      isAbsent ? '' : (r.shopName || ''),
-      r.employeeId || '',
-      r.employeeName || '',
-      isAbsent ? '' : formatTime12Hour(r.shiftStart),
-      isAbsent ? '' : formatTime12Hour(r.shiftEnd),
-      isAbsent ? '' : formatTime12Hour(r.timeReached),
-      isAbsent ? '' : formatTime12Hour(r.workerEndTime),
-      isAbsent ? 'Absent / Off' : (r.status || 'Present'),
-      r.remarks || ''
+      isAbsent ? '' : (r.shopName || ''),           // col 1 — Shop
+      r.employeeName || '',                          // col 2 — Worker Name
+      isAbsent ? '' : formatTime12Hour(r.shiftStart),  // col 3 — Shift Start
+      isAbsent ? '' : formatTime12Hour(r.shiftEnd),    // col 4 — Shift End
+      isAbsent ? '' : formatTime12Hour(r.timeReached), // col 5 — Arrival
+      isAbsent ? '' : formatTime12Hour(r.workerEndTime),// col 6 — Leave
+      isAbsent ? 'Absent / Off' : (r.status || 'Present'), // col 7 — Status
+      r.remarks || ''                                // col 8 — Remarks
     ]);
 
     const statusColors = {
       Present: ['FFE8F5E9', 'FF166534'],
-      Late: ['FFFFF7ED', 'FFB45309'],
-      Half: ['FFEFF6FF', 'FF1D4ED8'],
-      Absent: ['FFFEF2F2', 'FFB91C1C']
+      Late:    ['FFFFF7ED', 'FFB45309'],
+      Half:    ['FFEFF6FF', 'FF1D4ED8'],
+      Absent:  ['FFFEF2F2', 'FFB91C1C']
     };
     const [statusFill, statusFont] = statusColors[r.status] || statusColors.Present;
 
-    // Generous row height for mobile readability
     row.height = 28;
 
     row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
       const isEven = row.number % 2 === 0;
       cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } };
       cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
+        type: 'pattern', pattern: 'solid',
         fgColor: { argb: isAbsent ? 'FFFFF5F5' : (isEven ? 'FFFFFFFF' : 'FFF8FAFC') }
       };
       cell.border = {
-        top: { style: 'thin', color: { argb: border } },
+        top:    { style: 'thin', color: { argb: border } },
         bottom: { style: 'thin', color: { argb: border } },
-        left: { style: 'thin', color: { argb: border } },
-        right: { style: 'thin', color: { argb: border } }
+        left:   { style: 'thin', color: { argb: border } },
+        right:  { style: 'thin', color: { argb: border } }
       };
       cell.alignment = {
         vertical: 'middle',
-        horizontal: [1, 3, 5, 6, 7, 8, 9].includes(columnNumber) ? 'center' : 'left',
-        wrapText: [2, 4, 10].includes(columnNumber)
+        horizontal: [3, 4, 5, 6, 7].includes(columnNumber) ? 'center' : 'left',
+        wrapText: [1, 2, 8].includes(columnNumber)
       };
     });
 
-    // Worker Name: Bold & clear for fast scanning on phone screens
-    const nameCell = row.getCell(4);
+    // Worker Name: Bold & clear
+    const nameCell = row.getCell(2);
     nameCell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FF0F172A' } };
 
-    // Employee ID: clean subtle text
-    const idCell = row.getCell(3);
-    idCell.font = { name: 'Calibri', size: 9.5, color: { argb: 'FF64748B' } };
-
-    // Shop Cell with distinct shop brand color pill
-    const shopCell = row.getCell(2);
+    // Shop Cell with brand colour
+    const shopCell = row.getCell(1);
     if (!isAbsent && r.shopName) {
       const sc = getShopColor(r.shopName);
       shopCell.value = r.shopName;
       shopCell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: sc.excelText } };
       shopCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sc.excelBg } };
       shopCell.border = {
-        top: { style: 'thin', color: { argb: sc.excelBorder } },
+        top:    { style: 'thin', color: { argb: sc.excelBorder } },
         bottom: { style: 'thin', color: { argb: sc.excelBorder } },
-        left: { style: 'thin', color: { argb: sc.excelBorder } },
-        right: { style: 'thin', color: { argb: sc.excelBorder } }
+        left:   { style: 'thin', color: { argb: sc.excelBorder } },
+        right:  { style: 'thin', color: { argb: sc.excelBorder } }
       };
       shopCell.alignment = { horizontal: 'center', vertical: 'middle' };
     }
 
-    // Status Cell with vibrant badge styling
-    const statusCell = row.getCell(9);
+    // Status Cell: vibrant badge
+    const statusCell = row.getCell(7);
     statusCell.value = isAbsent ? 'Absent / Off' : (r.status || 'Present');
     statusCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: statusFont } };
     statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusFill } };
     statusCell.border = {
-      top: { style: 'thin', color: { argb: statusFont } },
+      top:    { style: 'thin', color: { argb: statusFont } },
       bottom: { style: 'thin', color: { argb: statusFont } },
-      left: { style: 'thin', color: { argb: statusFont } },
-      right: { style: 'thin', color: { argb: statusFont } }
+      left:   { style: 'thin', color: { argb: statusFont } },
+      right:  { style: 'thin', color: { argb: statusFont } }
     };
   });
 
-  // ── SUMMARY STAT ROW (EXECUTIVE KPI BAR) ───────────────────
+  // ── SUMMARY STAT ROW (KPI BAR) — 8 cols ───────────────────
   sheet.addRow([]);
   const summaryRow = sheet.addRow([
     'TOTAL WORKERS', records.length,
-    'PRESENT', records.filter(record => record.status === 'Present').length,
-    'LATE', records.filter(record => record.status === 'Late').length,
-    'HALF DAY', records.filter(record => record.status === 'Half').length,
-    'ABSENT', records.filter(record => record.status === 'Absent').length
+    'PRESENT', records.filter(r => r.status === 'Present').length,
+    'LATE', records.filter(r => r.status === 'Late').length,
+    'ABSENT', records.filter(r => r.status === 'Absent').length
   ]);
   summaryRow.height = 28;
 
@@ -345,12 +337,11 @@ async function buildDailyAttendanceExcel(records, dateStr) {
     2: { bg: 'FFF1F5F9', font: navy },
     4: { bg: 'FFE8F5E9', font: 'FF166534' },
     6: { bg: 'FFFFF7ED', font: 'FFB45309' },
-    8: { bg: 'FFEFF6FF', font: 'FF1D4ED8' },
-    10: { bg: 'FFFEF2F2', font: 'FFB91C1C' }
+    8: { bg: 'FFFEF2F2', font: 'FFB91C1C' }
   };
 
   summaryRow.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-    const isLabel = [1, 3, 5, 7, 9].includes(columnNumber);
+    const isLabel = [1, 3, 5, 7].includes(columnNumber);
     if (isLabel) {
       cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
@@ -361,100 +352,95 @@ async function buildDailyAttendanceExcel(records, dateStr) {
     }
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
     cell.border = {
-      top: { style: 'medium', color: { argb: darkBorder } },
+      top:    { style: 'medium', color: { argb: darkBorder } },
       bottom: { style: 'medium', color: { argb: darkBorder } },
-      left: { style: 'thin', color: { argb: border } },
-      right: { style: 'thin', color: { argb: border } }
+      left:   { style: 'thin',   color: { argb: border } },
+      right:  { style: 'thin',   color: { argb: border } }
     };
   });
 
-  // ── SIGN-OFF / VERIFICATION CARDS (CLEAN EXECUTIVE BOXES) ──
+  // ── SIGN-OFF / VERIFICATION CARDS — fit within 8 cols (A–H) ──
   sheet.addRow([]);
   const sigHeaderRow = sheet.addRow([
-    '', 'SUBMITTED BY (ATTENDANCE OPERATOR)', '', '', '',
-    '', 'VERIFIED BY (ATTENDANCE CHECKER)', '', '', ''
+    'SUBMITTED BY (ATTENDANCE OPERATOR)', '', '', '',
+    'VERIFIED BY (ATTENDANCE CHECKER)', '', '', ''
   ]);
   const sigRowIdx = sigHeaderRow.number;
-  sheet.mergeCells(`B${sigRowIdx}:E${sigRowIdx}`);
-  sheet.mergeCells(`G${sigRowIdx}:J${sigRowIdx}`);
+  sheet.mergeCells(`A${sigRowIdx}:D${sigRowIdx}`);
+  sheet.mergeCells(`E${sigRowIdx}:H${sigRowIdx}`);
   sigHeaderRow.height = 24;
 
-  const cellSubHeader = sheet.getCell(`B${sigRowIdx}`);
+  const cellSubHeader = sheet.getCell(`A${sigRowIdx}`);
   cellSubHeader.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
   cellSubHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
   cellSubHeader.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const cellVerHeader = sheet.getCell(`G${sigRowIdx}`);
+  const cellVerHeader = sheet.getCell(`E${sigRowIdx}`);
   cellVerHeader.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
   cellVerHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
   cellVerHeader.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const sigNameRow = sheet.addRow([
-    '', preparedBy, '', '', '',
-    '', verifiedBy, '', '', ''
-  ]);
+  const sigNameRow = sheet.addRow([preparedBy, '', '', '', verifiedBy, '', '', '']);
   const sigNameIdx = sigNameRow.number;
-  sheet.mergeCells(`B${sigNameIdx}:E${sigNameIdx}`);
-  sheet.mergeCells(`G${sigNameIdx}:J${sigNameIdx}`);
+  sheet.mergeCells(`A${sigNameIdx}:D${sigNameIdx}`);
+  sheet.mergeCells(`E${sigNameIdx}:H${sigNameIdx}`);
   sigNameRow.height = 32;
 
-  const cellSubName = sheet.getCell(`B${sigNameIdx}`);
+  const cellSubName = sheet.getCell(`A${sigNameIdx}`);
   cellSubName.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF0F172A' } };
   cellSubName.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
   cellSubName.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const cellVerName = sheet.getCell(`G${sigNameIdx}`);
+  const cellVerName = sheet.getCell(`E${sigNameIdx}`);
   cellVerName.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF0F172A' } };
   cellVerName.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
   cellVerName.alignment = { horizontal: 'center', vertical: 'middle' };
 
   const sigTitleRow = sheet.addRow([
-    '', 'Attendance Operator  |  PixxTechnologies UK', '', '', '',
-    '', 'Attendance Checker  |  PixxTechnologies UK', '', '', ''
+    'Attendance Operator  |  PixxTechnologies UK', '', '', '',
+    'Attendance Checker  |  PixxTechnologies UK', '', '', ''
   ]);
   const sigTitleIdx = sigTitleRow.number;
-  sheet.mergeCells(`B${sigTitleIdx}:E${sigTitleIdx}`);
-  sheet.mergeCells(`G${sigTitleIdx}:J${sigTitleIdx}`);
+  sheet.mergeCells(`A${sigTitleIdx}:D${sigTitleIdx}`);
+  sheet.mergeCells(`E${sigTitleIdx}:H${sigTitleIdx}`);
   sigTitleRow.height = 22;
 
-  const cellSubTitle = sheet.getCell(`B${sigTitleIdx}`);
+  const cellSubTitle = sheet.getCell(`A${sigTitleIdx}`);
   cellSubTitle.font = { name: 'Calibri', size: 8.5, italic: true, color: { argb: slate } };
   cellSubTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
   cellSubTitle.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const cellVerTitle = sheet.getCell(`G${sigTitleIdx}`);
+  const cellVerTitle = sheet.getCell(`E${sigTitleIdx}`);
   cellVerTitle.font = { name: 'Calibri', size: 8.5, italic: true, color: { argb: slate } };
   cellVerTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
   cellVerTitle.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // Outline borders for the cards
-  ['B', 'C', 'D', 'E'].forEach(col => {
-    sheet.getCell(`${col}${sigRowIdx}`).border = { top: { style: 'medium', color: { argb: navy } }, left: col === 'B' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'E' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
-    sheet.getCell(`${col}${sigNameIdx}`).border = { left: col === 'B' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'E' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
-    sheet.getCell(`${col}${sigTitleIdx}`).border = { bottom: { style: 'medium', color: { argb: darkBorder } }, left: col === 'B' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'E' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
+  // Outline borders for the sign-off cards
+  ['A', 'B', 'C', 'D'].forEach(col => {
+    sheet.getCell(`${col}${sigRowIdx}`).border  = { top:    { style: 'medium', color: { argb: navy } }, left: col === 'A' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'D' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
+    sheet.getCell(`${col}${sigNameIdx}`).border = { left: col === 'A' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'D' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
+    sheet.getCell(`${col}${sigTitleIdx}`).border = { bottom: { style: 'medium', color: { argb: darkBorder } }, left: col === 'A' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'D' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
   });
 
-  ['G', 'H', 'I', 'J'].forEach(col => {
-    sheet.getCell(`${col}${sigRowIdx}`).border = { top: { style: 'medium', color: { argb: navy } }, left: col === 'G' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'J' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
-    sheet.getCell(`${col}${sigNameIdx}`).border = { left: col === 'G' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'J' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
-    sheet.getCell(`${col}${sigTitleIdx}`).border = { bottom: { style: 'medium', color: { argb: darkBorder } }, left: col === 'G' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'J' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
+  ['E', 'F', 'G', 'H'].forEach(col => {
+    sheet.getCell(`${col}${sigRowIdx}`).border  = { top:    { style: 'medium', color: { argb: navy } }, left: col === 'E' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'H' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
+    sheet.getCell(`${col}${sigNameIdx}`).border = { left: col === 'E' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'H' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
+    sheet.getCell(`${col}${sigTitleIdx}`).border = { bottom: { style: 'medium', color: { argb: darkBorder } }, left: col === 'E' ? { style: 'thin', color: { argb: darkBorder } } : undefined, right: col === 'H' ? { style: 'thin', color: { argb: darkBorder } } : undefined };
   });
 
-  // ── COLUMN WIDTHS & VIEW SETTINGS (OPTIMIZED FOR MOBILE SCREENS)
+  // ── COLUMN WIDTHS (8 cols) ─────────────────────────────────
   sheet.columns = [
-    { width: 13 }, // Date (compact)
-    { width: 18 }, // Shop (clean badge width)
-    { width: 14 }, // Employee ID (compact)
-    { width: 24 }, // Worker Name (bold readable name)
+    { width: 20 }, // Shop
+    { width: 26 }, // Worker Name
     { width: 13 }, // Shift Start
     { width: 13 }, // Shift End
     { width: 13 }, // Arrival
     { width: 13 }, // Leave
-    { width: 15 }, // Status (readable badge)
-    { width: 30 }  // Remarks
+    { width: 16 }, // Status
+    { width: 32 }  // Remarks
   ];
   sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 3, showGridLines: true, activeCell: 'A4' }];
-  sheet.autoFilter = { from: 'A3', to: `J${Math.max(3, records.length + 3)}` };
+  sheet.autoFilter = { from: 'A3', to: `H${Math.max(3, records.length + 3)}` };
   sheet.pageSetup = {
     orientation: 'landscape',
     fitToPage: true,
