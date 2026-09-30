@@ -1,3 +1,4 @@
+require('./utils/pdfkitFontPatch'); // MUST be first — patches Module resolver so pdfkit finds its fonts on Vercel
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
