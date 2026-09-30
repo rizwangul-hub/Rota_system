@@ -19,14 +19,9 @@ function sendServerError(res, error, message) {
 
   const payload = {
     success: false,
-    message: process.env.NODE_ENV === 'production'
-      ? 'Something went wrong. Please try again.'
-      : message
+    message: message || 'Something went wrong. Please try again.',
+    error: error?.message || (typeof error === 'string' ? error : undefined)
   };
-
-  if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
-    payload.error = error.message;
-  }
 
   return res.status(500).json(payload);
 }

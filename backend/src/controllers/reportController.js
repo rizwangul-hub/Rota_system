@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Attendance = require('../models/Attendance');
 const { sendServerError } = require('../utils/httpErrors');
 const WeeklySalary = require('../models/WeeklySalary');
