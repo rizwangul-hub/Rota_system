@@ -6,6 +6,7 @@ import {
   Check,
   Edit,
   Download,
+  FileText,
   MessageSquare,
   RefreshCw,
   CheckCheck,
@@ -290,6 +291,7 @@ export default function SarfrazAttendance() {
   };
 
   const downloadExcel = () => downloadAttendanceExport('excel');
+  const downloadPdf = () => downloadAttendanceExport('pdf');
 
   return (
     <div className="page-container">
@@ -349,6 +351,13 @@ export default function SarfrazAttendance() {
             title="View & copy WhatsApp report"
           >
             <MessageSquare size={15} color="#16a34a" /> WhatsApp Report
+          </button>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={downloadPdf}
+            title="Download executive PDF report for mobile viewing"
+          >
+            <FileText size={15} color="#dc2626" /> Export PDF
           </button>
           <button
             className="btn btn-outline btn-sm"

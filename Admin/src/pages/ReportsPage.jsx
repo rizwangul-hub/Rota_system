@@ -473,6 +473,13 @@ export default function ReportsPage() {
             </button>
             <button
               className="btn btn-outline btn-sm"
+              onClick={() => handleDownload('/reports/daily-attendance/pdf', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Daily_Attendance_${selectedDate}.pdf`)}
+              title="Download executive PDF report for mobile viewing"
+            >
+              <FileText size={14} color="#dc2626" /> Export PDF
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
               onClick={() => handleDownload('/reports/daily-attendance/excel', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Daily_Attendance_${selectedDate}.xlsx`)}
             >
               <Download size={14} /> Export Excel
