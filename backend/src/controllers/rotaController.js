@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const ExcelJS = require('exceljs');
+require('../utils/pdfkitFontPatch'); // Must be before PDFDocument — patches font resolution for Vercel
 const PDFDocument = require('pdfkit');
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');

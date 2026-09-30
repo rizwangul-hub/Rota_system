@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+require('../utils/pdfkitFontPatch'); // Must be before PDFDocument — patches font resolution for Vercel
 const Attendance = require('../models/Attendance');
 const { sendServerError } = require('../utils/httpErrors');
 const WeeklySalary = require('../models/WeeklySalary');

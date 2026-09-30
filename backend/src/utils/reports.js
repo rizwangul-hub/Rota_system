@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs');
+require('./pdfkitFontPatch'); // Must be before PDFDocument — patches font resolution for Vercel
 const PDFDocument = require('pdfkit');
 
 function formatTime12Hour(value) {

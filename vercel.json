@@ -5,7 +5,7 @@
       "src": "backend/src/index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": "backend/node_modules/pdfkit/**"
+        "includeFiles": "backend/src/assets/**"
       }
     }
   ],
