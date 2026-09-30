@@ -5,11 +5,7 @@
       "src": "backend/src/index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": [
-          "backend/src/assets/**",
-          "backend/node_modules/pdfkit/js/standard-fonts/**",
-          "backend/node_modules/pdfkit/js/data/**"
-        ]
+        "includeFiles": "backend/node_modules/pdfkit/**"
       }
     }
   ],
