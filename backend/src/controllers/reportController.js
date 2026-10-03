@@ -92,7 +92,7 @@ exports.getDailyAttendanceReport = async (req, res) => {
     records.forEach(r => {
       const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
       r.dailyWage = wage;
-      if ((!r.attendancePay || r.attendancePay === 0) && r.status !== 'Absent') {
+      if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
           dailyWage: wage,
           shiftStart: r.shiftStart || '09:00',
@@ -103,6 +103,7 @@ exports.getDailyAttendanceReport = async (req, res) => {
           gracePeriodMinutes: 15
         });
         r.hourlyWage = calc.hourlyWage;
+        r.lateMinutes = calc.lateMinutes;
         r.lateDeduction = calc.lateDeduction;
         r.attendancePay = calc.attendancePay;
       }

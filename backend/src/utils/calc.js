@@ -80,7 +80,7 @@ function calculateAttendanceRecord({
   status = 'Present',
   gracePeriodMinutes = 15,
 }) {
-  const wage = Number(dailyWage) || 0;
+  const wage = (Number(dailyWage) && Number(dailyWage) > 0) ? Number(dailyWage) : 50;
   const scheduledHours = calculateScheduledHours(shiftStart, shiftEnd);
   const hourlyWage = scheduledHours > 0 ? Number((wage / scheduledHours).toFixed(4)) : 0;
 

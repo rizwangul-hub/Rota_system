@@ -451,8 +451,11 @@ exports.updateAttendanceRecord = async (req, res) => {
     } = req.body;
 
     const gracePeriod = await getGracePeriod();
+    const employee = record.employee ? await Employee.findById(record.employee) : null;
+    const dailyWage = (record.dailyWage && record.dailyWage > 0) ? record.dailyWage : (employee?.dailyWage || 50);
+
     const calcResult = calculateAttendanceRecord({
-      dailyWage: record.dailyWage,
+      dailyWage,
       shiftStart,
       shiftEnd,
       timeReached,
@@ -460,6 +463,8 @@ exports.updateAttendanceRecord = async (req, res) => {
       status,
       gracePeriodMinutes: gracePeriod
     });
+
+    record.dailyWage = dailyWage;
 
     record.shiftStart = shiftStart;
     record.shiftEnd = shiftEnd;
