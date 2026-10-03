@@ -1189,26 +1189,44 @@ exports.getEmployeeMonthlyReport = async (req, res) => {
     const attendances = await Attendance.find({
       employee: employeeId,
       dateString: { $gte: startStr, $lte: endStr }
-    });
+    }).populate('shop').sort({ dateString: 1 });
 
-    attendances.forEach(r => {
-      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
-      r.dailyWage = wage;
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dailyRecords = attendances.map(r => {
+      const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+      let calc = { hourlyWage: 0, lateMinutes: 0, lateDeduction: 0, attendancePay: 0 };
       if (r.status !== 'Absent') {
-        const calc = calculateAttendanceRecord({
+        calc = calculateAttendanceRecord({
           dailyWage: wage,
           shiftStart: r.shiftStart || '09:00',
           shiftEnd: r.shiftEnd || '19:00',
-          timeReached: r.timeReached || '09:00',
-          workerEndTime: r.workerEndTime || '19:00',
+          timeReached: r.timeReached || r.shiftStart || '09:00',
+          workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
           status: r.status,
           gracePeriodMinutes: 15
         });
-        r.hourlyWage = calc.hourlyWage;
-        r.lateMinutes = calc.lateMinutes;
-        r.lateDeduction = calc.lateDeduction;
-        r.attendancePay = calc.attendancePay;
       }
+      r.hourlyWage = calc.hourlyWage;
+      r.lateMinutes = calc.lateMinutes;
+      r.lateDeduction = calc.lateDeduction;
+      r.attendancePay = calc.attendancePay;
+
+      const dayIdx = getDayOfWeekUK(r.dateString || r.date);
+      return {
+        dateString: r.dateString,
+        formattedDate: formatUKDate(r.dateString || r.date),
+        dayOfWeek: dayNames[dayIdx] || 'Mon',
+        shopName: r.shopName || r.shop?.name || employee.assignedShop?.name || 'Shop',
+        shiftStart: r.shiftStart || '09:00',
+        shiftEnd: r.shiftEnd || '19:00',
+        timeReached: r.timeReached || r.shiftStart || '09:00',
+        workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
+        actualHours: Number(r.actualHours || 0),
+        status: r.status || 'Present',
+        lateMinutes: calc.lateMinutes || 0,
+        lateDeduction: calc.lateDeduction || 0,
+        attendancePay: calc.attendancePay || 0
+      };
     });
 
     const attendanceSummary = {
@@ -1289,6 +1307,7 @@ exports.getEmployeeMonthlyReport = async (req, res) => {
       monthLabel,
       attendanceSummary,
       weeklyBreakdowns,
+      dailyRecords,
       grandTotal: {
         days: grandDays,
         wage: Number(grandWage.toFixed(2)),
@@ -1312,10 +1331,48 @@ exports.exportEmployeeMonthlyExcel = async (req, res) => {
     if (!employeeId) return res.status(400).json({ success: false, message: 'employeeId is required.' });
     const period = getMonthlyReportPeriod(month, year);
     if (!period) return res.status(400).json({ success: false, message: 'Month must be between 1 and 12 and year must be valid.' });
-    const employee = await Employee.findById(employeeId);
+    const employee = await Employee.findById(employeeId).populate('assignedShop');
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
-    const { monthStart, monthEnd, monthLabel } = period;
+    const { targetYear, targetMonth, monthStart, monthEnd, monthLabel } = period;
+
+    const startStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+    const endStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const attendances = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } }).populate('shop').sort({ dateString: 1 });
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dailyRecords = attendances.map(r => {
+      const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+      let calc = { hourlyWage: 0, lateMinutes: 0, lateDeduction: 0, attendancePay: 0 };
+      if (r.status !== 'Absent') {
+        calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || r.shiftStart || '09:00',
+          workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+      }
+      const dayIdx = getDayOfWeekUK(r.dateString || r.date);
+      return {
+        dateString: r.dateString,
+        formattedDate: formatUKDate(r.dateString || r.date),
+        dayOfWeek: dayNames[dayIdx] || 'Mon',
+        shopName: r.shopName || r.shop?.name || employee.assignedShop?.name || 'Shop',
+        shiftStart: r.shiftStart || '09:00',
+        shiftEnd: r.shiftEnd || '19:00',
+        timeReached: r.timeReached || r.shiftStart || '09:00',
+        workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
+        actualHours: Number(r.actualHours || 0),
+        status: r.status || 'Present',
+        lateMinutes: calc.lateMinutes || 0,
+        lateDeduction: calc.lateDeduction || 0,
+        attendancePay: calc.attendancePay || 0
+      };
+    });
 
     const salaries = await WeeklySalary.find({
       employee: employeeId,
@@ -1364,7 +1421,8 @@ exports.exportEmployeeMonthlyExcel = async (req, res) => {
       monthLabel,
       weeklyBreakdowns,
       { days: grandDays, wage: grandWage, ded: grandDed, bonus: grandBonus, total: grandTotal, cash: grandCash, bank: grandBank, paid: grandPaid },
-      balancePayable
+      balancePayable,
+      dailyRecords
     );
 
     await logAction({
@@ -1400,26 +1458,40 @@ exports.exportEmployeeMonthlyPDF = async (req, res) => {
     const lastDay = new Date(targetYear, targetMonth, 0).getDate();
     const endStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-    const attendances = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } });
-    attendances.forEach(r => {
-      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
-      r.dailyWage = wage;
+    const attendances = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } }).populate('shop').sort({ dateString: 1 });
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dailyRecords = attendances.map(r => {
+      const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+      let calc = { hourlyWage: 0, lateMinutes: 0, lateDeduction: 0, attendancePay: 0 };
       if (r.status !== 'Absent') {
-        const calc = calculateAttendanceRecord({
+        calc = calculateAttendanceRecord({
           dailyWage: wage,
           shiftStart: r.shiftStart || '09:00',
           shiftEnd: r.shiftEnd || '19:00',
-          timeReached: r.timeReached || '09:00',
-          workerEndTime: r.workerEndTime || '19:00',
+          timeReached: r.timeReached || r.shiftStart || '09:00',
+          workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
           status: r.status,
           gracePeriodMinutes: 15
         });
-        r.hourlyWage = calc.hourlyWage;
-        r.lateMinutes = calc.lateMinutes;
-        r.lateDeduction = calc.lateDeduction;
-        r.attendancePay = calc.attendancePay;
       }
+      const dayIdx = getDayOfWeekUK(r.dateString || r.date);
+      return {
+        dateString: r.dateString,
+        formattedDate: formatUKDate(r.dateString || r.date),
+        dayOfWeek: dayNames[dayIdx] || 'Mon',
+        shopName: r.shopName || r.shop?.name || employee.assignedShop?.name || 'Shop',
+        shiftStart: r.shiftStart || '09:00',
+        shiftEnd: r.shiftEnd || '19:00',
+        timeReached: r.timeReached || r.shiftStart || '09:00',
+        workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
+        actualHours: Number(r.actualHours || 0),
+        status: r.status || 'Present',
+        lateMinutes: calc.lateMinutes || 0,
+        lateDeduction: calc.lateDeduction || 0,
+        attendancePay: calc.attendancePay || 0
+      };
     });
+
     const attendanceSummary = {
       workingDays: attendances.filter(a => a.status !== 'Absent').length,
       present: attendances.filter(a => a.status === 'Present').length,
@@ -1488,7 +1560,8 @@ exports.exportEmployeeMonthlyPDF = async (req, res) => {
       weeklyBreakdowns,
       { total: grandTotal, paid: grandPaid, cash: grandCash, bank: grandBank },
       balancePayable,
-      req.user?.name || 'Admin'
+      req.user?.name || 'Admin',
+      dailyRecords
     );
   } catch (error) {
     return sendServerError(res, error, 'Failed to export employee monthly report PDF.');

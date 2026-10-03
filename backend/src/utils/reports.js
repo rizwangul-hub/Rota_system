@@ -644,7 +644,7 @@ async function buildCommissionExcel(bonuses, monthStr, yearStr) {
 /**
  * Generate Excel workbook for Single Employee Monthly Report (Matching Image 2: Shahab Ahmad format)
  */
-async function buildEmployeeMonthlyExcel(employeeName, monthLabel, weeklyBreakdowns, grandTotal, balancePayable) {
+async function buildEmployeeMonthlyExcel(employeeName, monthLabel, weeklyBreakdowns, grandTotal, balancePayable, dailyRecords = []) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Monthly Report');
 
@@ -743,6 +743,57 @@ async function buildEmployeeMonthlyExcel(employeeName, monthLabel, weeklyBreakdo
   sheet.columns.forEach(col => { col.width = 16; });
   sheet.getColumn(1).width = 24;
   sheet.getColumn(2).width = 8;
+
+  if (dailyRecords && dailyRecords.length > 0) {
+    const dailySheet = workbook.addWorksheet('Daily Work Log');
+
+    dailySheet.mergeCells('A1:K1');
+    const h1 = dailySheet.getCell('A1');
+    h1.value = `DAILY WORKPLACE & SHOP LOCATION LOG: ${employeeName.toUpperCase()} (${monthLabel})`;
+    h1.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    h1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    h1.alignment = { horizontal: 'center', vertical: 'middle' };
+    dailySheet.getRow(1).height = 28;
+
+    const dHeaders = ['#', 'Date', 'Day of Week', 'Shop Location Worked', 'Shift Start', 'Shift End', 'Time In', 'Time Out', 'Worked Hours', 'Status', 'Daily Net Pay (£)'];
+    const dHeaderRow = dailySheet.addRow(dHeaders);
+    dHeaderRow.height = 24;
+    dHeaderRow.eachCell(cell => {
+      cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+
+    dailyRecords.forEach((r, idx) => {
+      const dRow = dailySheet.addRow([
+        idx + 1,
+        r.formattedDate || (r.dateString ? formatUKDate(r.dateString) : ''),
+        r.dayOfWeek || '',
+        r.shopName || 'Shop',
+        r.shiftStart || '09:00',
+        r.shiftEnd || '19:00',
+        r.timeReached ? formatTime12Hour(r.timeReached) : '--',
+        r.workerEndTime ? formatTime12Hour(r.workerEndTime) : '--',
+        Number(r.actualHours || 0),
+        r.status || 'Present',
+        Number(r.attendancePay || 0)
+      ]);
+      dRow.height = 20;
+      dRow.eachCell(cell => {
+        cell.font = { name: 'Calibri', size: 10 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = { top: { style: 'thin', color: { argb: 'FFE2E8F0' } }, left: { style: 'thin', color: { argb: 'FFE2E8F0' } }, bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }, right: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+      });
+      dRow.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+      dRow.getCell(4).font = { name: 'Calibri', size: 10, bold: true };
+    });
+
+    dailySheet.columns = [
+      { width: 5 }, { width: 14 }, { width: 14 }, { width: 28 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 16 }
+    ];
+  }
+
   return workbook;
 }
 
@@ -1238,7 +1289,7 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
 /**
  * Generate PDF for Employee Monthly Report
  */
-async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, monthLabel, attendanceSummary = {}, weeklyBreakdowns = [], grandTotal = {}, balancePayable = 0, generatedBy = 'Admin') {
+async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, monthLabel, attendanceSummary = {}, weeklyBreakdowns = [], grandTotal = {}, balancePayable = 0, generatedBy = 'Admin', dailyRecords = []) {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
   drawPdfBanner(doc, `Employee Monthly Statement`, `${employeeName} • ${shopName}`, `Period: ${monthLabel}`, true);
 
@@ -1285,6 +1336,80 @@ async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, 
     doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(w.paymentTotal || 0).toFixed(2)}`, 755, y + 4).font('Helvetica').fillColor('#0f172a');
     y += 16;
   });
+
+  if (dailyRecords && dailyRecords.length > 0) {
+    if (y + 60 > 500) {
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      y = 30;
+    } else {
+      y += 18;
+    }
+
+    doc.roundedRect(25, y, 790, 18, 3).fill('#1e293b');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5)
+       .text(`DAILY WORKPLACE & SHOP LOCATION LOG — ${employeeName.toUpperCase()}`, 35, y + 4.5);
+    y += 18;
+
+    doc.rect(25, y, 790, 15).fill('#f1f5f9');
+    doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7.5);
+    doc.text('Date & Day', 35, y + 3.5, { width: 110, lineBreak: false });
+    doc.text('Shop Location Worked', 150, y + 3.5, { width: 180, lineBreak: false });
+    doc.text('Shift Start - End', 335, y + 3.5, { width: 110, align: 'center', lineBreak: false });
+    doc.text('Time In / Time Out', 450, y + 3.5, { width: 120, align: 'center', lineBreak: false });
+    doc.text('Hours', 575, y + 3.5, { width: 75, align: 'center', lineBreak: false });
+    doc.text('Status', 655, y + 3.5, { width: 65, align: 'center', lineBreak: false });
+    doc.text('Daily Net Pay', 725, y + 3.5, { width: 80, align: 'right', lineBreak: false });
+    y += 15;
+
+    dailyRecords.forEach((r, idx) => {
+      if (y + 15 > 520) {
+        doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+        y = 30;
+        doc.rect(25, y, 790, 15).fill('#f1f5f9');
+        doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7.5);
+        doc.text('Date & Day', 35, y + 3.5, { width: 110, lineBreak: false });
+        doc.text('Shop Location Worked', 150, y + 3.5, { width: 180, lineBreak: false });
+        doc.text('Shift Start - End', 335, y + 3.5, { width: 110, align: 'center', lineBreak: false });
+        doc.text('Time In / Time Out', 450, y + 3.5, { width: 120, align: 'center', lineBreak: false });
+        doc.text('Hours', 575, y + 3.5, { width: 75, align: 'center', lineBreak: false });
+        doc.text('Status', 655, y + 3.5, { width: 65, align: 'center', lineBreak: false });
+        doc.text('Daily Net Pay', 725, y + 3.5, { width: 80, align: 'right', lineBreak: false });
+        y += 15;
+      }
+
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      doc.rect(25, y, 790, 15).fill(bg);
+      doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
+
+      const dStr = r.formattedDate || (r.dateString ? formatUKDate(r.dateString) : '');
+      const dateDisplay = `${dStr} (${r.dayOfWeek || ''})`;
+      doc.text(dateDisplay, 35, y + 3.5, { width: 110, lineBreak: false });
+
+      doc.font('Helvetica-Bold').fillColor('#1e293b');
+      doc.text(r.shopName || 'Shop', 150, y + 3.5, { width: 180, lineBreak: false });
+
+      doc.font('Helvetica').fillColor('#0f172a');
+      doc.text(`${r.shiftStart || '09:00'} - ${r.shiftEnd || '19:00'}`, 335, y + 3.5, { width: 110, align: 'center', lineBreak: false });
+
+      const timeInStr = r.timeReached ? formatTime12Hour(r.timeReached) : '--';
+      const timeOutStr = r.workerEndTime ? formatTime12Hour(r.workerEndTime) : '--';
+      const isLate = r.status === 'Late' || (r.lateMinutes && r.lateMinutes > 0);
+      doc.fillColor(isLate ? '#d97706' : '#059669');
+      doc.text(`${timeInStr} / ${timeOutStr}`, 450, y + 3.5, { width: 120, align: 'center', lineBreak: false });
+
+      doc.fillColor('#0f172a');
+      doc.text(r.status !== 'Absent' ? `${Number(r.actualHours || 0).toFixed(1)}h` : '0.0h', 575, y + 3.5, { width: 75, align: 'center', lineBreak: false });
+
+      const statusColor = r.status === 'Present' ? '#059669' : (r.status === 'Late' ? '#d97706' : (r.status === 'Half' ? '#0284c7' : '#dc2626'));
+      doc.font('Helvetica-Bold').fillColor(statusColor);
+      doc.text(r.status || 'Present', 655, y + 3.5, { width: 65, align: 'center', lineBreak: false });
+
+      doc.font('Helvetica-Bold').fillColor('#059669');
+      doc.text(`£${Number(r.attendancePay || 0).toFixed(2)}`, 725, y + 3.5, { width: 80, align: 'right', lineBreak: false });
+
+      y += 15;
+    });
+  }
 
   drawPdfSignatures(doc, y + 15, true);
   return await sendPdfOrBuffer(res, doc, `Monthly_${employeeName.replace(/\s+/g, '_')}_${monthLabel}.pdf`);

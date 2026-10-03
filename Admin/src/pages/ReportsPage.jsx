@@ -923,6 +923,78 @@ export default function ReportsPage() {
               <span style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>£{(monthlyData.balancePayable || 0).toFixed(2)}</span>
             </div>
           </div>
+
+          {/* Daily Workplace & Shop Location Log Table */}
+          {monthlyData.dailyRecords && monthlyData.dailyRecords.length > 0 && (
+            <div className="card" style={{ marginTop: '20px', padding: '16px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 14px 0', color: '#334155', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Calendar size={16} color="#2563eb" /> Daily Workplace & Shop Location Log ({monthlyData.monthLabel})
+              </h3>
+              <div className="table-responsive">
+                <table className="custom-table">
+                  <thead>
+                    <tr style={{ background: '#1e293b' }}>
+                      <th style={{ color: '#ffffff' }}>Date & Day</th>
+                      <th style={{ color: '#ffffff' }}>Shop Location Worked</th>
+                      <th style={{ color: '#ffffff', textAlign: 'center' }}>Shift Start - End</th>
+                      <th style={{ color: '#ffffff', textAlign: 'center' }}>Time In / Time Out</th>
+                      <th style={{ color: '#ffffff', textAlign: 'center' }}>Hours</th>
+                      <th style={{ color: '#ffffff', textAlign: 'center' }}>Status</th>
+                      <th style={{ color: '#ffffff', textAlign: 'right' }}>Daily Net Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyData.dailyRecords.map((r, idx) => {
+                      const isLate = r.status === 'Late' || (r.lateMinutes && r.lateMinutes > 0);
+                      const statusColor = r.status === 'Present' ? '#059669' : (r.status === 'Late' ? '#d97706' : (r.status === 'Half' ? '#0284c7' : '#dc2626'));
+                      const badgeStyle = getShopBadgeStyle(r.shopName);
+                      const formattedTimeIn = r.timeReached ? formatTime12Hour(r.timeReached) : '--';
+                      const formattedTimeOut = r.workerEndTime ? formatTime12Hour(r.workerEndTime) : '--';
+
+                      return (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                          <td style={{ fontWeight: 600 }}>{r.formattedDate || r.dateString} ({r.dayOfWeek || ''})</td>
+                          <td>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                background: badgeStyle.bg,
+                                color: badgeStyle.color,
+                                border: `1px solid ${badgeStyle.border}`
+                              }}
+                            >
+                              {r.shopName || 'Shop'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center', fontSize: '12px' }}>
+                            {r.shiftStart || '09:00'} - {r.shiftEnd || '19:00'}
+                          </td>
+                          <td style={{ textAlign: 'center', color: isLate ? '#d97706' : '#059669', fontWeight: 600, fontSize: '12px' }}>
+                            {formattedTimeIn} / {formattedTimeOut}
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                            {r.status !== 'Absent' ? `${Number(r.actualHours || 0).toFixed(1)}h` : '0.0h'}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ color: statusColor, fontWeight: 700, fontSize: '12px' }}>
+                              {r.status || 'Present'} {isLate ? `(${r.lateMinutes}m late)` : ''}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                            £{Number(r.attendancePay || 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
