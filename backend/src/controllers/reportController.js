@@ -705,22 +705,26 @@ function buildWeeklyAttendanceData(attendances) {
     else if (a.status === 'Half') rec.halfDays += 1;
     else if (a.status === 'Absent') rec.absentDays += 1;
 
-    rec.scheduledHours = Number((rec.scheduledHours + (a.scheduledHours || 0)).toFixed(2));
-    rec.actualHours = Number((rec.actualHours + (a.actualHours || 0)).toFixed(2));
-    rec.lateMinutes += (a.lateMinutes || 0);
+    const sched = Number(a.scheduledHours) || 0;
+    const act = Number(a.actualHours) || 0;
+    const lMin = Number(a.lateMinutes) || 0;
+
+    rec.scheduledHours = Number((Number(rec.scheduledHours || 0) + sched).toFixed(2));
+    rec.actualHours = Number((Number(rec.actualHours || 0) + act).toFixed(2));
+    rec.lateMinutes = Number(rec.lateMinutes || 0) + lMin;
   });
 
   const records = Object.values(empMap);
   const summary = {
     totalEmployees: records.length,
-    totalWorkingDays: records.reduce((sum, r) => sum + r.workingDays, 0),
-    totalPresent: records.reduce((sum, r) => sum + r.presentDays, 0),
-    totalLate: records.reduce((sum, r) => sum + r.lateDays, 0),
-    totalHalf: records.reduce((sum, r) => sum + r.halfDays, 0),
-    totalAbsent: records.reduce((sum, r) => sum + r.absentDays, 0),
-    totalScheduledHours: Number(records.reduce((sum, r) => sum + r.scheduledHours, 0).toFixed(2)),
-    totalWorkedHours: Number(records.reduce((sum, r) => sum + r.actualHours, 0).toFixed(2)),
-    totalLateMinutes: records.reduce((sum, r) => sum + r.lateMinutes, 0)
+    totalWorkingDays: records.reduce((sum, r) => sum + (Number(r.workingDays) || 0), 0),
+    totalPresent: records.reduce((sum, r) => sum + (Number(r.presentDays) || 0), 0),
+    totalLate: records.reduce((sum, r) => sum + (Number(r.lateDays) || 0), 0),
+    totalHalf: records.reduce((sum, r) => sum + (Number(r.halfDays) || 0), 0),
+    totalAbsent: records.reduce((sum, r) => sum + (Number(r.absentDays) || 0), 0),
+    totalScheduledHours: Number(records.reduce((sum, r) => sum + (Number(r.scheduledHours) || 0), 0).toFixed(2)),
+    totalWorkedHours: Number(records.reduce((sum, r) => sum + (Number(r.actualHours) || 0), 0).toFixed(2)),
+    totalLateMinutes: records.reduce((sum, r) => sum + (Number(r.lateMinutes) || 0), 0)
   };
 
   return { records, summary };
@@ -983,7 +987,7 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
           };
         }
         const rec = empMap[key];
-        const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        const effectiveWage = (Number(a.dailyWage) && Number(a.dailyWage) > 0) ? Number(a.dailyWage) : (Number(a.employee?.dailyWage) || 50);
         const calcResult = calculateAttendanceRecord({
           dailyWage: effectiveWage,
           shiftStart: a.shiftStart || '09:00',
@@ -993,15 +997,15 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
           status: a.status,
           gracePeriodMinutes: 15
         });
-        rec.grossDailyWages += effectiveWage;
-        rec.lateDeductions += calcResult.lateDeduction;
-        rec.netAttendancePay += calcResult.attendancePay;
+        rec.grossDailyWages = Number(rec.grossDailyWages || 0) + Number(effectiveWage || 0);
+        rec.lateDeductions = Number(rec.lateDeductions || 0) + Number(calcResult.lateDeduction || 0);
+        rec.netAttendancePay = Number(rec.netAttendancePay || 0) + Number(calcResult.attendancePay || 0);
       });
 
       salaries = Object.values(empMap).map(rec => {
-        rec.netAttendancePay = Number(rec.netAttendancePay.toFixed(2));
-        rec.grossDailyWages = Number(rec.grossDailyWages.toFixed(2));
-        rec.lateDeductions = Number(rec.lateDeductions.toFixed(2));
+        rec.netAttendancePay = Number(Number(rec.netAttendancePay || 0).toFixed(2));
+        rec.grossDailyWages = Number(Number(rec.grossDailyWages || 0).toFixed(2));
+        rec.lateDeductions = Number(Number(rec.lateDeductions || 0).toFixed(2));
         rec.finalSalary = rec.netAttendancePay;
         rec.balanceRemaining = rec.netAttendancePay;
         return rec;
@@ -1026,13 +1030,13 @@ exports.getWeeklySalaryReport = async (req, res) => {
 
     const totals = {
       count: salaries.length,
-      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2)),
-      totalAllowances: Number(salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2)),
-      totalBonus: Number(salaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2)),
-      totalDeductions: Number(salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2)),
-      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2)),
-      totalPaid: Number(salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2)),
-      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0).toFixed(2))
+      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
+      totalAllowances: Number(salaries.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
+      totalBonus: Number(salaries.reduce((sum, s) => sum + (Number(s.bonus) || 0), 0).toFixed(2)),
+      totalDeductions: Number(salaries.reduce((sum, s) => sum + (Number(s.manualDeductions) || 0), 0).toFixed(2)),
+      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (Number(s.finalSalary) || 0), 0).toFixed(2)),
+      totalPaid: Number(salaries.reduce((sum, s) => sum + (Number(s.totalPaid) || 0), 0).toFixed(2)),
+      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (Number(s.balanceRemaining) || 0), 0).toFixed(2))
     };
 
     res.json({
@@ -1051,13 +1055,13 @@ exports.exportWeeklySalaryExcel = async (req, res) => {
   try {
     const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
-      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2)),
-      totalAllowances: Number(salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2)),
-      totalBonus: Number(salaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2)),
-      totalDeductions: Number(salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2)),
-      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2)),
-      totalPaid: Number(salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2)),
-      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0).toFixed(2))
+      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
+      totalAllowances: Number(salaries.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
+      totalBonus: Number(salaries.reduce((sum, s) => sum + (Number(s.bonus) || 0), 0).toFixed(2)),
+      totalDeductions: Number(salaries.reduce((sum, s) => sum + (Number(s.manualDeductions) || 0), 0).toFixed(2)),
+      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (Number(s.finalSalary) || 0), 0).toFixed(2)),
+      totalPaid: Number(salaries.reduce((sum, s) => sum + (Number(s.totalPaid) || 0), 0).toFixed(2)),
+      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (Number(s.balanceRemaining) || 0), 0).toFixed(2))
     };
 
     const workbook = await buildWeeklySalaryExcel(salaries, targetWeekLabel, totals);
@@ -1083,13 +1087,13 @@ exports.exportWeeklySalaryPDF = async (req, res) => {
   try {
     const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
-      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2)),
-      totalAllowances: Number(salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2)),
-      totalBonus: Number(salaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2)),
-      totalDeductions: Number(salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2)),
-      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2)),
-      totalPaid: Number(salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2)),
-      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0).toFixed(2))
+      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
+      totalAllowances: Number(salaries.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
+      totalBonus: Number(salaries.reduce((sum, s) => sum + (Number(s.bonus) || 0), 0).toFixed(2)),
+      totalDeductions: Number(salaries.reduce((sum, s) => sum + (Number(s.manualDeductions) || 0), 0).toFixed(2)),
+      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (Number(s.finalSalary) || 0), 0).toFixed(2)),
+      totalPaid: Number(salaries.reduce((sum, s) => sum + (Number(s.totalPaid) || 0), 0).toFixed(2)),
+      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (Number(s.balanceRemaining) || 0), 0).toFixed(2))
     };
 
     await logAction({
@@ -1945,11 +1949,15 @@ exports.getShopLabourHours = async (req, res) => {
         empEntry.workingDays += 1;
         shopLabourMap[sName].totalWorkingDays += 1;
       }
-      empEntry.scheduledHours = Number((empEntry.scheduledHours + (a.scheduledHours || 0)).toFixed(2));
-      empEntry.hours = Number((empEntry.hours + (a.actualHours || 0)).toFixed(2));
-      empEntry.lateMinutes += (a.lateMinutes || 0);
+      const sched = Number(a.scheduledHours) || 0;
+      const act = Number(a.actualHours) || 0;
+      const lMin = Number(a.lateMinutes) || 0;
 
-      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      empEntry.scheduledHours = Number((Number(empEntry.scheduledHours || 0) + sched).toFixed(2));
+      empEntry.hours = Number((Number(empEntry.hours || 0) + act).toFixed(2));
+      empEntry.lateMinutes = Number(empEntry.lateMinutes || 0) + lMin;
+
+      const effectiveWage = (Number(a.dailyWage) && Number(a.dailyWage) > 0) ? Number(a.dailyWage) : (Number(a.employee?.dailyWage) || 50);
       const calcResult = calculateAttendanceRecord({
         dailyWage: effectiveWage,
         shiftStart: a.shiftStart || '09:00',
@@ -1959,14 +1967,14 @@ exports.getShopLabourHours = async (req, res) => {
         status: a.status,
         gracePeriodMinutes: 15
       });
-      const attPay = calcResult.attendancePay;
+      const attPay = Number(calcResult.attendancePay) || 0;
 
-      empEntry.wageCost = Number((empEntry.wageCost + attPay).toFixed(2));
+      empEntry.wageCost = Number((Number(empEntry.wageCost || 0) + attPay).toFixed(2));
 
-      shopLabourMap[sName].totalScheduledHours = Number((shopLabourMap[sName].totalScheduledHours + (a.scheduledHours || 0)).toFixed(2));
-      shopLabourMap[sName].totalHours = Number((shopLabourMap[sName].totalHours + (a.actualHours || 0)).toFixed(2));
-      shopLabourMap[sName].totalLateMinutes += (a.lateMinutes || 0);
-      shopLabourMap[sName].totalWageCost = Number((shopLabourMap[sName].totalWageCost + attPay).toFixed(2));
+      shopLabourMap[sName].totalScheduledHours = Number((Number(shopLabourMap[sName].totalScheduledHours || 0) + sched).toFixed(2));
+      shopLabourMap[sName].totalHours = Number((Number(shopLabourMap[sName].totalHours || 0) + act).toFixed(2));
+      shopLabourMap[sName].totalLateMinutes = Number(shopLabourMap[sName].totalLateMinutes || 0) + lMin;
+      shopLabourMap[sName].totalWageCost = Number((Number(shopLabourMap[sName].totalWageCost || 0) + attPay).toFixed(2));
     });
 
     const result = Object.values(shopLabourMap).map(s => ({

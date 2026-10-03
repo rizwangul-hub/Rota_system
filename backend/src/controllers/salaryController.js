@@ -175,12 +175,12 @@ exports.generateWeeklySalary = async (req, res) => {
 
       // Check working days (exclude Absent, preserve Half and Present/Late)
       const workingDays = records.filter(r => r.status !== 'Absent').length;
-      const scheduledHours = Number(records.reduce((sum, r) => sum + (r.scheduledHours || 0), 0).toFixed(2));
-      const actualHours = Number(records.reduce((sum, r) => sum + (r.actualHours || 0), 0).toFixed(2));
+      const scheduledHours = Number(records.reduce((sum, r) => sum + (Number(r.scheduledHours) || 0), 0).toFixed(2));
+      const actualHours = Number(records.reduce((sum, r) => sum + (Number(r.actualHours) || 0), 0).toFixed(2));
 
       // Dynamically calculate lateness deductions and pay for each attendance record
       records.forEach(r => {
-        const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+        const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
         r.dailyWage = wage;
         const calcResult = calculateAttendanceRecord({
           dailyWage: wage,
@@ -196,9 +196,9 @@ exports.generateWeeklySalary = async (req, res) => {
         r.attendancePay = calcResult.attendancePay;
       });
 
-      const grossDailyWages = Number(records.reduce((sum, r) => sum + (r.dailyWage || 50), 0).toFixed(2));
-      const lateDeductions = Number(records.reduce((sum, r) => sum + (r.lateDeduction || 0), 0).toFixed(2));
-      const netAttendancePay = Number(records.reduce((sum, r) => sum + (r.attendancePay || 0), 0).toFixed(2));
+      const grossDailyWages = Number(records.reduce((sum, r) => sum + (Number(r.dailyWage) || 50), 0).toFixed(2));
+      const lateDeductions = Number(records.reduce((sum, r) => sum + (Number(r.lateDeduction) || 0), 0).toFixed(2));
+      const netAttendancePay = Number(records.reduce((sum, r) => sum + (Number(r.attendancePay) || 0), 0).toFixed(2));
 
       // Shops worked during the week
       const shopsWorked = Array.from(new Set(records.map(r => r.shopName).filter(Boolean)));

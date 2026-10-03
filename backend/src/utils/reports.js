@@ -1240,7 +1240,7 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
  */
 async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, monthLabel, attendanceSummary = {}, weeklyBreakdowns = [], grandTotal = {}, balancePayable = 0, generatedBy = 'Admin') {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
-  drawPdfBanner(doc, `Employee Monthly Statement`, `${employeeName} (${employeeId}) • ${shopName}`, `Period: ${monthLabel}`, true);
+  drawPdfBanner(doc, `Employee Monthly Statement`, `${employeeName} • ${shopName}`, `Period: ${monthLabel}`, true);
 
   const kpiY = 75;
   drawKpiCard(doc, 25, kpiY, 125, 'WORK DAYS', String(attendanceSummary.workingDays || 0), '#2563eb');
