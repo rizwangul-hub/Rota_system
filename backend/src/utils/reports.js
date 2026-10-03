@@ -940,136 +940,64 @@ function drawPdfSignatures(doc, yPos, isLandscape = true) {
  */
 async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generatedBy = 'Admin') {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
-  drawPdfBanner(doc, 'Weekly Attendance Schedule', 'Sun - Sat Workplace Roster', `Week: ${weekLabel}`, true);
+  drawPdfBanner(doc, 'Weekly Attendance', 'Worker-by-day shop assignments', `Week: ${weekLabel}`, true);
 
-  const kpiY = 75;
-  drawKpiCard(doc, 25, kpiY, 245, 'TOTAL STAFF', String(records.length), '#2563eb');
-  drawKpiCard(doc, 295, kpiY, 245, 'TOTAL WORK DAYS', String(summary.totalWorkingDays || 0), '#059669');
-  drawKpiCard(doc, 565, kpiY, 250, 'TOTAL HOURS WORKED', `${(summary.totalWorkedHours || 0).toFixed(1)}h`, '#d97706');
+  const margin = 25;
+  const tableWidth = 790;
+  const nameWidth = 170;
+  const dayWidth = (tableWidth - nameWidth) / 7;
+  const rowHeight = 20;
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  let y = 78;
 
-  let y = 135;
-
-  // Group records by shop (with Absent at bottom)
-  const shopGroups = {};
-  records.forEach(r => {
-    const sName = r.status === 'Absent' ? 'ABSENT / OFF' : (r.shopName || 'Unknown Shop');
-    if (!shopGroups[sName]) shopGroups[sName] = [];
-    shopGroups[sName].push(r);
-  });
-
-  const sortedShopNames = Object.keys(shopGroups).sort((a, b) => {
-    if (a === 'ABSENT / OFF') return 1;
-    if (b === 'ABSENT / OFF') return -1;
-    return a.localeCompare(b);
-  });
-
-  const sectionHeaderH = 18;
-  const tableHeaderH = 16;
-  const rowH = 16;
-
-  sortedShopNames.forEach(shopName => {
-    const group = shopGroups[shopName];
-    const isAbsentGroup = shopName === 'ABSENT / OFF';
-    const sc = getShopColor(isAbsentGroup ? 'ABSENT / OFF' : shopName);
-
-    // Check page overflow
-    if (y + sectionHeaderH + tableHeaderH + rowH > 520) {
-      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-      y = 30;
-    }
-
-    // 1. Shop Header Banner Bar
-    const headerBg = sc.primary || '#1e293b';
-    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fill(headerBg);
-    doc.circle(34, y + 9, 2.5).fill('#ffffff');
-
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
-       .text(isAbsentGroup ? 'ABSENT / OFF DUTY' : `${shopName.toUpperCase()} CYCLES`, 42, y + 4.5, { lineBreak: false });
-
-    const countText = isAbsentGroup
-      ? `${group.length} Staff Off / Absent`
-      : `${group.length} ${group.length === 1 ? 'Worker' : 'Workers'} Assigned`;
-
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
-       .text(countText, 550, y + 5, { width: 255, align: 'right', lineBreak: false });
-
-    y += sectionHeaderH;
-
-    // 2. Table Column Headers
-    doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
-    doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
-
-    doc.text('WORKER NAME', 35, y + 4, { width: 175, lineBreak: false });
-    doc.text('Sun', 220, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Mon', 275, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Tue', 330, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Wed', 385, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Thu', 440, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Fri', 495, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Sat', 550, y + 4, { width: 50, align: 'center', lineBreak: false });
-    doc.text('Work Days', 615, y + 4, { width: 60, align: 'center', lineBreak: false });
-    doc.text('Hours (h)', 690, y + 4, { width: 70, align: 'center', lineBreak: false });
-
-    y += tableHeaderH;
-
-    // 3. Rows for this Shop
-    let shopDays = 0;
-    let shopHours = 0;
-
-    group.forEach((r, idx) => {
-      if (y + rowH > 520) {
-        doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-        y = 30;
-        doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
-        doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
-        doc.text('WORKER NAME', 35, y + 4, { width: 175, lineBreak: false });
-        doc.text('Sun', 220, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Mon', 275, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Tue', 330, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Wed', 385, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Thu', 440, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Fri', 495, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Sat', 550, y + 4, { width: 50, align: 'center', lineBreak: false });
-        doc.text('Work Days', 615, y + 4, { width: 60, align: 'center', lineBreak: false });
-        doc.text('Hours (h)', 690, y + 4, { width: 70, align: 'center', lineBreak: false });
-        y += tableHeaderH;
-      }
-
-      shopDays += r.workingDays || 0;
-      shopHours += r.actualHours || 0;
-
-      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
-      doc.rect(25, y, 790, rowH).fill(bg);
-      doc.rect(25, y, 3, rowH).fill(sc.primary || '#2563eb');
-
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
-      doc.text((r.employeeName || '').slice(0, 24), 35, y + 3.5, { width: 175, lineBreak: false });
-      doc.font('Helvetica').fontSize(7.5);
-      doc.text((r.dailySchedule?.Sun || 'Off').slice(0, 8), 220, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text((r.dailySchedule?.Mon || 'Off').slice(0, 8), 275, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text((r.dailySchedule?.Tue || 'Off').slice(0, 8), 330, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text((r.dailySchedule?.Wed || 'Off').slice(0, 8), 385, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text((r.dailySchedule?.Thu || 'Off').slice(0, 8), 440, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text((r.dailySchedule?.Fri || 'Off').slice(0, 8), 495, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text((r.dailySchedule?.Sat || 'Off').slice(0, 8), 550, y + 4, { width: 50, align: 'center', lineBreak: false });
-      doc.text(String(r.workingDays || 0), 615, y + 4, { width: 60, align: 'center', lineBreak: false });
-      doc.text(`${(r.actualHours || 0).toFixed(1)}h`, 690, y + 4, { width: 70, align: 'center', lineBreak: false });
-      y += rowH;
+  const drawTableHeader = () => {
+    doc.rect(margin, y, tableWidth, rowHeight).fill('#e2e8f0');
+    doc.fillColor('#334155').font('Helvetica-Bold').fontSize(8)
+       .text('WORKER NAME', margin + 8, y + 6, { width: nameWidth - 12, lineBreak: false });
+    days.forEach((day, index) => {
+      const x = margin + nameWidth + index * dayWidth;
+      doc.fillColor('#334155').font('Helvetica-Bold').fontSize(8)
+         .text(day, x, y + 6, { width: dayWidth, align: 'center', lineBreak: false });
     });
+    y += rowHeight;
+  };
 
-    // Shop Subtotal Bar
-    if (y + 15 > 520) {
+  drawTableHeader();
+  const sortedRecords = [...records].sort((a, b) =>
+    (a.employeeName || '').localeCompare(b.employeeName || '')
+  );
+
+  sortedRecords.forEach((record, rowIndex) => {
+    if (y + rowHeight > 510) {
       doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-      y = 30;
+      y = 35;
+      drawTableHeader();
     }
-    doc.rect(25, y, 790, 15).fill(sc.lightBg || '#f1f5f9');
-    doc.rect(25, y, 3, 15).fill(sc.primary || '#2563eb');
-    doc.fillColor(sc.text || '#0f172a').font('Helvetica-Bold').fontSize(7.5);
-    doc.text(`SUBTOTAL — ${shopName.toUpperCase()}`, 35, y + 3.5, { lineBreak: false });
-    doc.text(`Staff: ${group.length}`, 450, y + 3.5, { lineBreak: false });
-    doc.text(`Total Days: ${shopDays}`, 600, y + 3.5, { lineBreak: false });
-    doc.text(`Total Hours: ${shopHours.toFixed(1)}h`, 690, y + 3.5, { lineBreak: false });
-    y += 21;
+
+    const background = rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc';
+    doc.rect(margin, y, tableWidth, rowHeight).fill(background);
+    doc.rect(margin, y + rowHeight - 0.5, tableWidth, 0.5).fill('#e2e8f0');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
+       .text(record.employeeName || 'Worker', margin + 8, y + 6, {
+         width: nameWidth - 12,
+         lineBreak: false
+       });
+
+    days.forEach((day, index) => {
+      const x = margin + nameWidth + index * dayWidth;
+      const shop = record.dailySchedule?.[day] || 'Off';
+      doc.fillColor(shop === 'Off' ? '#94a3b8' : '#0f766e')
+         .font(shop === 'Off' ? 'Helvetica' : 'Helvetica-Bold')
+         .fontSize(7.5)
+         .text(shop, x + 2, y + 6, {
+           width: dayWidth - 4,
+           align: 'center',
+           lineBreak: false
+         });
+      doc.strokeColor('#e2e8f0').lineWidth(0.4)
+         .moveTo(x, y).lineTo(x, y + rowHeight).stroke();
+    });
+    y += rowHeight;
   });
 
   drawPdfSignatures(doc, y + 15, true);

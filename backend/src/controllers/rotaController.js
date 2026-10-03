@@ -584,39 +584,325 @@ async function getExportData(weekStart, employeeId) {
   return { week, rota, assignments, employeesById, shopsById };
 }
 
+const SHOP_EXPORT_PALETTE = {
+  station:   { name: 'Station Cycles',   excelFill: 'FFCCE5FF', pdfHex: '#cce5ff', text: '#002060' },
+  camden:    { name: 'Camden Cycles',    excelFill: 'FFFFF3CD', pdfHex: '#fff3cd', text: '#664d03' },
+  chelsea:   { name: 'Chelsea Bikes',    excelFill: 'FFD1ECF1', pdfHex: '#d1ecf1', text: '#055160' },
+  edgware:   { name: 'Edgware Cycles',   excelFill: 'FFA5F3FC', pdfHex: '#a5f3fc', text: '#004d40' },
+  southwark: { name: 'Southwark Cycles', excelFill: 'FFFEF08A', pdfHex: '#fef08a', text: '#554400' },
+  leebridge: { name: 'Leebridge Cycles', excelFill: 'FFD4EDDA', pdfHex: '#d4edda', text: '#0f5132' },
+  leabridge: { name: 'Leebridge Cycles', excelFill: 'FFD4EDDA', pdfHex: '#d4edda', text: '#0f5132' }
+};
+
+function getShopPalette(shopName = '') {
+  const lower = String(shopName || '').toLowerCase();
+  for (const [key, val] of Object.entries(SHOP_EXPORT_PALETTE)) {
+    if (lower.includes(key)) return val;
+  }
+  return { name: shopName, excelFill: 'FFE2E8F0', pdfHex: '#e2e8f0', text: '#1e293b' };
+}
+
 exports.exportExcel = async (req, res) => {
   try {
     const employeeId = req.params.employeeId;
     if (employeeId) checkObjectId(employeeId, 'employeeId');
-    const data = await getExportData(req.params.weekStart, employeeId);
-    if (employeeId && !data.employeesById.has(employeeId)) throw new RotaError(404, 'Employee not found or has no shifts in this rota.');
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Weekly Rota');
-    sheet.columns = [
-      { header: 'Date', key: 'date', width: 14 }, { header: 'Employee', key: 'employee', width: 28 },
-      { header: 'Employee ID', key: 'employeeId', width: 16 }, { header: 'Shop', key: 'shop', width: 26 },
-      { header: 'Start', key: 'start', width: 12 }, { header: 'End', key: 'end', width: 12 },
-      { header: 'Locked', key: 'locked', width: 12 }
-    ];
-    for (const assignment of data.assignments) {
-      const employee = data.employeesById.get(id(assignment.employeeId));
-      const shop = data.shopsById.get(id(assignment.shopId));
-      sheet.addRow({
-        date: assignment.dateKey, employee: employee?.name || '', employeeId: employee?.employeeId || '',
-        shop: shop?.name || '', start: assignment.startTime, end: assignment.endTime,
-        locked: assignment.locked ? 'Yes' : 'No'
+    const weekStart = req.params.weekStart;
+    const week = getWeek(weekStart);
+
+    // If single employee export requested
+    if (employeeId) {
+      const data = await getExportData(weekStart, employeeId);
+      if (!data.employeesById.has(employeeId)) throw new RotaError(404, 'Employee not found or has no shifts in this rota.');
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Weekly Rota');
+      sheet.columns = [
+        { header: 'Date', key: 'date', width: 14 }, { header: 'Employee', key: 'employee', width: 28 },
+        { header: 'Employee ID', key: 'employeeId', width: 16 }, { header: 'Shop', key: 'shop', width: 26 },
+        { header: 'Start', key: 'start', width: 12 }, { header: 'End', key: 'end', width: 12 },
+        { header: 'Locked', key: 'locked', width: 12 }
+      ];
+      for (const assignment of data.assignments) {
+        const employee = data.employeesById.get(id(assignment.employeeId));
+        const shop = data.shopsById.get(id(assignment.shopId));
+        sheet.addRow({
+          date: assignment.dateKey, employee: employee?.name || '', employeeId: employee?.employeeId || '',
+          shop: shop?.name || '', start: assignment.startTime, end: assignment.endTime,
+          locked: assignment.locked ? 'Yes' : 'No'
+        });
+      }
+      sheet.getRow(1).font = { bold: true };
+      await logAction({
+        user: req.user,
+        action: 'ROTA_EXPORTED',
+        recordType: 'WeeklyRota',
+        details: `Exported employee ${employeeId} rota for ${data.week.weekStart} as Excel.`,
+        req
       });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="rota-employee-${data.week.weekStart}.xlsx"`);
+      await workbook.xlsx.write(res);
+      return res.end();
     }
-    sheet.getRow(1).font = { bold: true };
+
+    // FULL MULTI-SHOP UNIFIED ROTA SPREADSHEET (Matches uploaded template)
+    const rota = await WeeklyRota.findOne({ weekStart: week.weekStart })
+      .populate('shopRoster.shopId', 'name')
+      .populate('shopRoster.employeeIds', 'name')
+      .lean();
+    if (!rota) throw new RotaError(404, 'No rota exists for this week.');
+
+    const allShops = await Shop.find({ isActive: true }).select('name').lean();
+    const shopsById = {};
+    allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
+
+    // Cell lookup
+    const cellMap = {};
+    for (const a of (rota.assignments || [])) {
+      const hId = id(a.homeShopId || a.shopId);
+      const eId = id(a.employeeId);
+      cellMap[`${hId}:${eId}:${a.dateKey}`] = a;
+    }
+
+    // Shop roster lookup
+    const rosterMap = {};
+    for (const sr of (rota.shopRoster || [])) {
+      const sId = id(sr.shopId?._id || sr.shopId);
+      rosterMap[sId] = {
+        shopName: sr.shopId?.name || '',
+        employees: (sr.employeeIds || []).map(e => ({ _id: id(e._id || e), name: e.name || '' }))
+      };
+    }
+
+    const DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+    const weekDates = [];
+    const base = new Date(`${week.weekStart}T12:00:00.000Z`);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const formatted = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(d);
+      const shortDate = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+      weekDates.push({ iso, formatted, shortDate, dayLabel: DAYS[i] });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('ROTA', { views: [{ showGridLines: true }] });
+
+    sheet.columns = [
+      { width: 22 }, // A: Name
+      { width: 18 }, // B: Sun
+      { width: 18 }, // C: Mon
+      { width: 18 }, // D: Tue
+      { width: 18 }, // E: Wed
+      { width: 18 }, // F: Thu
+      { width: 18 }, // G: Fri
+      { width: 18 }  // H: Sat
+    ];
+
+    const thinBorder = {
+      top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+      right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+    };
+    const thickBottom = {
+      ...thinBorder,
+      bottom: { style: 'medium', color: { argb: 'FF000000' } }
+    };
+
+    // Row 1: ROTA Title Banner
+    sheet.mergeCells('A1:H1');
+    const titleRow = sheet.getRow(1);
+    titleRow.height = 30;
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = 'ROTA';
+    titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FF0F172A' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+
+    // Row 2: Subtitle with Date Range
+    sheet.mergeCells('A2:H2');
+    const subRow = sheet.getRow(2);
+    subRow.height = 20;
+    const subCell = sheet.getCell('A2');
+    subCell.value = `(${weekDates[0].shortDate} to ${weekDates[6].shortDate})`;
+    subCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF475569' } };
+    subCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+
+    // Row 3: Top Date Bar
+    const topDateRow = sheet.getRow(3);
+    topDateRow.height = 20;
+    sheet.getCell('A3').value = '';
+    sheet.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    sheet.getCell('A3').border = thinBorder;
+    for (let i = 0; i < 7; i++) {
+      const colLetter = String.fromCharCode(66 + i);
+      const c = sheet.getCell(`${colLetter}3`);
+      c.value = weekDates[i].formatted;
+      c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF1E293B' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      c.border = thinBorder;
+    }
+
+    let currentRowNum = 4;
+    const grandTotals = new Array(7).fill(0);
+
+    const shopOrder = allShops.map(s => id(s._id)).filter(sid => rosterMap[sid]);
+    Object.keys(rosterMap).forEach(sid => { if (!shopOrder.includes(sid)) shopOrder.push(sid); });
+
+    for (const shopId of shopOrder) {
+      const roster = rosterMap[shopId];
+      if (!roster || roster.employees.length === 0) continue;
+      const palette = getShopPalette(roster.shopName);
+
+      // Shop Header Row (Merged A..H)
+      sheet.mergeCells(`A${currentRowNum}:H${currentRowNum}`);
+      const sHRow = sheet.getRow(currentRowNum);
+      sHRow.height = 26;
+      const sHCell = sheet.getCell(`A${currentRowNum}`);
+      sHCell.value = roster.shopName;
+      sHCell.font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FF0F172A' } };
+      sHCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      sHCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: palette.excelFill } };
+      for (let c = 1; c <= 8; c++) {
+        sheet.getRow(currentRowNum).getCell(c).border = thickBottom;
+      }
+      currentRowNum++;
+
+      // Subheader Row 1: Name | Dates
+      const subH1 = sheet.getRow(currentRowNum);
+      subH1.height = 18;
+      const nCell = subH1.getCell(1);
+      nCell.value = 'Name';
+      nCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF334155' } };
+      nCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+      nCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: palette.excelFill } };
+      nCell.border = thinBorder;
+      for (let i = 0; i < 7; i++) {
+        const c = subH1.getCell(2 + i);
+        c.value = weekDates[i].formatted;
+        c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF475569' } };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: palette.excelFill } };
+        c.border = thinBorder;
+      }
+      currentRowNum++;
+
+      // Subheader Row 2: (blank) | SUNDAY, MONDAY...
+      const subH2 = sheet.getRow(currentRowNum);
+      subH2.height = 18;
+      const blankN = subH2.getCell(1);
+      blankN.value = '';
+      blankN.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: palette.excelFill } };
+      blankN.border = thinBorder;
+      for (let i = 0; i < 7; i++) {
+        const c = subH2.getCell(2 + i);
+        c.value = weekDates[i].dayLabel;
+        c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF1E293B' } };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: palette.excelFill } };
+        c.border = thinBorder;
+      }
+      currentRowNum++;
+
+      // Worker Rows
+      const shopTotals = new Array(7).fill(0);
+      roster.employees.forEach((emp, empIdx) => {
+        const row = sheet.getRow(currentRowNum);
+        row.height = 20;
+        const nameC = row.getCell(1);
+        nameC.value = emp.name;
+        nameC.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF0F172A' } };
+        nameC.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+        nameC.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: empIdx % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC' } };
+        nameC.border = thinBorder;
+
+        for (let i = 0; i < 7; i++) {
+          const c = row.getCell(2 + i);
+          const key = `${shopId}:${emp._id}:${weekDates[i].iso}`;
+          const cell = cellMap[key];
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: empIdx % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC' } };
+          c.border = thinBorder;
+          c.alignment = { horizontal: 'center', vertical: 'middle' };
+
+          if (!cell) {
+            c.value = '—';
+            c.font = { name: 'Arial', size: 8, color: { argb: 'FF94A3B8' } };
+          } else if (cell.status === 'OFF') {
+            c.value = 'OFF';
+            c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } }; // BOLD RED
+          } else if (cell.status === 'LOANED') {
+            const targetShop = shopsById[id(cell.targetShopId)] || cell.note || 'Loaned';
+            c.value = targetShop;
+            c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
+          } else {
+            // AVAILABLE / CUSTOM
+            shopTotals[i]++;
+            grandTotals[i]++;
+            if (cell.status === 'CUSTOM' && cell.note) {
+              c.value = cell.note;
+              c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
+            } else {
+              c.value = cell.note ? `Available (${cell.note})` : 'Available';
+              c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
+            }
+          }
+        }
+        currentRowNum++;
+      });
+
+      // Total Row for this Shop
+      const totRow = sheet.getRow(currentRowNum);
+      totRow.height = 20;
+      const tLabel = totRow.getCell(1);
+      tLabel.value = 'Total';
+      tLabel.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF1E293B' } };
+      tLabel.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+      tLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      tLabel.border = thinBorder;
+
+      for (let i = 0; i < 7; i++) {
+        const c = totRow.getCell(2 + i);
+        c.value = shopTotals[i];
+        c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF0F172A' } };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        c.border = thinBorder;
+      }
+      currentRowNum++;
+    }
+
+    // Grand Total Row (Bottom across all shops)
+    const gRow = sheet.getRow(currentRowNum);
+    gRow.height = 24;
+    const gLabel = gRow.getCell(1);
+    gLabel.value = 'Grand Total';
+    gLabel.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    gLabel.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    gLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    gLabel.border = thickBottom;
+
+    for (let i = 0; i < 7; i++) {
+      const c = gRow.getCell(2 + i);
+      c.value = grandTotals[i];
+      c.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF0F172A' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      c.border = thickBottom;
+    }
+
     await logAction({
       user: req.user,
       action: 'ROTA_EXPORTED',
       recordType: 'WeeklyRota',
-      details: `Exported ${employeeId ? `employee ${employeeId} ` : ''}rota for ${data.week.weekStart} as Excel.`,
+      details: `Exported weekly rota for ${week.weekStart} as Excel (Multi-Shop Sheet).`,
       req
     });
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="rota-${employeeId ? 'employee-' : ''}${data.week.weekStart}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Rota_${week.weekStart}.xlsx"`);
     await workbook.xlsx.write(res);
     return res.end();
   } catch (error) { return handleError(res, error); }
@@ -638,15 +924,6 @@ exports.exportPdf = async (req, res) => {
     // Fetch all shops in order
     const allShops = await Shop.find({ isActive: true }).select('name').lean();
 
-    // Build a lookup: assignmentKey = `homeShopId:employeeId:dateKey` → assignment
-    const cellMap = {};
-    for (const a of (rota.assignments || [])) {
-      const hId = id(a.homeShopId || a.shopId);
-      const eId = id(a.employeeId);
-      const key = `${hId}:${eId}:${a.dateKey}`;
-      cellMap[key] = a;
-    }
-
     // Build shopRoster lookup
     const rosterMap = {};
     for (const sr of (rota.shopRoster || [])) {
@@ -657,11 +934,17 @@ exports.exportPdf = async (req, res) => {
       };
     }
 
-    // Build shopsById for cell lookup labels (loaned shop names)
+    const cellMap = {};
+    for (const a of (rota.assignments || [])) {
+      const hId = id(a.homeShopId || a.shopId);
+      const eId = id(a.employeeId);
+      cellMap[`${hId}:${eId}:${a.dateKey}`] = a;
+    }
+
     const shopsById = {};
     allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
 
-    // Week days: Sun → Sat
+    // Week days: Sun -> Sat
     const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
     const DAY_LABELS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
     const weekDates = [];
@@ -674,7 +957,7 @@ exports.exportPdf = async (req, res) => {
       weekDates.push({ iso, formatted, day: DAYS[i], dayLabel: DAY_LABELS[i] });
     }
 
-    // ── PDF setup ─────────────────────────────────────────────────────────────
+    // PDF setup
     const PAGE_W = 841.89; // A4 landscape width
     const PAGE_H = 595.28; // A4 landscape height
     const MARGIN = 24;
@@ -696,7 +979,7 @@ exports.exportPdf = async (req, res) => {
       dateBg:      '#f1f5f9',
       dateText:    '#334155',
       offText:     '#dc2626',
-      loanText:    '#7c3aed',
+      loanText:    '#2563eb',
       availText:   '#059669',
       rowAlt:      '#f8fafc',
       totalBg:     '#e2e8f0',
@@ -707,17 +990,14 @@ exports.exportPdf = async (req, res) => {
 
     let y = MARGIN;
 
-    // ── Helper: draw a full-width horizontal line ────────────────────────────
     const hLine = (yPos, color = COLORS.border) => {
       doc.strokeColor(color).lineWidth(0.4).moveTo(MARGIN, yPos).lineTo(MARGIN + usableW, yPos).stroke();
     };
 
-    // ── Helper: draw a cell rect ─────────────────────────────────────────────
     const fillRect = (x, yPos, w, h, bg) => {
       doc.rect(x, yPos, w, h).fillColor(bg).fill();
     };
 
-    // ── Helper: draw text centred in a cell ──────────────────────────────────
     const cellText = (text, x, yPos, w, h, color, size, bold = false, align = 'center') => {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica')
          .fontSize(size)
@@ -725,7 +1005,6 @@ exports.exportPdf = async (req, res) => {
          .text(text, x + 2, yPos + 2, { width: w - 4, height: h - 2, align, lineBreak: false });
     };
 
-    // ── Page header ──────────────────────────────────────────────────────────
     const drawPageHeader = () => {
       const H = 22;
       fillRect(MARGIN, y, usableW, H, COLORS.headerBg);
@@ -733,7 +1012,6 @@ exports.exportPdf = async (req, res) => {
          .text(`Weekly Staff Rota  ·  ${weekDates[0].formatted} – ${weekDates[6].formatted}`,
                 MARGIN + 4, y + 6, { width: usableW - 8, align: 'center' });
       y += H;
-      // Date header row
       fillRect(MARGIN, y, NAME_COL, 18, COLORS.dateBg);
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
@@ -747,58 +1025,59 @@ exports.exportPdf = async (req, res) => {
 
     drawPageHeader();
 
-    // ── Draw each shop section ───────────────────────────────────────────────
+    const grandTotals = new Array(7).fill(0);
     const shopOrder = allShops.map(s => id(s._id)).filter(sid => rosterMap[sid]);
-    // also add shops from rosterMap not in allShops
     Object.keys(rosterMap).forEach(sid => { if (!shopOrder.includes(sid)) shopOrder.push(sid); });
 
     for (const shopId of shopOrder) {
       const roster = rosterMap[shopId];
       if (!roster || roster.employees.length === 0) continue;
+      const palette = getShopPalette(roster.shopName);
 
       const ROW_H   = 14;
       const HEAD_H  = 16;
       const TOTAL_H = 13;
       const shopBlockH = HEAD_H + ROW_H + ROW_H + roster.employees.length * ROW_H + TOTAL_H;
 
-      // Page break check
-      if (y + shopBlockH > PAGE_H - MARGIN - 10) {
+      if (y + shopBlockH > PAGE_H - MARGIN - 25) {
         doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
         y = MARGIN;
         drawPageHeader();
       }
 
-      // ── Shop title row ───────────────────────────────────────────────────
-      fillRect(MARGIN, y, usableW, HEAD_H, COLORS.dateBg);
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.shopText)
+      fillRect(MARGIN, y, usableW, HEAD_H, palette.pdfHex);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(palette.text || COLORS.shopText)
          .text(roster.shopName, MARGIN, y + 4, { width: usableW, align: 'center', lineBreak: false });
       hLine(y); hLine(y + HEAD_H);
       y += HEAD_H;
 
-      // ── Sub-header: Name + date columns ─────────────────────────────────
-      fillRect(MARGIN, y, NAME_COL, ROW_H, COLORS.dateBg);
+      fillRect(MARGIN, y, NAME_COL, ROW_H, palette.pdfHex);
       cellText('Name', MARGIN, y, NAME_COL, ROW_H, COLORS.shopText, 6.5, true, 'left');
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
-        fillRect(x, y, DAY_COL, ROW_H, COLORS.dateBg);
+        fillRect(x, y, DAY_COL, ROW_H, palette.pdfHex);
         cellText(weekDates[i].formatted.replace(/ \d{4}$/, ''), x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, false);
       }
       hLine(y + ROW_H);
       y += ROW_H;
 
-      // ── Day-name row ─────────────────────────────────────────────────────
-      fillRect(MARGIN, y, NAME_COL, ROW_H, COLORS.dateBg);
+      fillRect(MARGIN, y, NAME_COL, ROW_H, palette.pdfHex);
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
-        fillRect(x, y, DAY_COL, ROW_H, COLORS.dateBg);
+        fillRect(x, y, DAY_COL, ROW_H, palette.pdfHex);
         cellText(weekDates[i].dayLabel, x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, true);
       }
       hLine(y + ROW_H);
       y += ROW_H;
 
-      // ── Staff rows ───────────────────────────────────────────────────────
       const totals = new Array(7).fill(0);
       roster.employees.forEach((emp, rowIdx) => {
+        if (y + ROW_H > PAGE_H - MARGIN - 40) {
+          doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+          y = MARGIN;
+          drawPageHeader();
+        }
+
         const rowBg = rowIdx % 2 === 0 ? COLORS.white : COLORS.rowAlt;
         fillRect(MARGIN, y, NAME_COL, ROW_H, rowBg);
         cellText(emp.name, MARGIN + 2, y, NAME_COL - 4, ROW_H, COLORS.shopText, 6, true, 'left');
@@ -815,17 +1094,18 @@ exports.exportPdf = async (req, res) => {
             if (cell.status === 'OFF') {
               label = 'OFF'; color = COLORS.offText;
             } else if (cell.status === 'LOANED') {
-              label = cell.note || 'Loaned'; color = COLORS.loanText;
+              const targetShop = shopsById[id(cell.targetShopId)] || cell.note || 'Loaned';
+              label = targetShop; color = COLORS.loanText;
             } else {
-              // AVAILABLE
               label = cell.note ? `Avail. ${cell.note}` : 'Available';
               color = COLORS.availText;
               totals[i]++;
+              grandTotals[i]++;
             }
           }
           cellText(label, x, y, DAY_COL, ROW_H, color, 5.5, cell?.status === 'OFF');
         }
-        // Vertical grid lines for this row
+
         doc.strokeColor(COLORS.border).lineWidth(0.3);
         for (let i = 0; i <= 7; i++) {
           const lx = i === 0 ? MARGIN + NAME_COL : MARGIN + NAME_COL + i * DAY_COL;
@@ -835,7 +1115,6 @@ exports.exportPdf = async (req, res) => {
         y += ROW_H;
       });
 
-      // ── Totals row ───────────────────────────────────────────────────────
       fillRect(MARGIN, y, NAME_COL, TOTAL_H, COLORS.totalBg);
       cellText('Total', MARGIN + 2, y, NAME_COL, TOTAL_H, COLORS.totalText, 6, true, 'left');
       for (let i = 0; i < 7; i++) {
@@ -844,13 +1123,28 @@ exports.exportPdf = async (req, res) => {
         cellText(String(totals[i]), x, y, DAY_COL, TOTAL_H, COLORS.totalText, 6.5, true);
       }
       hLine(y); hLine(y + TOTAL_H);
-      // outer border
       doc.rect(MARGIN, y - roster.employees.length * ROW_H - HEAD_H - 2 * ROW_H, usableW, roster.employees.length * ROW_H + HEAD_H + 2 * ROW_H + TOTAL_H)
          .strokeColor(COLORS.border).lineWidth(0.6).stroke();
-      y += TOTAL_H + 8; // gap between shops
+      y += TOTAL_H + 6;
     }
 
-    // ── Footer ───────────────────────────────────────────────────────────────
+    const GRAND_H = 15;
+    if (y + GRAND_H > PAGE_H - MARGIN - 20) {
+      doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+      y = MARGIN;
+      drawPageHeader();
+    }
+    fillRect(MARGIN, y, NAME_COL, GRAND_H, '#94a3b8');
+    cellText('Grand Total', MARGIN + 2, y, NAME_COL, GRAND_H, '#ffffff', 7, true, 'left');
+    for (let i = 0; i < 7; i++) {
+      const x = MARGIN + NAME_COL + i * DAY_COL;
+      fillRect(x, y, DAY_COL, GRAND_H, '#e2e8f0');
+      cellText(String(grandTotals[i]), x, y, DAY_COL, GRAND_H, '#0f172a', 8, true);
+    }
+    hLine(y); hLine(y + GRAND_H);
+    y += GRAND_H + 8;
+
+    // Footer
     const footerY = PAGE_H - MARGIN - 10;
     doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
        .text(`Generated by PIXX ROTA  ·  ${new Date().toLocaleDateString('en-GB')}`, MARGIN, footerY, { width: usableW, align: 'center' });
@@ -859,7 +1153,7 @@ exports.exportPdf = async (req, res) => {
       user: req.user,
       action: 'ROTA_EXPORTED',
       recordType: 'WeeklyRota',
-      details: `Exported rota for ${weekStart} as PDF.`,
+      details: `Exported rota for ${weekStart} as PDF (Multi-Shop Sheet).`,
       req
     });
 

@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios';
 import {
   AlertCircle, AlertTriangle, ArrowRight, Calendar, Check, CheckCircle2,
-  ChevronLeft, ChevronRight, Copy, Download, GripVertical, Maximize2,
-  Minimize2, Move, Plus, Printer, RefreshCw, Save, Trash2, UserCheck,
-  UserX, Users, X
+  ChevronLeft, ChevronRight, Copy, Download, Eye, EyeOff, GripVertical,
+  Maximize2, Minimize2, Move, Plus, Printer, RefreshCw, Save, Trash2,
+  UserCheck, UserX, Users, X
 } from 'lucide-react';
 import { API_BASE_URL } from '../context/AuthContext';
 import './WeeklyRotaPlanner.css';
@@ -13,20 +13,20 @@ const API = `${API_BASE_URL}/rota`;
 
 // Shop Colors & Brand Styling
 const SHOP_COLORS = {
-  Station: { name: 'Station Cycles', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', pillBg: '#ede9fe', text: '#6d28d9' },
-  Camden: { name: 'Camden Cycles', color: '#ea580c', bg: '#fff7ed', border: '#fed7aa', pillBg: '#ffedd5', text: '#c2410c' },
-  Chelsea: { name: 'Chelsea Bikes', color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd', pillBg: '#e0f2fe', text: '#0369a1' },
-  Edgware: { name: 'Edgware Cycles', color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', pillBg: '#ccfbf1', text: '#0f766e' },
-  Southwark: { name: 'Southwark Cycles', color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', pillBg: '#e0e7ff', text: '#4338ca' },
-  Leebridge: { name: 'Leebridge Cycles', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', pillBg: '#dcfce7', text: '#15803d' },
-  Leabridge: { name: 'Leebridge Cycles', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', pillBg: '#dcfce7', text: '#15803d' }
+  Station:   { name: 'Station Cycles',   color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd', pillBg: '#cce5ff', text: '#002060', excelBg: '#cce5ff' },
+  Camden:    { name: 'Camden Cycles',    color: '#d97706', bg: '#fffbeb', border: '#fde68a', pillBg: '#fff3cd', text: '#664d03', excelBg: '#fff3cd' },
+  Chelsea:   { name: 'Chelsea Bikes',    color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', pillBg: '#d1ecf1', text: '#055160', excelBg: '#d1ecf1' },
+  Edgware:   { name: 'Edgware Cycles',   color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', pillBg: '#a5f3fc', text: '#004d40', excelBg: '#a5f3fc' },
+  Southwark: { name: 'Southwark Cycles', color: '#ca8a04', bg: '#fefce8', border: '#fef08a', pillBg: '#fef08a', text: '#554400', excelBg: '#fef08a' },
+  Leebridge: { name: 'Leebridge Cycles', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', pillBg: '#d4edda', text: '#0f5132', excelBg: '#d4edda' },
+  Leabridge: { name: 'Leebridge Cycles', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', pillBg: '#d4edda', text: '#0f5132', excelBg: '#d4edda' }
 };
 
 function getShopStyle(shopName = '') {
   for (const [key, val] of Object.entries(SHOP_COLORS)) {
     if (shopName.toLowerCase().includes(key.toLowerCase())) return val;
   }
-  return { name: shopName, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', pillBg: '#dbeafe', text: '#1d4ed8' };
+  return { name: shopName, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', pillBg: '#dbeafe', text: '#1d4ed8', excelBg: '#e2e8f0' };
 }
 
 // Helpers for dates
@@ -65,7 +65,7 @@ export default function WeeklyRotaPlanner() {
 
   // Fullscreen & Pick/Drop Modes
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewMode, setViewMode] = useState('GRID'); // 'GRID' (Weekly matrix) or 'BOARD' (Daily drag & drop board)
+  const [viewMode, setViewMode] = useState('SHEET'); // 'SHEET' (Unified Excel Rota), 'GRID' (Cards matrix), or 'BOARD' (Daily board)
   const [selectedDailyDate, setSelectedDailyDate] = useState(() => weekStart);
 
   // Pick & Drop active state: { employeeId, sourceShopId, dateKey, employeeName, sourceShopName }
@@ -78,6 +78,7 @@ export default function WeeklyRotaPlanner() {
   const [shops, setShops] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [currentRota, setCurrentRota] = useState(null);
+  const [availabilities, setAvailabilities] = useState([]);
 
   // Shop Roster: { [shopId]: [employeeId1, employeeId2, ...] }
   const [shopRosters, setShopRosters] = useState({});
@@ -91,6 +92,16 @@ export default function WeeklyRotaPlanner() {
 
   // Add worker dropdown state per shop
   const [addingWorkerShopId, setAddingWorkerShopId] = useState(null);
+
+  // ── PREVIEW PREVIOUS ROTA STATE ────────────────────────────────────────
+  // prevRota: last week's rota data: { assignments[], shopRoster[] }
+  const [prevRota, setPrevRota] = useState(null);
+  const [prevRotaLoading, setPrevRotaLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false); // toggle overlay
+
+  // Available Workers Modal: when clicking OFF/unavailable slot in preview
+  // { shopId, shopName, employeeId, employeeName, employeeCode, dateKey, dayName, availableWorkers[], transferrableWorkers[] }
+  const [availModal, setAvailModal] = useState(null);
 
   // Days in selected week (Sunday - Saturday)
   const weekDays = useMemo(() => getWeekDates(weekStart), [weekStart]);
@@ -106,6 +117,8 @@ export default function WeeklyRotaPlanner() {
       if (e.key === 'Escape') {
         if (pickedWorker) {
           setPickedWorker(null);
+        } else if (availModal) {
+          setAvailModal(null);
         } else if (isFullscreen) {
           setIsFullscreen(false);
         } else if (activeCell) {
@@ -115,7 +128,7 @@ export default function WeeklyRotaPlanner() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pickedWorker, isFullscreen, activeCell]);
+  }, [pickedWorker, isFullscreen, activeCell, availModal]);
 
   // Load week rota from backend
   const loadWeek = useCallback(async (targetWeek) => {
@@ -124,7 +137,11 @@ export default function WeeklyRotaPlanner() {
     setActiveCell(null);
     setPickedWorker(null);
     try {
-      const res = await axios.get(`${API}/dashboard`, { params: { weekStart: targetWeek } });
+      const [res, availRes] = await Promise.all([
+        axios.get(`${API}/dashboard`, { params: { weekStart: targetWeek } }),
+        axios.get(`${API}/availability`, { params: { weekStart: targetWeek } }).catch(() => ({ data: { availability: [] } }))
+      ]);
+
       const data = res.data || {};
       const activeShops = data.shops || [];
       const activeEmployees = data.employees || [];
@@ -133,6 +150,7 @@ export default function WeeklyRotaPlanner() {
       setShops(activeShops);
       setEmployees(activeEmployees);
       setCurrentRota(rota);
+      setAvailabilities(availRes?.data?.availability || []);
 
       // 1. Build initial Shop Rosters
       const rosters = {};
@@ -158,7 +176,6 @@ export default function WeeklyRotaPlanner() {
           }
         });
       }
-      // else: brand new week — keep all rosters empty so admin adds workers manually
 
       setShopRosters(rosters);
 
@@ -190,7 +207,214 @@ export default function WeeklyRotaPlanner() {
 
   useEffect(() => {
     loadWeek(weekStart);
+    setPrevRota(null);
+    setShowPreview(false);
   }, [weekStart, loadWeek]);
+
+  // Helper: compute previous week's Sunday
+  const prevWeekStart = useMemo(() => {
+    const d = new Date(`${weekStart}T12:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() - 7);
+    return d.toISOString().slice(0, 10);
+  }, [weekStart]);
+
+  // Load previous week's rota for preview
+  const loadPrevWeekRota = useCallback(async () => {
+    setPrevRotaLoading(true);
+    try {
+      const res = await axios.get(`${API}/dashboard`, { params: { weekStart: prevWeekStart } });
+      const data = res.data || {};
+      const rota = data.rota || null;
+      setPrevRota(rota);
+      setShowPreview(true);
+      setNotice(`Previewing previous week's rota (${prevWeekStart}). Unavailable/OFF workers are highlighted in RED.`);
+    } catch (err) {
+      setError('Could not load previous week rota for preview.');
+      setPrevRota(null);
+    } finally {
+      setPrevRotaLoading(false);
+    }
+  }, [prevWeekStart]);
+
+  // Toggle preview mode
+  const togglePreview = () => {
+    if (showPreview) {
+      setShowPreview(false);
+    } else {
+      if (prevRota) {
+        setShowPreview(true);
+      } else {
+        loadPrevWeekRota();
+      }
+    }
+  };
+
+  // Check if a worker is considered unavailable or absent in current week
+  const checkIsWorkerUnavailableInPreview = useCallback((shopId, employeeId, dateKey, dayIndex) => {
+    const cellKey = `${shopId}:${employeeId}:${dateKey}`;
+    const cell = cells[cellKey];
+
+    // Explicitly marked OFF
+    if (cell?.status === 'OFF') return true;
+
+    // Explicitly marked UNAVAILABLE in availability records
+    const isUnavail = availabilities.some(
+      a => String(a.employeeId?._id || a.employeeId) === String(employeeId) &&
+           a.dateKey === dateKey &&
+           a.status === 'UNAVAILABLE'
+    );
+    if (isUnavail) return true;
+
+    // If prevRota is loaded: was this worker scheduled in previous week at this shop on this day,
+    // but in current week they are absent / not scheduled / not available?
+    if (prevRota) {
+      const prevDays = getWeekDates(prevWeekStart);
+      const prevDateKey = prevDays[dayIndex]?.dateKey;
+      if (prevDateKey) {
+        const prevAssignment = (prevRota.assignments || []).find(
+          a => String(a.employeeId?._id || a.employeeId) === String(employeeId) &&
+               String(a.homeShopId || a.shopId) === String(shopId) &&
+               a.dateKey === prevDateKey &&
+               a.status !== 'OFF'
+        );
+        if (prevAssignment) {
+          if (!cell || cell.status === 'OFF') return true;
+        }
+      }
+    }
+
+    return false;
+  }, [cells, availabilities, prevRota, prevWeekStart]);
+
+  // Open the replacement / availability modal
+  const openAvailabilityModal = (shopId, employeeId, dateKey, dayName) => {
+    const shop = shopMap.get(shopId);
+    const emp = employeeMap.get(employeeId);
+
+    // 1. Available workers: Active employees not working in ANY shop on this day
+    const busyEmpIds = new Set();
+    shops.forEach(s => {
+      const workerIds = shopRosters[s._id] || [];
+      workerIds.forEach(eId => {
+        const c = cells[`${s._id}:${eId}:${dateKey}`];
+        if (c && (c.status === 'AVAILABLE' || c.status === 'CUSTOM' || c.status === 'LOANED')) {
+          busyEmpIds.add(eId);
+        }
+      });
+    });
+
+    const availableWorkers = employees.filter(e => !busyEmpIds.has(e._id) && e._id !== employeeId);
+
+    // 2. Transfer / Borrow workers: Active employees currently working in OTHER shops on this day
+    const transferrableWorkers = [];
+    shops.forEach(s => {
+      if (s._id === shopId) return;
+      const workerIds = shopRosters[s._id] || [];
+      workerIds.forEach(eId => {
+        const c = cells[`${s._id}:${eId}:${dateKey}`];
+        if (c && (c.status === 'AVAILABLE' || c.status === 'CUSTOM')) {
+          const workerEmp = employeeMap.get(eId);
+          if (workerEmp) {
+            transferrableWorkers.push({
+              employeeId: eId,
+              employeeName: workerEmp.name,
+              employeeCode: workerEmp.employeeId || '',
+              currentShopId: s._id,
+              currentShopName: s.name,
+              currentStatus: c.status,
+              note: c.note || ''
+            });
+          }
+        }
+      });
+    });
+
+    setAvailModal({
+      shopId,
+      shopName: shop?.name || 'Shop',
+      employeeId,
+      employeeName: emp?.name || 'Worker',
+      employeeCode: emp?.employeeId || '',
+      dateKey,
+      dayName,
+      availableWorkers,
+      transferrableWorkers
+    });
+  };
+
+  const assignAvailableWorker = (newEmpId) => {
+    if (!availModal) return;
+    const { shopId, dateKey, dayName, shopName } = availModal;
+    const newEmp = employeeMap.get(newEmpId);
+
+    setShopRosters(prev => {
+      const list = prev[shopId] || [];
+      if (list.includes(newEmpId)) return prev;
+      return { ...prev, [shopId]: [...list, newEmpId] };
+    });
+
+    setCells(prev => ({
+      ...prev,
+      [`${shopId}:${newEmpId}:${dateKey}`]: {
+        status: 'AVAILABLE',
+        targetShopId: null,
+        targetShopName: '',
+        note: ''
+      }
+    }));
+
+    setNotice(`Assigned ${newEmp?.name || 'worker'} to ${shopName} on ${dayName}.`);
+    setAvailModal(null);
+  };
+
+  const transferWorkerFromShop = (sourceEmpId, sourceShopId) => {
+    if (!availModal) return;
+    const { shopId: destShopId, shopName: destShopName, dateKey, dayName } = availModal;
+    const workerEmp = employeeMap.get(sourceEmpId);
+    const sourceShop = shopMap.get(sourceShopId);
+
+    setCells(prev => {
+      const next = { ...prev };
+      next[`${sourceShopId}:${sourceEmpId}:${dateKey}`] = {
+        status: 'LOANED',
+        targetShopId: destShopId,
+        targetShopName: destShopName,
+        note: `Transferred to ${destShopName}`
+      };
+      next[`${destShopId}:${sourceEmpId}:${dateKey}`] = {
+        status: 'AVAILABLE',
+        targetShopId: null,
+        targetShopName: '',
+        note: `Transferred from ${sourceShop?.name || 'other shop'}`
+      };
+      return next;
+    });
+
+    setShopRosters(prev => {
+      const list = prev[destShopId] || [];
+      if (list.includes(sourceEmpId)) return prev;
+      return { ...prev, [destShopId]: [...list, sourceEmpId] };
+    });
+
+    setNotice(`Transferred ${workerEmp?.name || 'worker'} from ${sourceShop?.name} to ${destShopName} on ${dayName}.`);
+    setAvailModal(null);
+  };
+
+  const forceOriginalAvailable = () => {
+    if (!availModal) return;
+    const { shopId, employeeId, dateKey, employeeName, shopName, dayName } = availModal;
+    setCells(prev => ({
+      ...prev,
+      [`${shopId}:${employeeId}:${dateKey}`]: {
+        status: 'AVAILABLE',
+        targetShopId: null,
+        targetShopName: '',
+        note: ''
+      }
+    }));
+    setNotice(`Marked ${employeeName} as Available at ${shopName} on ${dayName}.`);
+    setAvailModal(null);
+  };
 
   // Navigate weeks
   const changeWeek = (delta) => {
@@ -865,27 +1089,48 @@ export default function WeeklyRotaPlanner() {
             {isFullscreen ? (
               <><Minimize2 size={15} /> Exit Fullscreen</>
             ) : (
-              <><Maximize2 size={15} /> Fullscreen Board</>
+              <><Maximize2 size={15} /> Fullscreen</>
             )}
           </button>
 
-          {/* View Mode Switcher in Fullscreen */}
-          {isFullscreen && (
-            <div className="rota-view-switch">
-              <button
-                className={`switch-tab ${viewMode === 'GRID' ? 'active' : ''}`}
-                onClick={() => setViewMode('GRID')}
-              >
-                Weekly Matrix
-              </button>
-              <button
-                className={`switch-tab ${viewMode === 'BOARD' ? 'active' : ''}`}
-                onClick={() => setViewMode('BOARD')}
-              >
-                Daily Pick & Drop Board
-              </button>
-            </div>
-          )}
+          {/* View Mode Switcher (Visible in both normal & fullscreen) */}
+          <div className="rota-view-switch">
+            <button
+              className={`switch-tab ${viewMode === 'SHEET' ? 'active' : ''}`}
+              onClick={() => setViewMode('SHEET')}
+              title="Color-Coded Unified Spreadsheet Rota (Matches Template)"
+            >
+              Unified Sheet
+            </button>
+            <button
+              className={`switch-tab ${viewMode === 'GRID' ? 'active' : ''}`}
+              onClick={() => setViewMode('GRID')}
+              title="Shop Card Matrix View"
+            >
+              Cards Matrix
+            </button>
+            <button
+              className={`switch-tab ${viewMode === 'BOARD' ? 'active' : ''}`}
+              onClick={() => setViewMode('BOARD')}
+              title="Daily Pick & Drop Board"
+            >
+              Daily Board
+            </button>
+          </div>
+
+          {/* Preview Last Week Toggle */}
+          <button
+            className={`btn btn-sm ${showPreview ? 'rota-btn-preview-active' : 'btn-outline'}`}
+            onClick={togglePreview}
+            disabled={prevRotaLoading}
+            title="Preview last week's rota and highlight unavailable workers in RED"
+          >
+            {showPreview ? (
+              <><EyeOff size={15} /> Exit Preview</>
+            ) : (
+              <><Eye size={15} /> {prevRotaLoading ? 'Loading…' : 'Preview Last Week'}</>
+            )}
+          </button>
 
           <button
             className="btn btn-outline btn-sm rota-btn-action"
@@ -905,14 +1150,14 @@ export default function WeeklyRotaPlanner() {
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={downloadPdf}
-            title="Download PDF rota (shop-by-shop table)"
+            title="Download PDF rota (Color-Coded Multi-Shop Spreadsheet)"
           >
             <Download size={15} /> PDF
           </button>
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={downloadExcel}
-            title="Download Excel spreadsheet"
+            title="Download Excel spreadsheet (Matches Uploaded Template)"
           >
             <Download size={15} /> Excel
           </button>
@@ -963,6 +1208,26 @@ export default function WeeklyRotaPlanner() {
           Next Week <ChevronRight size={16} />
         </button>
       </div>
+
+      {/* ── PREVIEW BANNER (WHEN ACTIVE) ─────────────────────────── */}
+      {showPreview && (
+        <div className="rota-preview-banner card" style={{ background: '#fef2f2', border: '1.5px solid #ef4444', padding: '12px 18px', marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={20} color="#dc2626" />
+            <div>
+              <strong style={{ color: '#991b1b', fontSize: '13.5px' }}>
+                Previewing Previous Week's Rota:
+              </strong>
+              <span style={{ color: '#7f1d1d', fontSize: '12.5px', marginLeft: '6px' }}>
+                Workers who are <strong>NOT AVAILABLE</strong> or marked <strong>OFF</strong> are highlighted in <strong>RED ("NOT AVAIL")</strong>. Click on any red slot to see available workers on that day or transfer someone from another shop!
+              </span>
+            </div>
+          </div>
+          <button className="btn btn-sm btn-outline" onClick={() => setShowPreview(false)} style={{ borderColor: '#fca5a5', color: '#991b1b', fontWeight: 600 }}>
+            Exit Preview
+          </button>
+        </div>
+      )}
 
       {/* ── TOAST NOTIFICATIONS ──────────────────────────────────── */}
       {error && (
@@ -1071,7 +1336,7 @@ export default function WeeklyRotaPlanner() {
       )}
 
       {/* ── DAILY DISPATCH BOARD (KANBAN PICK & DROP MODE) ───────── */}
-      {isFullscreen && viewMode === 'BOARD' ? (
+      {viewMode === 'BOARD' ? (
         <div className="rota-daily-board-container card">
           {/* Day Tabs */}
           <div className="daily-board-day-tabs">
@@ -1247,6 +1512,213 @@ export default function WeeklyRotaPlanner() {
             </div>
           </div>
         </div>
+      ) : viewMode === 'SHEET' ? (
+        /* ── UNIFIED ROTA SHEET (MATCHES SPREADSHEET TEMPLATE) ── */
+        loading ? (
+          <div className="card" style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+            <RefreshCw size={24} className="spin-icon" style={{ marginBottom: '10px' }} />
+            <div>Loading weekly rota schedule…</div>
+          </div>
+        ) : (
+          <div id="rota-print-area" className="rota-excel-sheet">
+            {/* Sheet Title Bar */}
+            <div className="sheet-main-title-bar">
+              <div className="sheet-title-text">ROTA</div>
+              <div className="sheet-subtitle-text">({weekDays[0]?.fullDate} to {weekDays[6]?.fullDate})</div>
+            </div>
+
+            {/* Top Date Bar */}
+            <div className="sheet-top-date-bar">
+              <div className="sheet-th-corner"></div>
+              {weekDays.map(d => (
+                <div key={d.dateKey} className="sheet-th-date-col">
+                  {d.fullDate.replace(/ \d{4}$/, '')}
+                </div>
+              ))}
+            </div>
+
+            {/* Stacked Shops */}
+            {shops.map(shop => {
+              const style = getShopStyle(shop.name);
+              const workerIds = shopRosters[shop._id] || [];
+              const isAddingWorker = addingWorkerShopId === shop._id;
+              const availableToAdd = employees.filter(e => !workerIds.includes(e._id));
+
+              return (
+                <div key={shop._id} className="sheet-shop-section">
+                  {/* Shop Banner Row */}
+                  <div
+                    className="sheet-shop-header-row"
+                    style={{ backgroundColor: style.excelBg || style.bg }}
+                  >
+                    <span className="sheet-shop-name-title" style={{ color: style.text }}>
+                      {shop.name}
+                    </span>
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className="sheet-add-emp-btn"
+                        onClick={() => setAddingWorkerShopId(isAddingWorker ? null : shop._id)}
+                      >
+                        <Plus size={12} /> Add Worker
+                      </button>
+                      {isAddingWorker && (
+                        <div className="add-worker-popover card">
+                          <div className="add-worker-header">
+                            <span>Add Worker to {shop.name}</span>
+                            <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                          </div>
+                          <div className="add-worker-list">
+                            {availableToAdd.length === 0 ? (
+                              <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
+                                All active workers are already in this shop's roster.
+                              </div>
+                            ) : (
+                              availableToAdd.map(emp => (
+                                <button
+                                  key={emp._id}
+                                  className="add-worker-item"
+                                  onClick={() => addWorkerToShop(shop._id, emp._id)}
+                                >
+                                  <strong>{emp.name}</strong>
+                                  <span>{emp.employeeId}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Subheader: Name & Dates */}
+                  <div className="sheet-subhead-row dates-row" style={{ backgroundColor: style.excelBg || style.bg }}>
+                    <div className="sheet-col-name">Name</div>
+                    {weekDays.map(d => (
+                      <div key={d.dateKey} className="sheet-col-day">
+                        {d.fullDate.replace(/ \d{4}$/, '')}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Subheader: Day of Week (SUNDAY, MONDAY...) */}
+                  <div className="sheet-subhead-row days-row" style={{ backgroundColor: style.excelBg || style.bg }}>
+                    <div className="sheet-col-name"></div>
+                    {weekDays.map(d => (
+                      <div key={d.dateKey} className="sheet-col-day sheet-day-name">
+                        {d.dayName}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Worker Rows */}
+                  {workerIds.length === 0 ? (
+                    <div className="sheet-empty-roster">
+                      No workers assigned to {shop.name} yet. Click <strong>+ Add Worker</strong> above to start.
+                    </div>
+                  ) : (
+                    workerIds.map((empId, empIdx) => {
+                      const emp = employeeMap.get(empId);
+                      const empName = emp?.name || 'Worker';
+
+                      return (
+                        <div key={empId} className={`sheet-worker-row ${empIdx % 2 === 1 ? 'sheet-row-alt' : ''}`}>
+                          <div className="sheet-col-name sheet-worker-name-cell">
+                            <span className="sheet-emp-name">{empName}</span>
+                            <button
+                              className="sheet-remove-btn"
+                              onClick={() => removeWorkerFromShop(shop._id, empId)}
+                              title="Remove worker from this shop roster"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+
+                          {weekDays.map((d, dIdx) => {
+                            const cellKey = `${shop._id}:${empId}:${d.dateKey}`;
+                            const cell = cells[cellKey] || { status: 'AVAILABLE' };
+                            const conflicted = isCellConflicted(shop._id, empId, d.dateKey);
+                            const isUnavailable = checkIsWorkerUnavailableInPreview(shop._id, empId, d.dateKey, dIdx);
+                            const isPicked = pickedWorker?.employeeId === empId && pickedWorker?.dateKey === d.dateKey;
+
+                            let cellText = 'Available';
+                            let cellClass = 'sheet-cell-avail';
+
+                            if (conflicted) {
+                              cellClass = 'sheet-cell-conflict';
+                              cellText = '⚠️ Conflict';
+                            } else if (cell.status === 'OFF') {
+                              cellClass = 'sheet-cell-off';
+                              cellText = 'OFF';
+                            } else if (cell.status === 'LOANED' && cell.targetShopId) {
+                              const targetShop = shopMap.get(cell.targetShopId);
+                              cellClass = 'sheet-cell-loaned';
+                              cellText = targetShop?.name || 'Transferred';
+                            } else if (cell.status === 'CUSTOM' && cell.note) {
+                              cellClass = 'sheet-cell-custom';
+                              cellText = cell.note;
+                            }
+
+                            if (showPreview && isUnavailable) {
+                              cellClass += ' sheet-cell-preview-red';
+                            }
+
+                            if (isPicked) {
+                              cellClass += ' cell-picked-ring';
+                            }
+
+                            return (
+                              <div
+                                key={d.dateKey}
+                                className={`sheet-col-day sheet-cell-interactive ${cellClass}`}
+                                onClick={(e) => {
+                                  if (showPreview && isUnavailable) {
+                                    openAvailabilityModal(shop._id, empId, d.dateKey, d.dayName);
+                                  } else {
+                                    openCellPopover(shop._id, empId, d.dateKey, e);
+                                  }
+                                }}
+                                title={showPreview && isUnavailable ? "Worker unavailable! Click to assign replacement or transfer from another shop." : "Click to edit status or transfer"}
+                              >
+                                {showPreview && isUnavailable && (
+                                  <span className="preview-red-tag">NOT AVAIL</span>
+                                )}
+                                <span>{cellText}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* Shop Total Row */}
+                  <div className="sheet-total-row">
+                    <div className="sheet-col-name sheet-total-label">Total</div>
+                    {weekDays.map(d => (
+                      <div key={d.dateKey} className="sheet-col-day sheet-total-val">
+                        {getShopDayTotal(shop._id, d.dateKey)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Grand Total Row at Bottom across all shops */}
+            <div className="sheet-grand-total-row">
+              <div className="sheet-col-name sheet-grand-total-label">Grand Total</div>
+              {weekDays.map(d => {
+                let grandSum = 0;
+                shops.forEach(s => { grandSum += getShopDayTotal(s._id, d.dateKey); });
+                return (
+                  <div key={d.dateKey} className="sheet-col-day sheet-grand-total-val">
+                    {grandSum}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )
       ) : (
         /* ── WEEKLY MATRIX VIEW (GRID) ────────────────────────────── */
         loading ? (
@@ -1374,10 +1846,11 @@ export default function WeeklyRotaPlanner() {
                                   </div>
                                 </td>
 
-                                {weekDays.map(day => {
+                                {weekDays.map((day, dayIdx) => {
                                   const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
                                   const cell = cells[cellKey] || { status: 'AVAILABLE' };
                                   const conflicted = isCellConflicted(shop._id, empId, day.dateKey);
+                                  const isUnavailable = checkIsWorkerUnavailableInPreview(shop._id, empId, day.dateKey, dayIdx);
                                   const isPicked = pickedWorker?.employeeId === empId && pickedWorker?.dateKey === day.dateKey;
 
                                   let cellClass = 'rota-cell-btn';
@@ -1407,6 +1880,10 @@ export default function WeeklyRotaPlanner() {
                                     cellLabel = 'Available';
                                   }
 
+                                  if (showPreview && isUnavailable) {
+                                    cellClass += ' sheet-cell-preview-red';
+                                  }
+
                                   if (isPicked) {
                                     cellClass += ' cell-picked-ring';
                                   }
@@ -1426,10 +1903,19 @@ export default function WeeklyRotaPlanner() {
                                           style={cellStyle}
                                           draggable
                                           onDragStart={(e) => handleDragStart(e, empId, shop._id, day.dateKey)}
-                                          onClick={(e) => openCellPopover(shop._id, empId, day.dateKey, e)}
-                                          title="Click to edit, or drag & drop to another shop"
+                                          onClick={(e) => {
+                                            if (showPreview && isUnavailable) {
+                                              openAvailabilityModal(shop._id, empId, day.dateKey, day.dayName);
+                                            } else {
+                                              openCellPopover(shop._id, empId, day.dateKey, e);
+                                            }
+                                          }}
+                                          title={showPreview && isUnavailable ? "Worker unavailable! Click to assign replacement or transfer from another shop." : "Click to edit, or drag & drop to another shop"}
                                         >
                                           {conflicted && <span className="conflict-dot">⚠️</span>}
+                                          {showPreview && isUnavailable && (
+                                            <span className="preview-red-tag" style={{ marginRight: '4px' }}>NOT AVAIL</span>
+                                          )}
                                           <span>{cellLabel}</span>
                                         </button>
 
@@ -1622,6 +2108,108 @@ export default function WeeklyRotaPlanner() {
                 >
                   Apply
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FIND REPLACEMENT & TRANSFER WORKER MODAL ────────────────── */}
+      {availModal && (
+        <div className="rota-modal-backdrop" onClick={() => setAvailModal(null)}>
+          <div className="avail-modal-card card" onClick={(e) => e.stopPropagation()}>
+            <div className="avail-modal-header">
+              <div>
+                <div className="avail-modal-badge">
+                  <UserX size={14} /> Worker Unavailable Slot
+                </div>
+                <h3 className="avail-modal-title">
+                  Replace Slot at {availModal.shopName}
+                </h3>
+                <div className="avail-modal-subtitle">
+                  📅 {availModal.dayName}, {weekDays.find(d => d.dateKey === availModal.dateKey)?.dateFormatted}
+                  {' '}· Worker: <strong>{availModal.employeeName}</strong> {availModal.employeeCode ? `(${availModal.employeeCode})` : ''}
+                </div>
+              </div>
+              <button className="popover-close-btn" onClick={() => setAvailModal(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="avail-modal-body">
+              {/* Quick override button */}
+              <div className="avail-override-bar">
+                <span style={{ fontSize: '12px', color: '#475569' }}>
+                  Is {availModal.employeeName} available to work?
+                </span>
+                <button className="btn btn-sm btn-outline" onClick={forceOriginalAvailable}>
+                  <Check size={14} /> Keep {availModal.employeeName} as Available
+                </button>
+              </div>
+
+              {/* Section 1: Available (Free) Workers */}
+              <div className="avail-section">
+                <div className="avail-section-header">
+                  <UserCheck size={16} color="#16a34a" />
+                  <strong>Available Workers on {availModal.dayName} ({availModal.availableWorkers.length})</strong>
+                  <span className="avail-pill-hint">Not assigned anywhere today</span>
+                </div>
+
+                <div className="avail-workers-list">
+                  {availModal.availableWorkers.length === 0 ? (
+                    <div className="avail-empty-box">
+                      <AlertCircle size={16} />
+                      <span>No active workers are completely free on {availModal.dayName}. You can transfer a worker from another shop below.</span>
+                    </div>
+                  ) : (
+                    availModal.availableWorkers.map(w => (
+                      <div key={w._id} className="avail-worker-item">
+                        <div className="avail-worker-info">
+                          <strong className="avail-worker-name">{w.name}</strong>
+                          <span className="avail-worker-id">{w.employeeId}</span>
+                        </div>
+                        <button
+                          className="btn btn-sm btn-primary assign-worker-btn"
+                          onClick={() => assignAvailableWorker(w._id)}
+                        >
+                          <Plus size={13} /> Assign to {availModal.shopName}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2: Transfer / Borrow from Another Shop */}
+              <div className="avail-section" style={{ marginTop: '16px' }}>
+                <div className="avail-section-header">
+                  <Move size={16} color="#2563eb" />
+                  <strong>Transfer / Borrow from Another Shop ({availModal.transferrableWorkers.length})</strong>
+                  <span className="avail-pill-hint">Currently scheduled at other shops today</span>
+                </div>
+
+                <div className="avail-workers-list">
+                  {availModal.transferrableWorkers.length === 0 ? (
+                    <div className="avail-empty-box">
+                      <span>No workers scheduled at other shops to borrow from.</span>
+                    </div>
+                  ) : (
+                    availModal.transferrableWorkers.map(tw => (
+                      <div key={`${tw.currentShopId}:${tw.employeeId}`} className="avail-worker-item transfer-item">
+                        <div className="avail-worker-info">
+                          <strong className="avail-worker-name">{tw.employeeName}</strong>
+                          <span className="transfer-from-badge">Working at: {tw.currentShopName}</span>
+                        </div>
+                        <button
+                          className="btn btn-sm btn-outline transfer-worker-btn"
+                          onClick={() => transferWorkerFromShop(tw.employeeId, tw.currentShopId)}
+                        >
+                          <ArrowRight size={13} /> Transfer to {availModal.shopName}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
