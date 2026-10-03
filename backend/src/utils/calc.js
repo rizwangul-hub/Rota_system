@@ -1,3 +1,15 @@
+const mongoose = require('mongoose');
+
+/**
+ * Safely validate and return a MongoDB ObjectId or null
+ */
+function safeObjectId(id) {
+  if (!id || typeof id !== 'string') return null;
+  const cleaned = id.trim();
+  if (['all', 'undefined', 'null', 'none', ''].includes(cleaned)) return null;
+  return mongoose.Types.ObjectId.isValid(cleaned) ? cleaned : null;
+}
+
 /**
  * Business Calculation Engine for PixxTechnologies Bicycle Shops (UK)
  */
@@ -364,6 +376,7 @@ function calculateWeeklySalaryComponents({
 }
 
 module.exports = {
+  safeObjectId,
   timeToMinutes,
   minutesToTime,
   calculateScheduledHours,

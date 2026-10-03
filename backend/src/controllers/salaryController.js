@@ -8,7 +8,7 @@ const SalaryAdjustment = require('../models/SalaryAdjustment');
 const SalaryPayment = require('../models/SalaryPayment');
 const Bonus = require('../models/Bonus');
 const LedgerTransaction = require('../models/LedgerTransaction');
-const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord } = require('../utils/calc');
+const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord, safeObjectId } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { validatePaymentAmount, calculatePaymentState } = require('../utils/payment');
 
@@ -69,7 +69,8 @@ exports.getWeekInfo = async (req, res) => {
         { date: { $gte: week.startDate, $lte: week.endDate } }
       ]
     };
-    if (shopId) attendanceQuery.shop = shopId;
+    const sId = safeObjectId(shopId);
+    if (sId) attendanceQuery.shop = sId;
 
     const attendances = await Attendance.find(attendanceQuery).sort({ dateString: 1 });
 
@@ -118,7 +119,8 @@ exports.generateWeeklySalary = async (req, res) => {
       ],
       approvalStatus: { $in: ['Checked', 'Finalized'] }
     };
-    if (shopId) attendanceQuery.shop = shopId;
+    const sId = safeObjectId(shopId);
+    if (sId) attendanceQuery.shop = sId;
 
     const attendances = await Attendance.find(attendanceQuery).populate('employee').populate('shop');
 
@@ -130,7 +132,7 @@ exports.generateWeeklySalary = async (req, res) => {
       ],
       approvalStatus: { $nin: ['Checked', 'Finalized'] }
     };
-    if (shopId) pendingQuery.shop = shopId;
+    if (sId) pendingQuery.shop = sId;
     const pendingCount = await Attendance.countDocuments(pendingQuery);
 
     if (attendances.length === 0) {

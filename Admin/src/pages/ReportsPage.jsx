@@ -91,24 +91,26 @@ export default function ReportsPage() {
   const fetchActiveReport = async () => {
     setLoading(true);
     setErrorMsg('');
+    const cleanShop = (selectedShop && selectedShop !== 'all' && selectedShop !== 'undefined' && selectedShop !== 'null') ? selectedShop : undefined;
+    const cleanEmp = (selectedEmployee && selectedEmployee !== 'all' && selectedEmployee !== 'undefined' && selectedEmployee !== 'null') ? selectedEmployee : undefined;
     try {
       if (activeTab === 'daily_attendance') {
         const res = await axios.get(`${API_BASE_URL}/reports/daily-attendance`, {
-          params: { date: selectedDate, shopId: selectedShop, employeeId: selectedEmployee || undefined, status: selectedStatus || undefined }
+          params: { date: selectedDate, shopId: cleanShop, employeeId: cleanEmp, status: selectedStatus || undefined }
         });
         if (res.data.success) setDailyData(res.data);
       } else if (activeTab === 'weekly_attendance') {
         const res = await axios.get(`${API_BASE_URL}/reports/weekly-attendance`, {
-          params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }
+          params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: cleanShop, employeeId: cleanEmp }
         });
         if (res.data.success) setWeeklyAttendanceData(res.data);
       } else if (activeTab === 'weekly_salary' && isAdmin) {
         const res = await axios.get(`${API_BASE_URL}/reports/weekly-salary`, {
-          params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined, status: selectedStatus || undefined }
+          params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: cleanShop, employeeId: cleanEmp, status: selectedStatus || undefined }
         });
         if (res.data.success) setWeeklySalaryData(res.data);
       } else if (activeTab === 'employee_monthly' && isAdmin) {
-        const empId = selectedEmployee || (employees.length > 0 ? employees[0]._id : null);
+        const empId = cleanEmp || (employees.length > 0 ? employees[0]._id : null);
         if (!empId) return;
         if (!selectedEmployee) setSelectedEmployee(empId);
         const monthNum = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) + 1;
@@ -117,7 +119,7 @@ export default function ReportsPage() {
         });
         if (res.data.success) setMonthlyData(res.data);
       } else if (activeTab === 'employee_yearly' && isAdmin) {
-        const empId = selectedEmployee || (employees.length > 0 ? employees[0]._id : null);
+        const empId = cleanEmp || (employees.length > 0 ? employees[0]._id : null);
         if (!empId) return;
         if (!selectedEmployee) setSelectedEmployee(empId);
         const res = await axios.get(`${API_BASE_URL}/reports/employee-yearly`, {
@@ -126,18 +128,18 @@ export default function ReportsPage() {
         if (res.data.success) setYearlyData(res.data);
       } else if (activeTab === 'bonus' && isAdmin) {
         const res = await axios.get(`${API_BASE_URL}/reports/bonus`, {
-          params: { month: selectedMonth || undefined, year: selectedYear || undefined, employeeId: selectedEmployee || undefined, shopId: selectedShop || undefined }
+          params: { month: selectedMonth || undefined, year: selectedYear || undefined, employeeId: cleanEmp, shopId: cleanShop }
         });
         if (res.data.success) setBonusData(res.data);
       } else if (activeTab === 'shop_labour') {
         const res = await axios.get(`${API_BASE_URL}/reports/shop-labour`, {
-          params: { startDate: startDate || undefined, endDate: endDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }
+          params: { startDate: startDate || undefined, endDate: endDate || undefined, shopId: cleanShop, employeeId: cleanEmp }
         });
         if (res.data.success) setLabourData(res.data);
       } else if (activeTab === 'payments' && isAdmin) {
         const [payRes, sumRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/reports/payments`, {
-            params: { startDate: startDate || undefined, endDate: endDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined, paymentMethod: paymentMethod || undefined }
+            params: { startDate: startDate || undefined, endDate: endDate || undefined, shopId: cleanShop, employeeId: cleanEmp, paymentMethod: paymentMethod || undefined }
           }),
           axios.get(`${API_BASE_URL}/reports/payments/summary`, {
             params: { startDate: startDate || undefined, endDate: endDate || undefined }

@@ -34,7 +34,7 @@ const {
   getShopColor,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
-const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord } = require('../utils/calc');
+const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, safeObjectId } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const {
   attendanceOperatorRecord,
@@ -73,8 +73,10 @@ exports.getDailyAttendanceReport = async (req, res) => {
     const dateStr = date ? getUKDateString(date) : getUKDateString(new Date());
     const query = { dateString: dateStr };
 
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
     if (status) query.status = status;
     if (approvalStatus) query.approvalStatus = approvalStatus;
     if (search) {
@@ -168,8 +170,10 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
     const dateStr = date ? getUKDateString(date) : getUKDateString(new Date());
     const query = { dateString: dateStr };
 
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
     if (status) query.status = status;
     if (approvalStatus) query.approvalStatus = approvalStatus;
     if (search) {
@@ -228,8 +232,10 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     const dateStr = date ? getUKDateString(date) : getUKDateString(new Date());
     const query = { dateString: dateStr };
 
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
     if (status) query.status = status;
     if (approvalStatus) query.approvalStatus = approvalStatus;
     if (search) {
@@ -747,8 +753,10 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
         { date: { $gte: week.startDate, $lte: week.endDate } }
       ]
     };
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
 
     const attendances = await Attendance.find(query)
       .populate('employee')
@@ -787,8 +795,10 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
         { date: { $gte: week.startDate, $lte: week.endDate } }
       ]
     };
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const { records, summary } = buildWeeklyAttendanceData(attendances);
@@ -829,8 +839,10 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
         { date: { $gte: week.startDate, $lte: week.endDate } }
       ]
     };
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const { records, summary } = buildWeeklyAttendanceData(attendances);
@@ -929,8 +941,10 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
     ]
   };
 
-  if (shopId) query.shop = shopId;
-  if (employeeId) query.employee = employeeId;
+  const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+  const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
   if (status) query.status = status;
 
   if (paymentStatus === 'PAID') {
@@ -955,8 +969,8 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
         { date: { $gte: week.startDate, $lte: week.endDate } }
       ]
     };
-    if (shopId) attQuery.shop = shopId;
-    if (employeeId) attQuery.employee = employeeId;
+    if (sId) attQuery.shop = sId;
+    if (eId) attQuery.employee = eId;
 
     const attendances = await Attendance.find(attQuery).populate('employee').sort({ shopName: 1, employeeName: 1 });
 
@@ -1803,10 +1817,12 @@ exports.getBonusReport = async (req, res) => {
     const { employeeId, month, year, shopId } = req.query;
     const query = {};
 
-    if (employeeId) query.employee = employeeId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
     if (month) query.month = month;
     if (year) query.year = Number(year);
-    if (shopId) query.shop = shopId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
 
     const bonuses = await Bonus.find(query).sort({ year: -1, month: 1, employeeName: 1 });
 
@@ -1848,8 +1864,10 @@ exports.exportCommissionExcel = async (req, res) => {
   try {
     const { month = 'Aug', year = 2026, employeeId, shopId } = req.query;
     const query = { month, year: Number(year) };
-    if (employeeId) query.employee = employeeId;
-    if (shopId) query.shop = shopId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
 
     const bonuses = await Bonus.find(query).sort({ createdAt: 1 });
     const workbook = await buildCommissionExcel(bonuses, month, String(year));
@@ -1875,8 +1893,10 @@ exports.exportBonusPDF = async (req, res) => {
   try {
     const { month = 'Aug', year = 2026, employeeId, shopId } = req.query;
     const query = { month, year: Number(year) };
-    if (employeeId) query.employee = employeeId;
-    if (shopId) query.shop = shopId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
 
     const bonuses = await Bonus.find(query).sort({ createdAt: 1 });
     const totals = {
@@ -1910,8 +1930,10 @@ exports.getShopLabourHours = async (req, res) => {
     if (startDate && endDate) {
       query.dateString = { $gte: startDate, $lte: endDate };
     }
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
 
@@ -2119,8 +2141,10 @@ exports.exportShopLabourExcel = async (req, res) => {
     const { startDate, endDate, shopId, employeeId } = req.query;
     const query = { approvalStatus: { $in: ['Checked', 'Finalized'] } };
     if (startDate && endDate) query.dateString = { $gte: startDate, $lte: endDate };
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const shopLabourMap = {};
@@ -2188,8 +2212,10 @@ exports.exportShopLabourPDF = async (req, res) => {
     const { startDate, endDate, shopId, employeeId } = req.query;
     const query = { approvalStatus: { $in: ['Checked', 'Finalized'] } };
     if (startDate && endDate) query.dateString = { $gte: startDate, $lte: endDate };
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const shopLabourMap = {};
@@ -2257,8 +2283,10 @@ exports.getSalaryPaymentsReport = async (req, res) => {
     const { employeeId, shopId, startDate, endDate, paymentMethod, paymentStatus } = req.query;
     const query = {};
 
-    if (employeeId) query.employee = employeeId;
-    if (shopId) query.shop = shopId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
     if (paymentMethod) query.paymentMethod = paymentMethod;
     if (startDate && endDate) {
       query.paymentDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -2329,8 +2357,10 @@ exports.exportSalaryPaymentsExcel = async (req, res) => {
   try {
     const { employeeId, shopId, startDate, endDate, paymentMethod } = req.query;
     const query = {};
-    if (employeeId) query.employee = employeeId;
-    if (shopId) query.shop = shopId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
     if (paymentMethod) query.paymentMethod = paymentMethod;
     if (startDate && endDate) query.paymentDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
 
@@ -2370,8 +2400,10 @@ exports.exportSalaryPaymentsPDF = async (req, res) => {
   try {
     const { employeeId, shopId, startDate, endDate, paymentMethod } = req.query;
     const query = {};
-    if (employeeId) query.employee = employeeId;
-    if (shopId) query.shop = shopId;
+    const eId = safeObjectId(employeeId);
+    if (eId) query.employee = eId;
+    const sId = safeObjectId(shopId);
+    if (sId) query.shop = sId;
     if (paymentMethod) query.paymentMethod = paymentMethod;
     if (startDate && endDate) query.paymentDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
 
@@ -2526,7 +2558,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       const alt = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
       salaryQuery.weekLabel = { $in: [weekLabel, alt] };
     }
-    if (shopId) salaryQuery.shop = shopId;
+    if (sId) salaryQuery.shop = sId;
 
     const finalizedSalaries = await WeeklySalary.find(salaryQuery);
     const finalizedSalary = Number(finalizedSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2));
@@ -2540,7 +2572,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     // 3. Bonuses for the month
     const targetMonthStr = month || now.toLocaleString('en-US', { month: 'short' });
     const bonusQuery = { month: targetMonthStr, year: targetYear };
-    if (shopId) bonusQuery.shop = shopId;
+    if (sId) bonusQuery.shop = sId;
     const bonuses = await Bonus.find(bonusQuery);
     const totalBonuses = Number(bonuses.reduce((sum, b) => sum + (b.bonusAmount || 0), 0).toFixed(2));
 
