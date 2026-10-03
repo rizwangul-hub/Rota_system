@@ -18,6 +18,13 @@ function isAllowedOrigin(origin, allowedOrigins, isProduction) {
   if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
     return true;
   }
+  try {
+    const originUrl = new URL(origin);
+    if (originUrl.hostname.endsWith('.vercel.app')) {
+      return true;
+    }
+  } catch {}
+
   for (const allowed of allowedOrigins) {
     if (allowed.startsWith('*.')) {
       const suffix = allowed.slice(1);

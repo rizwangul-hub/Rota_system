@@ -81,16 +81,14 @@ app.use((req, res, next) => {
 });
 app.use(cors({
   origin(origin, callback) {
-    if (configuredOrigins.length === 0) {
+    if (!origin || configuredOrigins.length === 0 || isAllowedOrigin(origin, configuredOrigins, isProduction)) {
       return callback(null, true);
     }
-    if (isAllowedOrigin(origin, configuredOrigins, isProduction)) {
-      return callback(null, true);
-    }
-    return callback(new Error('Origin is not allowed by CORS.'));
+    return callback(null, false);
   },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 app.use(express.json({ limit: '1mb' }));
 
