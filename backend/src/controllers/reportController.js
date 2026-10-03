@@ -183,7 +183,7 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
     records.forEach(r => {
       const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
       r.dailyWage = wage;
-      if ((!r.attendancePay || r.attendancePay === 0) && r.status !== 'Absent') {
+      if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
           dailyWage: wage,
           shiftStart: r.shiftStart || '09:00',
@@ -243,7 +243,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     records.forEach(r => {
       const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
       r.dailyWage = wage;
-      if ((!r.attendancePay || r.attendancePay === 0) && r.status !== 'Absent') {
+      if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
           dailyWage: wage,
           shiftStart: r.shiftStart || '09:00',
@@ -1041,13 +1041,13 @@ exports.exportWeeklySalaryExcel = async (req, res) => {
   try {
     const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
-      totalAttendancePay: salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0),
-      totalAllowances: salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0),
-      totalBonus: salaries.reduce((sum, s) => sum + (s.bonus || 0), 0),
-      totalDeductions: salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0),
-      totalFinalSalary: salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0),
-      totalPaid: salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0),
-      totalOutstanding: salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0)
+      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2)),
+      totalAllowances: Number(salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2)),
+      totalBonus: Number(salaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2)),
+      totalDeductions: Number(salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2)),
+      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2)),
+      totalPaid: Number(salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2)),
+      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0).toFixed(2))
     };
 
     const workbook = await buildWeeklySalaryExcel(salaries, targetWeekLabel, totals);
@@ -1073,13 +1073,13 @@ exports.exportWeeklySalaryPDF = async (req, res) => {
   try {
     const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
-      totalAttendancePay: salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0),
-      totalAllowances: salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0),
-      totalBonus: salaries.reduce((sum, s) => sum + (s.bonus || 0), 0),
-      totalDeductions: salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0),
-      totalFinalSalary: salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0),
-      totalPaid: salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0),
-      totalOutstanding: salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0)
+      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2)),
+      totalAllowances: Number(salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2)),
+      totalBonus: Number(salaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2)),
+      totalDeductions: Number(salaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2)),
+      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2)),
+      totalPaid: Number(salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2)),
+      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0).toFixed(2))
     };
 
     await logAction({
@@ -1599,8 +1599,21 @@ exports.exportEmployeeYearlyExcel = async (req, res) => {
 
       const atts = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } });
       const wDays = atts.filter(a => a.status !== 'Absent').length;
-      const hours = atts.reduce((sum, a) => sum + (a.actualHours || 0), 0);
-      const attPay = atts.reduce((sum, a) => sum + (a.attendancePay || 0), 0);
+      const hours = Number(atts.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
+      const attPay = Number(atts.reduce((sum, a) => {
+        const wage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        if (a.status === 'Absent') return sum;
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: a.shiftStart || '09:00',
+          shiftEnd: a.shiftEnd || '19:00',
+          timeReached: a.timeReached || a.shiftStart || '09:00',
+          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+          status: a.status,
+          gracePeriodMinutes: 15
+        });
+        return sum + calc.attendancePay;
+      }, 0).toFixed(2));
 
       const sals = await WeeklySalary.find({
         employee: employeeId,
@@ -1689,8 +1702,21 @@ exports.exportEmployeeYearlyPDF = async (req, res) => {
 
       const atts = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } });
       const wDays = atts.filter(a => a.status !== 'Absent').length;
-      const hours = atts.reduce((sum, a) => sum + (a.actualHours || 0), 0);
-      const attPay = atts.reduce((sum, a) => sum + (a.attendancePay || 0), 0);
+      const hours = Number(atts.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
+      const attPay = Number(atts.reduce((sum, a) => {
+        const wage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        if (a.status === 'Absent') return sum;
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: a.shiftStart || '09:00',
+          shiftEnd: a.shiftEnd || '19:00',
+          timeReached: a.timeReached || a.shiftStart || '09:00',
+          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+          status: a.status,
+          gracePeriodMinutes: 15
+        });
+        return sum + calc.attendancePay;
+      }, 0).toFixed(2));
 
       const sals = await WeeklySalary.find({
         employee: employeeId,
@@ -1914,9 +1940,16 @@ exports.getShopLabourHours = async (req, res) => {
       empEntry.lateMinutes += (a.lateMinutes || 0);
 
       const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-      const attPay = (a.attendancePay && a.attendancePay > 0)
-        ? a.attendancePay
-        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+      const calcResult = calculateAttendanceRecord({
+        dailyWage: effectiveWage,
+        shiftStart: a.shiftStart || '09:00',
+        shiftEnd: a.shiftEnd || '19:00',
+        timeReached: a.timeReached || a.shiftStart || '09:00',
+        workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+        status: a.status,
+        gracePeriodMinutes: 15
+      });
+      const attPay = calcResult.attendancePay;
 
       empEntry.wageCost = Number((empEntry.wageCost + attPay).toFixed(2));
 
@@ -1985,13 +2018,31 @@ exports.getMonthlyShopLabourSummary = async (req, res) => {
       const workingDays = attendances.filter(a => a.status !== 'Absent').length;
       const scheduledHours = Number(attendances.reduce((sum, a) => sum + (a.scheduledHours || 0), 0).toFixed(2));
       const actualHours = Number(attendances.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
-      const lateDeductions = Number(attendances.reduce((sum, a) => sum + (a.lateDeduction || 0), 0).toFixed(2));
+      const lateDeductions = Number(attendances.reduce((sum, a) => {
+        const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        const calcResult = calculateAttendanceRecord({
+          dailyWage: effectiveWage,
+          shiftStart: a.shiftStart || '09:00',
+          shiftEnd: a.shiftEnd || '19:00',
+          timeReached: a.timeReached || a.shiftStart || '09:00',
+          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+          status: a.status,
+          gracePeriodMinutes: 15
+        });
+        return sum + calcResult.lateDeduction;
+      }, 0).toFixed(2));
       const attendancePay = Number(attendances.reduce((sum, a) => {
         const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-        const attPay = (a.attendancePay && a.attendancePay > 0)
-          ? a.attendancePay
-          : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
-        return sum + attPay;
+        const calcResult = calculateAttendanceRecord({
+          dailyWage: effectiveWage,
+          shiftStart: a.shiftStart || '09:00',
+          shiftEnd: a.shiftEnd || '19:00',
+          timeReached: a.timeReached || a.shiftStart || '09:00',
+          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+          status: a.status,
+          gracePeriodMinutes: 15
+        });
+        return sum + calcResult.attendancePay;
       }, 0).toFixed(2));
 
       // Finalized salary cost where available
@@ -2077,10 +2128,16 @@ exports.exportShopLabourExcel = async (req, res) => {
       e.lateMinutes += (a.lateMinutes || 0);
 
       const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-      const attPay = (a.attendancePay && a.attendancePay > 0)
-        ? a.attendancePay
-        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
-      e.wageCost += attPay;
+      const calcResult = calculateAttendanceRecord({
+        dailyWage: effectiveWage,
+        shiftStart: a.shiftStart || '09:00',
+        shiftEnd: a.shiftEnd || '19:00',
+        timeReached: a.timeReached || a.shiftStart || '09:00',
+        workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+        status: a.status,
+        gracePeriodMinutes: 15
+      });
+      e.wageCost += calcResult.attendancePay;
     });
 
     const shopData = Object.values(shopLabourMap).map(s => ({
@@ -2140,10 +2197,16 @@ exports.exportShopLabourPDF = async (req, res) => {
       e.lateMinutes += (a.lateMinutes || 0);
 
       const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-      const attPay = (a.attendancePay && a.attendancePay > 0)
-        ? a.attendancePay
-        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
-      e.wageCost += attPay;
+      const calcResult = calculateAttendanceRecord({
+        dailyWage: effectiveWage,
+        shiftStart: a.shiftStart || '09:00',
+        shiftEnd: a.shiftEnd || '19:00',
+        timeReached: a.timeReached || a.shiftStart || '09:00',
+        workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+        status: a.status,
+        gracePeriodMinutes: 15
+      });
+      e.wageCost += calcResult.attendancePay;
     });
 
     const shopData = Object.values(shopLabourMap).map(s => ({
