@@ -747,25 +747,22 @@ async function buildEmployeeMonthlyExcel(employeeName, monthLabel, weeklyBreakdo
 }
 
 /**
- * Generate Excel workbook for Weekly Attendance Report
+ * Generate Excel workbook for Weekly Attendance Report (Sun - Sat Roster)
  */
-async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}, includeFinancials = true) {
+async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Weekly Attendance');
 
-  const columnCount = includeFinancials ? 13 : 11;
-  sheet.mergeCells(1, 1, 1, columnCount);
+  sheet.mergeCells(1, 1, 1, 11);
   const title = sheet.getCell('A1');
-  title.value = `PixxTechnologies UK - Weekly Attendance Report (${weekLabel})`;
+  title.value = `PixxTechnologies UK - Weekly Attendance Roster (${weekLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
   sheet.getRow(1).height = 30;
 
   const headers = [
-    'Shop', 'Employee ID', 'Employee Name', 'Work Days', 'Present', 'Late', 'Half', 'Absent',
-    'Sched Hours', 'Worked Hours', 'Late (min)',
-    ...(includeFinancials ? ['Late Ded (£)', 'Attendance Pay (£)'] : [])
+    'Shop', 'Employee Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Work Days', 'Hours Worked'
   ];
   sheet.addRow([]);
   const headerRow = sheet.addRow(headers);
@@ -778,53 +775,35 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}, incl
   records.forEach(r => {
     sheet.addRow([
       r.shopName || '',
-      r.employeeId || '',
       r.employeeName || '',
+      r.dailySchedule?.Sun || 'Off',
+      r.dailySchedule?.Mon || 'Off',
+      r.dailySchedule?.Tue || 'Off',
+      r.dailySchedule?.Wed || 'Off',
+      r.dailySchedule?.Thu || 'Off',
+      r.dailySchedule?.Fri || 'Off',
+      r.dailySchedule?.Sat || 'Off',
       r.workingDays || 0,
-      r.presentDays || 0,
-      r.lateDays || 0,
-      r.halfDays || 0,
-      r.absentDays || 0,
-      Number((r.scheduledHours || 0).toFixed(2)),
-      Number((r.actualHours || 0).toFixed(2)),
-      r.lateMinutes || 0,
-      ...(includeFinancials
-        ? [
-            Number((r.lateDeduction || 0).toFixed(2)),
-            Number((r.attendancePay || 0).toFixed(2))
-          ]
-        : [])
+      Number((r.actualHours || 0).toFixed(2))
     ]);
   });
 
   sheet.addRow([]);
   const sumRow = sheet.addRow([
     'TOTALS',
-    `Employees: ${records.length}`,
-    '',
+    `Staff: ${records.length}`,
+    '', '', '', '', '', '', '',
     summary.totalWorkingDays || 0,
-    summary.totalPresent || 0,
-    summary.totalLate || 0,
-    summary.totalHalf || 0,
-    summary.totalAbsent || 0,
-    Number((summary.totalScheduledHours || 0).toFixed(2)),
-    Number((summary.totalWorkedHours || 0).toFixed(2)),
-    summary.totalLateMinutes || 0,
-    ...(includeFinancials
-      ? [
-          Number((summary.totalLateDeductions || 0).toFixed(2)),
-          Number((summary.totalAttendancePay || 0).toFixed(2))
-        ]
-      : [])
+    Number((summary.totalWorkedHours || 0).toFixed(2))
   ]);
   sumRow.eachCell(cell => {
     cell.font = { name: 'Arial', size: 10, bold: true };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
   });
 
-  sheet.columns.forEach(col => { col.width = 15; });
+  sheet.columns.forEach(col => { col.width = 14; });
   sheet.getColumn(1).width = 18;
-  sheet.getColumn(3).width = 22;
+  sheet.getColumn(2).width = 22;
   return workbook;
 }
 
@@ -906,36 +885,31 @@ function drawPdfSignatures(doc, yPos, isLandscape = true) {
 }
 
 /**
- * Generate PDF for Weekly Attendance Report
+ * Generate PDF for Weekly Attendance Report (Sun - Sat Workplace Schedule)
  */
-async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generatedBy = 'Admin', includeFinancials = true) {
+async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, generatedBy = 'Admin') {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
-  drawPdfBanner(doc, 'Weekly Attendance Report', 'Weekly Workforce Summary', `Week: ${weekLabel}`, true);
+  drawPdfBanner(doc, 'Weekly Attendance Schedule', 'Sun - Sat Workplace Roster', `Week: ${weekLabel}`, true);
 
   const kpiY = 75;
-  drawKpiCard(doc, 25, kpiY, 145, 'TOTAL STAFF', String(records.length), '#2563eb');
-  drawKpiCard(doc, 185, kpiY, 145, 'WORK DAYS', String(summary.totalWorkingDays || 0), '#059669');
-  drawKpiCard(doc, 345, kpiY, 145, 'WORKED HOURS', `${(summary.totalWorkedHours || 0).toFixed(1)}h`, '#d97706');
-  if (includeFinancials) {
-    drawKpiCard(doc, 505, kpiY, 145, 'LATE DEDUCTION', `£${(summary.totalLateDeductions || 0).toFixed(2)}`, '#dc2626');
-    drawKpiCard(doc, 665, kpiY, 150, 'NET ATTENDANCE PAY', `£${(summary.totalAttendancePay || 0).toFixed(2)}`, '#2563eb');
-  }
+  drawKpiCard(doc, 25, kpiY, 245, 'TOTAL STAFF', String(records.length), '#2563eb');
+  drawKpiCard(doc, 295, kpiY, 245, 'TOTAL WORK DAYS', String(summary.totalWorkingDays || 0), '#059669');
+  drawKpiCard(doc, 565, kpiY, 250, 'TOTAL HOURS WORKED', `${(summary.totalWorkedHours || 0).toFixed(1)}h`, '#d97706');
 
   let y = 135;
   doc.rect(25, y, 790, 20).fill('#1e293b');
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
   doc.text('Shop', 32, y + 6);
-  doc.text('ID', 125, y + 6);
-  doc.text('Employee Name', 180, y + 6);
-  doc.text('Work Days', 320, y + 6);
-  doc.text('Pres / Late / Half / Abs', 390, y + 6);
-  doc.text('Sched (h)', 510, y + 6);
-  doc.text('Worked (h)', 570, y + 6);
-  doc.text('Late (m)', 640, y + 6);
-  if (includeFinancials) {
-    doc.text('Late Ded (£)', 695, y + 6);
-    doc.text('Attendance Pay (£)', 755, y + 6);
-  }
+  doc.text('Employee Name', 115, y + 6);
+  doc.text('Sun', 230, y + 6);
+  doc.text('Mon', 285, y + 6);
+  doc.text('Tue', 340, y + 6);
+  doc.text('Wed', 395, y + 6);
+  doc.text('Thu', 450, y + 6);
+  doc.text('Fri', 505, y + 6);
+  doc.text('Sat', 560, y + 6);
+  doc.text('Work Days', 620, y + 6);
+  doc.text('Hours (h)', 690, y + 6);
   y += 20;
 
   records.forEach((r, idx) => {
@@ -947,17 +921,16 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
     doc.rect(25, y, 790, 16).fill(bg);
     doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
     doc.text((r.shopName || '').slice(0, 14), 32, y + 4);
-    doc.text(r.employeeId || '', 125, y + 4);
-    doc.font('Helvetica-Bold').text((r.employeeName || '').slice(0, 22), 180, y + 4).font('Helvetica');
-    doc.text(String(r.workingDays || 0), 320, y + 4);
-    doc.text(`${r.presentDays || 0} / ${r.lateDays || 0} / ${r.halfDays || 0} / ${r.absentDays || 0}`, 390, y + 4);
-    doc.text(`${(r.scheduledHours || 0).toFixed(1)}h`, 510, y + 4);
-    doc.text(`${(r.actualHours || 0).toFixed(1)}h`, 570, y + 4);
-    doc.text(`${r.lateMinutes || 0}m`, 640, y + 4);
-    if (includeFinancials) {
-      doc.text(`£${(r.lateDeduction || 0).toFixed(2)}`, 695, y + 4);
-      doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(r.attendancePay || 0).toFixed(2)}`, 755, y + 4).font('Helvetica').fillColor('#0f172a');
-    }
+    doc.font('Helvetica-Bold').text((r.employeeName || '').slice(0, 20), 115, y + 4).font('Helvetica');
+    doc.text((r.dailySchedule?.Sun || 'Off').slice(0, 8), 230, y + 4);
+    doc.text((r.dailySchedule?.Mon || 'Off').slice(0, 8), 285, y + 4);
+    doc.text((r.dailySchedule?.Tue || 'Off').slice(0, 8), 340, y + 4);
+    doc.text((r.dailySchedule?.Wed || 'Off').slice(0, 8), 395, y + 4);
+    doc.text((r.dailySchedule?.Thu || 'Off').slice(0, 8), 450, y + 4);
+    doc.text((r.dailySchedule?.Fri || 'Off').slice(0, 8), 505, y + 4);
+    doc.text((r.dailySchedule?.Sat || 'Off').slice(0, 8), 560, y + 4);
+    doc.text(String(r.workingDays || 0), 620, y + 4);
+    doc.text(`${(r.actualHours || 0).toFixed(1)}h`, 690, y + 4);
     y += 16;
   });
 
@@ -972,7 +945,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Weekly Salary');
 
-  sheet.mergeCells('A1:L1');
+  sheet.mergeCells('A1:K1');
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Weekly Salary Report (${weekLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -981,7 +954,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
   sheet.getRow(1).height = 30;
 
   const headers = [
-    'Shop', 'ID', 'Employee Name', 'Week Period',
+    'Shop', 'Employee Name', 'Week Period',
     'Attendance Pay (£)', 'Allowances (£)', 'Bonus (£)',
     'Deductions (£)', 'Final Salary (£)', 'Paid (£)', 'Outstanding (£)', 'Status'
   ];
@@ -997,7 +970,6 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
     const allow = (s.travelAllowance || 0) + (s.otherAllowances || 0);
     sheet.addRow([
       s.shopName || '',
-      s.employeeId || '',
       s.employeeName || '',
       s.weekLabel || weekLabel,
       Number((s.netAttendancePay || 0).toFixed(2)),
@@ -1013,7 +985,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
 
   sheet.addRow([]);
   const sumRow = sheet.addRow([
-    'TOTALS', '', '', `Staff: ${salaries.length}`,
+    'TOTALS', `Staff: ${salaries.length}`, '',
     Number((totals.totalAttendancePay || 0).toFixed(2)),
     Number((totals.totalAllowances || 0).toFixed(2)),
     Number((totals.totalBonus || 0).toFixed(2)),
@@ -1029,8 +1001,8 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
   });
 
   sheet.columns.forEach(col => { col.width = 16; });
+  sheet.getColumn(2).width = 24;
   sheet.getColumn(3).width = 24;
-  sheet.getColumn(4).width = 24;
   return workbook;
 }
 
@@ -1053,15 +1025,14 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
   doc.rect(25, y, 790, 20).fill('#1e293b');
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
   doc.text('Shop', 32, y + 6);
-  doc.text('ID', 115, y + 6);
-  doc.text('Employee Name', 160, y + 6);
-  doc.text('Attendance Pay', 280, y + 6);
-  doc.text('Allowances', 360, y + 6);
-  doc.text('Bonus', 430, y + 6);
-  doc.text('Deductions', 490, y + 6);
-  doc.text('Final Salary', 560, y + 6);
-  doc.text('Paid (£)', 635, y + 6);
-  doc.text('Outstanding', 700, y + 6);
+  doc.text('Employee Name', 135, y + 6);
+  doc.text('Attendance Pay', 265, y + 6);
+  doc.text('Allowances', 345, y + 6);
+  doc.text('Bonus', 415, y + 6);
+  doc.text('Deductions', 475, y + 6);
+  doc.text('Final Salary', 545, y + 6);
+  doc.text('Paid (£)', 625, y + 6);
+  doc.text('Outstanding', 695, y + 6);
   doc.text('Status', 765, y + 6);
   y += 20;
 
@@ -1076,16 +1047,15 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
 
     doc.rect(25, y, 790, 16).fill(bg);
     doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
-    doc.text((s.shopName || '').slice(0, 13), 32, y + 4);
-    doc.text(s.employeeId || '', 115, y + 4);
-    doc.font('Helvetica-Bold').text((s.employeeName || '').slice(0, 20), 160, y + 4).font('Helvetica');
-    doc.text(`£${(s.netAttendancePay || 0).toFixed(2)}`, 280, y + 4);
-    doc.text(`£${allowances.toFixed(2)}`, 360, y + 4);
-    doc.text(`£${(s.bonus || 0).toFixed(2)}`, 430, y + 4);
-    doc.text(`£${deductions.toFixed(2)}`, 490, y + 4);
-    doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(s.finalSalary || 0).toFixed(2)}`, 560, y + 4).font('Helvetica').fillColor('#0f172a');
-    doc.fillColor('#059669').text(`£${(s.totalPaid || 0).toFixed(2)}`, 635, y + 4).fillColor('#0f172a');
-    doc.font('Helvetica-Bold').fillColor(s.balanceRemaining > 0 ? '#dc2626' : '#64748b').text(`£${(s.balanceRemaining || 0).toFixed(2)}`, 700, y + 4).font('Helvetica').fillColor('#0f172a');
+    doc.text((s.shopName || '').slice(0, 14), 32, y + 4);
+    doc.font('Helvetica-Bold').text((s.employeeName || '').slice(0, 20), 135, y + 4).font('Helvetica');
+    doc.text(`£${(s.netAttendancePay || 0).toFixed(2)}`, 265, y + 4);
+    doc.text(`£${allowances.toFixed(2)}`, 345, y + 4);
+    doc.text(`£${(s.bonus || 0).toFixed(2)}`, 415, y + 4);
+    doc.text(`£${deductions.toFixed(2)}`, 475, y + 4);
+    doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(s.finalSalary || 0).toFixed(2)}`, 545, y + 4).font('Helvetica').fillColor('#0f172a');
+    doc.fillColor('#059669').text(`£${(s.totalPaid || 0).toFixed(2)}`, 625, y + 4).fillColor('#0f172a');
+    doc.font('Helvetica-Bold').fillColor(s.balanceRemaining > 0 ? '#dc2626' : '#64748b').text(`£${(s.balanceRemaining || 0).toFixed(2)}`, 695, y + 4).font('Helvetica').fillColor('#0f172a');
     doc.text(s.status || 'Generated', 765, y + 4);
     y += 16;
   });
@@ -1158,7 +1128,7 @@ async function buildEmployeeYearlyExcel(employeeName, employeeId, shopName, year
 
   sheet.mergeCells('A1:J1');
   const title = sheet.getCell('A1');
-  title.value = `PixxTechnologies UK - Annual Employee Payroll Report (${year}): ${employeeName.toUpperCase()} (${employeeId})`;
+  title.value = `PixxTechnologies UK - Annual Employee Payroll Report (${year}): ${employeeName.toUpperCase()}`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -1219,7 +1189,7 @@ async function buildEmployeeYearlyExcel(employeeName, employeeId, shopName, year
  */
 async function buildEmployeeYearlyPDF(res, employeeName, employeeId, shopName, year, monthlyRows, yearlyTotals = {}, generatedBy = 'Admin') {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
-  drawPdfBanner(doc, `Annual Employee Statement`, `${employeeName} (${employeeId}) • ${shopName}`, `Year: ${year}`, true);
+  drawPdfBanner(doc, `Annual Employee Statement`, `${employeeName} • ${shopName}`, `Year: ${year}`, true);
 
   const kpiY = 75;
   drawKpiCard(doc, 25, kpiY, 125, 'ANNUAL WORK DAYS', String(yearlyTotals.totalWorkingDays || 0), '#2563eb');
@@ -1285,12 +1255,11 @@ async function buildBonusPDF(res, bonuses, month, year, totals = {}, generatedBy
   doc.rect(25, y, 790, 20).fill('#1e293b');
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
   doc.text('Employee Name', 32, y + 6);
-  doc.text('Employee ID', 180, y + 6);
-  doc.text('Shop Location', 270, y + 6);
-  doc.text('Commitment / Tier', 390, y + 6);
-  doc.text('Sales Amount (£)', 540, y + 6);
-  doc.text('Rate (%)', 650, y + 6);
-  doc.text('Commission (£)', 725, y + 6);
+  doc.text('Shop Location', 200, y + 6);
+  doc.text('Commitment / Tier', 330, y + 6);
+  doc.text('Sales Amount (£)', 500, y + 6);
+  doc.text('Rate (%)', 630, y + 6);
+  doc.text('Commission (£)', 710, y + 6);
   y += 20;
 
   bonuses.forEach((b, idx) => {
@@ -1301,12 +1270,11 @@ async function buildBonusPDF(res, bonuses, month, year, totals = {}, generatedBy
     const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
     doc.rect(25, y, 790, 16).fill(bg);
     doc.fillColor('#0f172a').font('Helvetica-Bold').text((b.employeeName || '').slice(0, 22), 32, y + 4).font('Helvetica');
-    doc.text(b.employeeId || '', 180, y + 4);
-    doc.text((b.shopName || '').slice(0, 16), 270, y + 4);
-    doc.text((b.commitmentText || `${b.bonusPercentage}% commission`).slice(0, 24), 390, y + 4);
-    doc.text(`£${(b.salesAmount || 0).toLocaleString('en-GB')}`, 540, y + 4);
-    doc.text(`${b.bonusPercentage}%`, 650, y + 4);
-    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(b.bonusAmount || 0).toFixed(2)}`, 725, y + 4).font('Helvetica').fillColor('#0f172a');
+    doc.text((b.shopName || '').slice(0, 16), 200, y + 4);
+    doc.text((b.commitmentText || `${b.bonusPercentage}% commission`).slice(0, 24), 330, y + 4);
+    doc.text(`£${(b.salesAmount || 0).toLocaleString('en-GB')}`, 500, y + 4);
+    doc.text(`${b.bonusPercentage}%`, 630, y + 4);
+    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(b.bonusAmount || 0).toFixed(2)}`, 710, y + 4).font('Helvetica').fillColor('#0f172a');
     y += 16;
   });
 
@@ -1321,7 +1289,7 @@ async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Shop Labour Hours');
 
-  const columnCount = includeWageCost ? 8 : 7;
+  const columnCount = includeWageCost ? 7 : 6;
   sheet.mergeCells(1, 1, 1, columnCount);
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Shop Labour Hours Report (${periodLabel})`;
@@ -1331,7 +1299,7 @@ async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost 
   sheet.getRow(1).height = 30;
 
   const headers = [
-    'Shop Location', 'Employee ID', 'Employee Name', 'Work Days',
+    'Shop Location', 'Employee Name', 'Work Days',
     'Scheduled Hours', 'Actual Hours Worked', 'Late (min)',
     ...(includeWageCost ? ['Attendance Pay (£)'] : [])
   ];
@@ -1355,7 +1323,6 @@ async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost 
 
       sheet.addRow([
         s.shopName,
-        e.employeeId || '',
         e.employeeName || '',
         e.workingDays || 0,
         Number((e.scheduledHours || 0).toFixed(2)),
@@ -1368,8 +1335,7 @@ async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost 
 
   sheet.addRow([]);
   const sumRow = sheet.addRow([
-    'TOTALS',
-    '', '',
+    'TOTALS', '',
     grandDays,
     Number(grandSched.toFixed(2)),
     Number(grandActual.toFixed(2)),
@@ -1383,7 +1349,7 @@ async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost 
 
   sheet.columns.forEach(col => { col.width = 16; });
   sheet.getColumn(1).width = 20;
-  sheet.getColumn(3).width = 22;
+  sheet.getColumn(2).width = 22;
   return workbook;
 }
 
@@ -1416,13 +1382,12 @@ async function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy =
   doc.rect(25, y, 790, 20).fill('#1e293b');
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
   doc.text('Shop Location', 32, y + 6);
-  doc.text('Employee ID', 150, y + 6);
-  doc.text('Employee Name', 230, y + 6);
-  doc.text('Work Days', 370, y + 6);
-  doc.text('Sched Hours', 450, y + 6);
-  doc.text('Actual Hours', 540, y + 6);
-  doc.text('Late (min)', 630, y + 6);
-  if (includeWageCost) doc.text('Attendance Pay (£)', 715, y + 6);
+  doc.text('Employee Name', 180, y + 6);
+  doc.text('Work Days', 350, y + 6);
+  doc.text('Sched Hours', 430, y + 6);
+  doc.text('Actual Hours', 520, y + 6);
+  doc.text('Late (min)', 610, y + 6);
+  if (includeWageCost) doc.text('Attendance Pay (£)', 695, y + 6);
   y += 20;
 
   let rowIdx = 0;
@@ -1437,13 +1402,12 @@ async function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy =
       doc.rect(25, y, 790, 16).fill(bg);
       doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
       doc.text((s.shopName || '').slice(0, 16), 32, y + 4);
-      doc.text(e.employeeId || '', 150, y + 4);
-      doc.font('Helvetica-Bold').text((e.employeeName || '').slice(0, 20), 230, y + 4).font('Helvetica');
-      doc.text(String(e.workingDays || 0), 370, y + 4);
-      doc.text(`${(e.scheduledHours || 0).toFixed(1)}h`, 450, y + 4);
-      doc.text(`${(e.hours || 0).toFixed(1)}h`, 540, y + 4);
-      doc.text(`${e.lateMinutes || 0}m`, 630, y + 4);
-      if (includeWageCost) doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(e.wageCost || 0).toFixed(2)}`, 715, y + 4).font('Helvetica').fillColor('#0f172a');
+      doc.font('Helvetica-Bold').text((e.employeeName || '').slice(0, 20), 180, y + 4).font('Helvetica');
+      doc.text(String(e.workingDays || 0), 350, y + 4);
+      doc.text(`${(e.scheduledHours || 0).toFixed(1)}h`, 430, y + 4);
+      doc.text(`${(e.hours || 0).toFixed(1)}h`, 520, y + 4);
+      doc.text(`${e.lateMinutes || 0}m`, 610, y + 4);
+      if (includeWageCost) doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(e.wageCost || 0).toFixed(2)}`, 695, y + 4).font('Helvetica').fillColor('#0f172a');
       y += 16;
     });
   });
@@ -1459,7 +1423,7 @@ async function buildPaymentsExcel(payments, periodLabel = '', totals = {}, cashB
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Salary Payments');
 
-  sheet.mergeCells('A1:J1');
+  sheet.mergeCells('A1:I1');
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Salary Payment Disbursement Report (${periodLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1468,7 +1432,7 @@ async function buildPaymentsExcel(payments, periodLabel = '', totals = {}, cashB
   sheet.getRow(1).height = 30;
 
   const headers = [
-    'Employee ID', 'Employee Name', 'Shop', 'Salary Week', 'Payment Date',
+    'Employee Name', 'Shop', 'Salary Week', 'Payment Date',
     'Amount (£)', 'Method', 'Paid By', 'Reference', 'Notes'
   ];
   sheet.addRow([]);
@@ -1481,7 +1445,6 @@ async function buildPaymentsExcel(payments, periodLabel = '', totals = {}, cashB
 
   payments.forEach(p => {
     sheet.addRow([
-      p.employeeId || '',
       p.employeeName || '',
       p.shopName || '',
       p.weekLabel || '',
@@ -1498,7 +1461,7 @@ async function buildPaymentsExcel(payments, periodLabel = '', totals = {}, cashB
   const sumRow = sheet.addRow([
     'TOTALS',
     `Payments: ${payments.length}`,
-    '', '', '',
+    '', '',
     Number((totals.totalPaid || 0).toFixed(2)),
     `Cash: £${(cashBankSummary.cashTotal || 0).toFixed(2)} | Bank: £${(cashBankSummary.bankTotal || 0).toFixed(2)}`,
     '', '', ''
@@ -1509,8 +1472,8 @@ async function buildPaymentsExcel(payments, periodLabel = '', totals = {}, cashB
   });
 
   sheet.columns.forEach(col => { col.width = 16; });
-  sheet.getColumn(2).width = 22;
-  sheet.getColumn(4).width = 22;
+  sheet.getColumn(1).width = 22;
+  sheet.getColumn(3).width = 22;
   return workbook;
 }
 
@@ -1531,13 +1494,12 @@ async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, ca
   doc.rect(25, y, 790, 20).fill('#1e293b');
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
   doc.text('Employee Name', 32, y + 6);
-  doc.text('Employee ID', 180, y + 6);
-  doc.text('Shop', 260, y + 6);
-  doc.text('Salary Week', 350, y + 6);
-  doc.text('Payment Date', 490, y + 6);
-  doc.text('Amount (£)', 570, y + 6);
-  doc.text('Method', 645, y + 6);
-  doc.text('Paid By', 710, y + 6);
+  doc.text('Shop', 200, y + 6);
+  doc.text('Salary Week', 300, y + 6);
+  doc.text('Payment Date', 460, y + 6);
+  doc.text('Amount (£)', 540, y + 6);
+  doc.text('Method', 620, y + 6);
+  doc.text('Paid By', 690, y + 6);
   y += 20;
 
   payments.forEach((p, idx) => {
@@ -1549,13 +1511,12 @@ async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, ca
     doc.rect(25, y, 790, 16).fill(bg);
     doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
     doc.font('Helvetica-Bold').text((p.employeeName || '').slice(0, 20), 32, y + 4).font('Helvetica');
-    doc.text(p.employeeId || '', 180, y + 4);
-    doc.text((p.shopName || '').slice(0, 14), 260, y + 4);
-    doc.text((p.weekLabel || '').slice(0, 20), 350, y + 4);
-    doc.text(p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB') : '', 490, y + 4);
-    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(p.amount || 0).toFixed(2)}`, 570, y + 4).font('Helvetica').fillColor('#0f172a');
-    doc.text(p.paymentMethod || 'Cash', 645, y + 4);
-    doc.text((p.paidByName || '').slice(0, 16), 710, y + 4);
+    doc.text((p.shopName || '').slice(0, 14), 200, y + 4);
+    doc.text((p.weekLabel || '').slice(0, 20), 300, y + 4);
+    doc.text(p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB') : '', 460, y + 4);
+    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(p.amount || 0).toFixed(2)}`, 540, y + 4).font('Helvetica').fillColor('#0f172a');
+    doc.text(p.paymentMethod || 'Cash', 620, y + 4);
+    doc.text((p.paidByName || '').slice(0, 16), 690, y + 4);
     y += 16;
   });
 
@@ -1572,7 +1533,7 @@ async function buildLedgerExcel(employee, transactions, summary = {}) {
 
   sheet.mergeCells('A1:G1');
   const title = sheet.getCell('A1');
-  title.value = `PixxTechnologies UK - Employee Financial Ledger: ${employee.name.toUpperCase()} (${employee.employeeId})`;
+  title.value = `PixxTechnologies UK - Employee Financial Ledger: ${employee.name.toUpperCase()}`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -1626,7 +1587,7 @@ async function buildLedgerExcel(employee, transactions, summary = {}) {
  */
 async function buildLedgerPDF(res, employee, transactions, summary = {}, generatedBy = 'Admin') {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'portrait' });
-  drawPdfBanner(doc, `Financial Ledger: ${employee.name}`, `Employee ID: ${employee.employeeId}`, 'Official Salary & Payment Ledger', false);
+  drawPdfBanner(doc, `Financial Ledger: ${employee.name}`, 'Official Salary & Payment Ledger', '', false);
 
   const kpiY = 75;
   drawKpiCard(doc, 25, kpiY, 170, 'TOTAL WAGES EARNED', `£${(summary.totalEarned || 0).toFixed(2)}`, '#2563eb');

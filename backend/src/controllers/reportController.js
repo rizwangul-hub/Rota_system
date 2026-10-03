@@ -652,8 +652,70 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 };
 
 // ============================================================
-// 2. WEEKLY ATTENDANCE REPORT (Monday -> Sunday)
+// 2. WEEKLY ATTENDANCE REPORT (Sunday -> Saturday)
 // ============================================================
+
+function buildWeeklyAttendanceData(attendances) {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const empMap = {};
+
+  attendances.forEach(a => {
+    const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
+    if (!empMap[key]) {
+      empMap[key] = {
+        employee: a.employee,
+        employeeName: a.employeeName,
+        shopId: a.shop,
+        shopName: a.shopName,
+        dailySchedule: { Sun: 'Off', Mon: 'Off', Tue: 'Off', Wed: 'Off', Thu: 'Off', Fri: 'Off', Sat: 'Off' },
+        workingDays: 0,
+        presentDays: 0,
+        lateDays: 0,
+        halfDays: 0,
+        absentDays: 0,
+        scheduledHours: 0,
+        actualHours: 0,
+        lateMinutes: 0
+      };
+    }
+
+    const rec = empMap[key];
+    const dayIdx = getDayOfWeekUK(a.dateString);
+    const dayName = dayNames[dayIdx];
+    if (dayName) {
+      if (a.status !== 'Absent') {
+        rec.dailySchedule[dayName] = a.shopName || 'Present';
+      } else {
+        rec.dailySchedule[dayName] = 'Off';
+      }
+    }
+
+    if (a.status !== 'Absent') rec.workingDays += 1;
+    if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
+    if (a.status === 'Late') rec.lateDays += 1;
+    else if (a.status === 'Half') rec.halfDays += 1;
+    else if (a.status === 'Absent') rec.absentDays += 1;
+
+    rec.scheduledHours = Number((rec.scheduledHours + (a.scheduledHours || 0)).toFixed(2));
+    rec.actualHours = Number((rec.actualHours + (a.actualHours || 0)).toFixed(2));
+    rec.lateMinutes += (a.lateMinutes || 0);
+  });
+
+  const records = Object.values(empMap);
+  const summary = {
+    totalEmployees: records.length,
+    totalWorkingDays: records.reduce((sum, r) => sum + r.workingDays, 0),
+    totalPresent: records.reduce((sum, r) => sum + r.presentDays, 0),
+    totalLate: records.reduce((sum, r) => sum + r.lateDays, 0),
+    totalHalf: records.reduce((sum, r) => sum + r.halfDays, 0),
+    totalAbsent: records.reduce((sum, r) => sum + r.absentDays, 0),
+    totalScheduledHours: Number(records.reduce((sum, r) => sum + r.scheduledHours, 0).toFixed(2)),
+    totalWorkedHours: Number(records.reduce((sum, r) => sum + r.actualHours, 0).toFixed(2)),
+    totalLateMinutes: records.reduce((sum, r) => sum + r.lateMinutes, 0)
+  };
+
+  return { records, summary };
+}
 
 exports.getWeeklyAttendanceReport = async (req, res) => {
   try {
@@ -679,80 +741,15 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
       .populate('employee')
       .sort({ shopName: 1, employeeName: 1, dateString: 1 });
 
-    const empMap = {};
-    attendances.forEach(a => {
-      const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
-      if (!empMap[key]) {
-        empMap[key] = {
-          employee: a.employee,
-          employeeId: a.employeeId,
-          employeeName: a.employeeName,
-          shopId: a.shop,
-          shopName: a.shopName,
-          workingDays: 0,
-          presentDays: 0,
-          lateDays: 0,
-          halfDays: 0,
-          absentDays: 0,
-          scheduledHours: 0,
-          actualHours: 0,
-          lateMinutes: 0,
-          lateDeduction: 0,
-          attendancePay: 0
-        };
-      }
-
-      const rec = empMap[key];
-      if (a.status !== 'Absent') rec.workingDays += 1;
-      if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
-      if (a.status === 'Late') rec.lateDays += 1;
-      else if (a.status === 'Half') rec.halfDays += 1;
-      else if (a.status === 'Absent') rec.absentDays += 1;
-
-      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-      const attPay = (a.attendancePay && a.attendancePay > 0)
-        ? a.attendancePay
-        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
-
-      rec.scheduledHours = Number((rec.scheduledHours + (a.scheduledHours || 0)).toFixed(2));
-      rec.actualHours = Number((rec.actualHours + (a.actualHours || 0)).toFixed(2));
-      rec.lateMinutes += (a.lateMinutes || 0);
-      rec.lateDeduction = Number((rec.lateDeduction + (a.lateDeduction || 0)).toFixed(2));
-      rec.attendancePay = Number((rec.attendancePay + attPay).toFixed(2));
-    });
-
-    const records = Object.values(empMap);
-
-    const summary = {
-      totalEmployees: records.length,
-      totalWorkingDays: records.reduce((sum, r) => sum + r.workingDays, 0),
-      totalPresent: records.reduce((sum, r) => sum + r.presentDays, 0),
-      totalLate: records.reduce((sum, r) => sum + r.lateDays, 0),
-      totalHalf: records.reduce((sum, r) => sum + r.halfDays, 0),
-      totalAbsent: records.reduce((sum, r) => sum + r.absentDays, 0),
-      totalScheduledHours: Number(records.reduce((sum, r) => sum + r.scheduledHours, 0).toFixed(2)),
-      totalWorkedHours: Number(records.reduce((sum, r) => sum + r.actualHours, 0).toFixed(2)),
-      totalLateMinutes: records.reduce((sum, r) => sum + r.lateMinutes, 0),
-      totalLateDeductions: Number(records.reduce((sum, r) => sum + r.lateDeduction, 0).toFixed(2)),
-      totalAttendancePay: Number(records.reduce((sum, r) => sum + r.attendancePay, 0).toFixed(2))
-    };
-    const isAdmin = req.user.role === 'ADMIN';
-    const responseSummary = isAdmin
-      ? summary
-      : Object.fromEntries(Object.entries(summary).filter(([key]) =>
-        !['totalLateDeductions', 'totalAttendancePay'].includes(key)
-      ));
-    const responseRecords = isAdmin
-      ? records
-      : records.map(({ lateDeduction, attendancePay, ...record }) => record);
+    const { records, summary } = buildWeeklyAttendanceData(attendances);
 
     res.json({
       success: true,
       weekLabel: targetWeekLabel,
       startDateString: week.startDateString,
       endDateString: week.endDateString,
-      summary: responseSummary,
-      records: responseRecords
+      summary,
+      records
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to generate weekly attendance report.');
@@ -780,59 +777,9 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
     if (employeeId) query.employee = employeeId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
-    const empMap = {};
-    attendances.forEach(a => {
-      const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
-      if (!empMap[key]) {
-        empMap[key] = {
-          employeeId: a.employeeId,
-          employeeName: a.employeeName,
-          shopName: a.shopName,
-          workingDays: 0,
-          presentDays: 0,
-          lateDays: 0,
-          halfDays: 0,
-          absentDays: 0,
-          scheduledHours: 0,
-          actualHours: 0,
-          lateMinutes: 0,
-          lateDeduction: 0,
-          attendancePay: 0
-        };
-      }
-      const rec = empMap[key];
-      if (a.status !== 'Absent') rec.workingDays += 1;
-      if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
-      if (a.status === 'Late') rec.lateDays += 1;
-      else if (a.status === 'Half') rec.halfDays += 1;
-      else if (a.status === 'Absent') rec.absentDays += 1;
-      rec.scheduledHours += (a.scheduledHours || 0);
-      rec.actualHours += (a.actualHours || 0);
-      rec.lateMinutes += (a.lateMinutes || 0);
-      rec.lateDeduction += (a.lateDeduction || 0);
+    const { records, summary } = buildWeeklyAttendanceData(attendances);
 
-      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-      const attPay = (a.attendancePay && a.attendancePay > 0)
-        ? a.attendancePay
-        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
-      rec.attendancePay += attPay;
-    });
-
-    const records = Object.values(empMap);
-    const summary = {
-      totalWorkingDays: records.reduce((sum, r) => sum + r.workingDays, 0),
-      totalPresent: records.reduce((sum, r) => sum + r.presentDays, 0),
-      totalLate: records.reduce((sum, r) => sum + r.lateDays, 0),
-      totalHalf: records.reduce((sum, r) => sum + r.halfDays, 0),
-      totalAbsent: records.reduce((sum, r) => sum + r.absentDays, 0),
-      totalScheduledHours: records.reduce((sum, r) => sum + r.scheduledHours, 0),
-      totalWorkedHours: records.reduce((sum, r) => sum + r.actualHours, 0),
-      totalLateMinutes: records.reduce((sum, r) => sum + r.lateMinutes, 0),
-      totalLateDeductions: records.reduce((sum, r) => sum + r.lateDeduction, 0),
-      totalAttendancePay: records.reduce((sum, r) => sum + r.attendancePay, 0)
-    };
-
-    const workbook = await buildWeeklyAttendanceExcel(records, targetWeekLabel, summary, req.user.role === 'ADMIN');
+    const workbook = await buildWeeklyAttendanceExcel(records, targetWeekLabel, summary);
 
     await logAction({
       user: req.user,
@@ -872,51 +819,7 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
     if (employeeId) query.employee = employeeId;
 
     const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
-    const empMap = {};
-    attendances.forEach(a => {
-      const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
-      if (!empMap[key]) {
-        empMap[key] = {
-          employeeId: a.employeeId,
-          employeeName: a.employeeName,
-          shopName: a.shopName,
-          workingDays: 0,
-          presentDays: 0,
-          lateDays: 0,
-          halfDays: 0,
-          absentDays: 0,
-          scheduledHours: 0,
-          actualHours: 0,
-          lateMinutes: 0,
-          lateDeduction: 0,
-          attendancePay: 0
-        };
-      }
-      const rec = empMap[key];
-      if (a.status !== 'Absent') rec.workingDays += 1;
-      if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
-      if (a.status === 'Late') rec.lateDays += 1;
-      else if (a.status === 'Half') rec.halfDays += 1;
-      else if (a.status === 'Absent') rec.absentDays += 1;
-      rec.scheduledHours += (a.scheduledHours || 0);
-      rec.actualHours += (a.actualHours || 0);
-      rec.lateMinutes += (a.lateMinutes || 0);
-      rec.lateDeduction += (a.lateDeduction || 0);
-
-      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-      const attPay = (a.attendancePay && a.attendancePay > 0)
-        ? a.attendancePay
-        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
-      rec.attendancePay += attPay;
-    });
-
-    const records = Object.values(empMap);
-    const summary = {
-      totalWorkingDays: records.reduce((sum, r) => sum + r.workingDays, 0),
-      totalWorkedHours: records.reduce((sum, r) => sum + r.actualHours, 0),
-      totalLateDeductions: records.reduce((sum, r) => sum + r.lateDeduction, 0),
-      totalAttendancePay: records.reduce((sum, r) => sum + r.attendancePay, 0)
-    };
+    const { records, summary } = buildWeeklyAttendanceData(attendances);
 
     await logAction({
       user: req.user,
@@ -931,8 +834,7 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
       records,
       targetWeekLabel,
       summary,
-      req.user?.name || 'Admin',
-      req.user.role === 'ADMIN'
+      req.user.name || 'Admin'
     );
   } catch (error) {
     return sendServerError(res, error, 'Failed to export weekly attendance PDF.');

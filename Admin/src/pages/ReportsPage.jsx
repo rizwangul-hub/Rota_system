@@ -493,7 +493,6 @@ export default function ReportsPage() {
                 <thead>
                   <tr>
                     <th>Shop</th>
-                    <th>ID</th>
                     <th>Employee Name</th>
                     <th>Shift</th>
                     <th>Actual Shift</th>
@@ -551,7 +550,6 @@ export default function ReportsPage() {
                           </span>
                         )}
                       </td>
-                      <td>{r.employeeId}</td>
                       <td style={{ fontWeight: 500 }}>{r.employeeName}</td>
                       <td>{r.status === 'Absent' ? '—' : `${formatTime12Hour(r.shiftStart)} - ${formatTime12Hour(r.shiftEnd)}`}</td>
                       <td>{r.status === 'Absent' ? 'Absent / Off' : `${formatTime12Hour(r.timeReached)} - ${formatTime12Hour(r.workerEndTime)}`}</td>
@@ -575,7 +573,7 @@ export default function ReportsPage() {
                   })}
                   {(!dailyData.records || dailyData.records.length === 0) && (
                     <tr>
-                      <td colSpan={isAdmin ? 12 : 9} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={isAdmin ? 11 : 8} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No attendance records found for the selected date and filters.
                       </td>
                     </tr>
@@ -608,11 +606,6 @@ export default function ReportsPage() {
               <div className="stat-val" style={{ color: '#d97706' }}>{Number(weeklyAttendanceData.summary?.totalWorkedHours || 0).toFixed(1)}h</div>
               <div style={{ fontSize: '12px', color: '#64748b' }}>Scheduled: {Number(weeklyAttendanceData.summary?.totalScheduledHours || 0).toFixed(1)}h</div>
             </div>
-            {isAdmin && <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
-              <div className="stat-lbl">Total Attendance Pay</div>
-              <div className="stat-val" style={{ color: '#2563eb' }}>£{(weeklyAttendanceData.summary?.totalAttendancePay || 0).toFixed(2)}</div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>Deductions: £{(weeklyAttendanceData.summary?.totalLateDeductions || 0).toFixed(2)}</div>
-            </div>}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
@@ -636,40 +629,52 @@ export default function ReportsPage() {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>Shop</th>
-                    <th>ID</th>
+                    <th>Primary Shop</th>
                     <th>Employee Name</th>
+                    <th>Sun</th>
+                    <th>Mon</th>
+                    <th>Tue</th>
+                    <th>Wed</th>
+                    <th>Thu</th>
+                    <th>Fri</th>
+                    <th>Sat</th>
                     <th>Work Days</th>
-                    <th>Present</th>
-                    <th>Late</th>
-                    <th>Half</th>
-                    <th>Absent</th>
                     <th>Hours Worked</th>
-                    <th>Late (m)</th>
-                    {isAdmin && <th>Late Ded (£)</th>}
-                    {isAdmin && <th>Attendance Pay (£)</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {weeklyAttendanceData.records?.map(r => (
-                    <tr key={r.employeeId}>
-                      <td style={{ fontWeight: 600 }}>{r.shopName}</td>
-                      <td>{r.employeeId}</td>
+                  {weeklyAttendanceData.records?.map((r, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>{r.shopName || '—'}</td>
                       <td style={{ fontWeight: 500 }}>{r.employeeName}</td>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => {
+                        const val = r.dailySchedule?.[day] || 'Off';
+                        const isOff = val === 'Off';
+                        const badgeStyle = getShopBadgeStyle(isOff ? null : val);
+                        return (
+                          <td key={day}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: isOff ? '#f8fafc' : badgeStyle.bg,
+                              color: isOff ? '#94a3b8' : badgeStyle.color,
+                              border: `1px solid ${isOff ? '#e2e8f0' : badgeStyle.border}`
+                            }}>
+                              {val}
+                            </span>
+                          </td>
+                        );
+                      })}
                       <td style={{ fontWeight: 600 }}>{r.workingDays}</td>
-                      <td style={{ color: '#059669' }}>{r.presentDays}</td>
-                      <td style={{ color: '#d97706' }}>{r.lateDays}</td>
-                      <td style={{ color: '#2563eb' }}>{r.halfDays}</td>
-                      <td style={{ color: '#dc2626' }}>{r.absentDays}</td>
-                      <td>{r.actualHours}h</td>
-                      <td>{r.lateMinutes}m</td>
-                      {isAdmin && <td style={{ color: r.lateDeduction > 0 ? '#dc2626' : 'inherit' }}>£{(r.lateDeduction || 0).toFixed(2)}</td>}
-                      {isAdmin && <td style={{ fontWeight: 700, color: '#2563eb' }}>£{(r.attendancePay || 0).toFixed(2)}</td>}
+                      <td style={{ fontWeight: 600, color: '#2563eb' }}>{r.actualHours}h</td>
                     </tr>
                   ))}
                   {(!weeklyAttendanceData.records || weeklyAttendanceData.records.length === 0) && (
                     <tr>
-                      <td colSpan={isAdmin ? 12 : 10} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly attendance records found for this period.
                       </td>
                     </tr>
@@ -731,7 +736,6 @@ export default function ReportsPage() {
                 <thead>
                   <tr>
                     <th>Shop</th>
-                    <th>ID</th>
                     <th>Employee Name</th>
                     <th>Week</th>
                     <th>Attendance Pay</th>
@@ -750,7 +754,6 @@ export default function ReportsPage() {
                     return (
                       <tr key={s._id}>
                         <td style={{ fontWeight: 600 }}>{s.shopName}</td>
-                        <td>{s.employeeId}</td>
                         <td style={{ fontWeight: 500 }}>{s.employeeName}</td>
                         <td style={{ fontSize: '12px' }}>{s.weekLabel}</td>
                         <td>£{(s.netAttendancePay || 0).toFixed(2)}</td>
@@ -772,7 +775,7 @@ export default function ReportsPage() {
                   })}
                   {(!weeklySalaryData.salaries || weeklySalaryData.salaries.length === 0) && (
                     <tr>
-                      <td colSpan="12" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan="11" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly salary records found for this period.
                       </td>
                     </tr>
@@ -793,7 +796,7 @@ export default function ReportsPage() {
           <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
             <div>
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                {monthlyData.employeeName} ({monthlyData.employeeId})
+                {monthlyData.employeeName}
               </div>
               <div style={{ fontSize: '13px', color: '#64748b' }}>
                 Location: {monthlyData.shopName} | Period: {monthlyData.monthLabel}
@@ -929,7 +932,7 @@ export default function ReportsPage() {
           <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
             <div>
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                {yearlyData.employeeName} ({yearlyData.employeeId})
+                {yearlyData.employeeName}
               </div>
               <div style={{ fontSize: '13px', color: '#64748b' }}>
                 Location: {yearlyData.shopName} | Annual Payroll Year: {yearlyData.year}
@@ -1053,7 +1056,6 @@ export default function ReportsPage() {
                 <thead>
                   <tr>
                     <th>Employee Name</th>
-                    <th>ID</th>
                     <th>Shop</th>
                     <th>Commitment / Tier</th>
                     <th>Monthly Sale</th>
@@ -1066,7 +1068,6 @@ export default function ReportsPage() {
                   {bonusData.bonuses?.map(b => (
                     <tr key={b._id}>
                       <td style={{ fontWeight: 600 }}>{b.employeeName}</td>
-                      <td>{b.employeeId}</td>
                       <td>{b.shopName}</td>
                       <td>{b.commitmentText || `${b.bonusPercentage}% - ${b.shopName}`}</td>
                       <td style={{ fontWeight: 600 }}>£{(b.salesAmount || 0).toLocaleString()}</td>
@@ -1077,7 +1078,7 @@ export default function ReportsPage() {
                   ))}
                   {(!bonusData.bonuses || bonusData.bonuses.length === 0) && (
                     <tr>
-                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No bonus or commission records found for this period.
                       </td>
                     </tr>
@@ -1143,7 +1144,6 @@ export default function ReportsPage() {
                   <thead>
                     <tr>
                       <th>Employee Name</th>
-                      <th>ID</th>
                       <th>Work Days</th>
                       <th>Scheduled (h)</th>
                       <th>Actual Worked (h)</th>
@@ -1155,7 +1155,6 @@ export default function ReportsPage() {
                     {shop.employees?.map((e, eIdx) => (
                       <tr key={eIdx}>
                         <td style={{ fontWeight: 500 }}>{e.employeeName}</td>
-                        <td>{e.employeeId}</td>
                         <td>{e.workingDays}</td>
                         <td>{e.scheduledHours}h</td>
                         <td style={{ fontWeight: 600 }}>{e.hours}h</td>
@@ -1221,7 +1220,6 @@ export default function ReportsPage() {
                 <thead>
                   <tr>
                     <th>Employee Name</th>
-                    <th>ID</th>
                     <th>Shop</th>
                     <th>Salary Week</th>
                     <th>Payment Date</th>
@@ -1235,7 +1233,6 @@ export default function ReportsPage() {
                   {paymentsData.payments?.map(p => (
                     <tr key={p._id}>
                       <td style={{ fontWeight: 600 }}>{p.employeeName}</td>
-                      <td>{p.employeeId}</td>
                       <td>{p.shopName}</td>
                       <td style={{ fontSize: '12px' }}>{p.weekLabel}</td>
                       <td>{new Date(p.paymentDate).toLocaleDateString('en-GB')}</td>
@@ -1251,7 +1248,7 @@ export default function ReportsPage() {
                   ))}
                   {(!paymentsData.payments || paymentsData.payments.length === 0) && (
                     <tr>
-                      <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No payment records found for the selected filters.
                       </td>
                     </tr>
@@ -1271,7 +1268,7 @@ export default function ReportsPage() {
           <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
             <div>
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
-                {ledgerData.employee?.name} ({ledgerData.employee?.employeeId})
+                {ledgerData.employee?.name}
               </div>
               <div style={{ fontSize: '13px', color: '#64748b' }}>
                 Official Financial Ledger & Running Balance
