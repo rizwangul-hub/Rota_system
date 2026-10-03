@@ -618,7 +618,14 @@ export default function ReportsPage() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
             <button
               className="btn btn-outline btn-sm"
-              onClick={() => handleDownload('/reports/weekly-attendance/excel', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Attendance_${selectedDate}.xlsx`)}
+              onClick={() => handleDownload('/reports/weekly-attendance/pdf', { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Attendance_${selectedDate}.pdf`)}
+              title="Export Weekly Attendance PDF"
+            >
+              <FileText size={14} color="#dc2626" /> Export PDF
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => handleDownload('/reports/weekly-attendance/excel', { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Attendance_${selectedDate}.xlsx`)}
             >
               <Download size={14} /> Export Excel
             </button>
@@ -705,7 +712,14 @@ export default function ReportsPage() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
             <button
               className="btn btn-outline btn-sm"
-              onClick={() => handleDownload('/reports/weekly-salary/excel', { date: selectedDate, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Salary_${selectedDate}.xlsx`)}
+              onClick={() => handleDownload('/reports/weekly-salary/pdf', { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Salary_${selectedDate}.pdf`)}
+              title="Export Weekly Salary PDF"
+            >
+              <FileText size={14} color="#dc2626" /> Export PDF
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => handleDownload('/reports/weekly-salary/excel', { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Weekly_Salary_${selectedDate}.xlsx`)}
             >
               <Download size={14} /> Export Excel
             </button>
@@ -786,6 +800,14 @@ export default function ReportsPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => downloadMonthlyReport('pdf')}
+                disabled={Boolean(downloadingMonthlyReport)}
+                className="btn btn-outline btn-sm"
+              >
+                <FileText size={14} color="#dc2626" /> {downloadingMonthlyReport === 'pdf' ? 'Preparing PDF...' : 'Export PDF'}
+              </button>
               <button
                 type="button"
                 onClick={() => downloadMonthlyReport('excel')}
@@ -916,6 +938,13 @@ export default function ReportsPage() {
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 className="btn btn-outline btn-sm"
+                onClick={() => handleDownload('/reports/employee-yearly/pdf', { employeeId: selectedEmployee, year: selectedYear }, `Employee_Yearly_${selectedEmployee}_${selectedYear}.pdf`)}
+                title="Export Employee Yearly PDF"
+              >
+                <FileText size={14} color="#dc2626" /> Export PDF
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
                 onClick={() => handleDownload('/reports/employee-yearly/excel', { employeeId: selectedEmployee, year: selectedYear }, `Employee_Yearly_${selectedEmployee}_${selectedYear}.xlsx`)}
               >
                 <Download size={14} /> Export Excel
@@ -1004,12 +1033,18 @@ export default function ReportsPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
             <button
-              onClick={() => handleDownload('/reports/bonus/excel', { month: selectedMonth, year: selectedYear, employeeId: selectedEmployee, shopId: selectedShop }, `Bonus_${selectedMonth}_${selectedYear}.xlsx`)}
+              onClick={() => handleDownload('/reports/bonus/pdf', { month: selectedMonth, year: selectedYear, employeeId: selectedEmployee || undefined, shopId: selectedShop || undefined }, `Bonus_${selectedMonth}_${selectedYear}.pdf`)}
+              className="btn btn-outline btn-sm"
+              title="Export Bonus PDF"
+            >
+              <FileText size={14} color="#dc2626" /> Export PDF
+            </button>
+            <button
+              onClick={() => handleDownload('/reports/bonus/excel', { month: selectedMonth, year: selectedYear, employeeId: selectedEmployee || undefined, shopId: selectedShop || undefined }, `Bonus_${selectedMonth}_${selectedYear}.xlsx`)}
               className="btn btn-outline btn-sm"
             >
               <Download size={14} /> Export Excel
             </button>
-
           </div>
 
           <div className="card">
@@ -1079,12 +1114,18 @@ export default function ReportsPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
             <button
-              onClick={() => handleDownload('/reports/shop-labour/excel', { startDate, endDate, shopId: selectedShop, employeeId: selectedEmployee }, `Shop_Labour_${startDate}_${endDate}.xlsx`)}
+              onClick={() => handleDownload('/reports/shop-labour/pdf', { startDate: startDate || undefined, endDate: endDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Shop_Labour_${startDate || 'all'}_${endDate || 'all'}.pdf`)}
+              className="btn btn-outline btn-sm"
+              title="Export Shop Labour PDF"
+            >
+              <FileText size={14} color="#dc2626" /> Export PDF
+            </button>
+            <button
+              onClick={() => handleDownload('/reports/shop-labour/excel', { startDate: startDate || undefined, endDate: endDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined }, `Shop_Labour_${startDate || 'all'}_${endDate || 'all'}.xlsx`)}
               className="btn btn-outline btn-sm"
             >
               <Download size={14} /> Export Excel
             </button>
-
           </div>
 
           {labourData.data?.map((shop, sIdx) => (
@@ -1160,12 +1201,18 @@ export default function ReportsPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '16px' }}>
             <button
-              onClick={() => handleDownload('/reports/payments/excel', { startDate, endDate, shopId: selectedShop, employeeId: selectedEmployee, paymentMethod }, `Payments_${startDate}_${endDate}.xlsx`)}
+              onClick={() => handleDownload('/reports/payments/pdf', { startDate: startDate || undefined, endDate: endDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined, paymentMethod: paymentMethod || undefined }, `Payments_${startDate || 'all'}_${endDate || 'all'}.pdf`)}
+              className="btn btn-outline btn-sm"
+              title="Export Salary Payments PDF"
+            >
+              <FileText size={14} color="#dc2626" /> Export PDF
+            </button>
+            <button
+              onClick={() => handleDownload('/reports/payments/excel', { startDate: startDate || undefined, endDate: endDate || undefined, shopId: selectedShop || undefined, employeeId: selectedEmployee || undefined, paymentMethod: paymentMethod || undefined }, `Payments_${startDate || 'all'}_${endDate || 'all'}.xlsx`)}
               className="btn btn-outline btn-sm"
             >
               <Download size={14} /> Export Excel
             </button>
-
           </div>
 
           <div className="card">
@@ -1232,12 +1279,18 @@ export default function ReportsPage() {
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
+                onClick={() => handleDownload(`/reports/ledger/${selectedEmployee}/pdf`, { startDate: startDate || undefined, endDate: endDate || undefined }, `Ledger_${selectedEmployee}.pdf`)}
+                className="btn btn-outline btn-sm"
+                title="Export Ledger PDF"
+              >
+                <FileText size={14} color="#dc2626" /> Export PDF
+              </button>
+              <button
                 onClick={() => handleDownload(`/reports/ledger/${selectedEmployee}/excel`, {}, `Ledger_${selectedEmployee}.xlsx`)}
                 className="btn btn-outline btn-sm"
               >
                 <Download size={14} /> Export Excel
               </button>
-
             </div>
           </div>
 

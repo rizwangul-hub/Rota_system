@@ -81,6 +81,8 @@ export default function EmployeeDetail() {
     }
   };
 
+  const [downloadingMonthlyPdf, setDownloadingMonthlyPdf] = useState(false);
+
   const downloadMonthlyExcel = async () => {
     setDownloadingMonthlyExcel(true);
     try {
@@ -93,6 +95,21 @@ export default function EmployeeDetail() {
       window.alert(err.message || 'Unable to download monthly Excel report.');
     } finally {
       setDownloadingMonthlyExcel(false);
+    }
+  };
+
+  const downloadMonthlyPdf = async () => {
+    setDownloadingMonthlyPdf(true);
+    try {
+      await downloadReportFile(
+        '/reports/employee-monthly/pdf',
+        { employeeId: id, month: reportMonth, year: reportYear },
+        `Employee_Monthly_${reportYear}-${String(reportMonth).padStart(2, '0')}.pdf`
+      );
+    } catch (err) {
+      window.alert(err.message || 'Unable to download monthly PDF report.');
+    } finally {
+      setDownloadingMonthlyPdf(false);
     }
   };
 
@@ -161,6 +178,9 @@ export default function EmployeeDetail() {
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-outline btn-sm" onClick={downloadMonthlyPdf} disabled={downloadingMonthlyPdf}>
+              <FileText size={14} color="#dc2626" /> {downloadingMonthlyPdf ? 'Preparing PDF...' : 'Export Monthly PDF'}
+            </button>
             <button className="btn btn-outline btn-sm" onClick={downloadMonthlyExcel} disabled={downloadingMonthlyExcel}>
               <Download size={14} /> {downloadingMonthlyExcel ? 'Preparing Excel...' : 'Export Monthly Excel'}
             </button>

@@ -602,11 +602,19 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 exports.getWeeklyAttendanceReport = async (req, res) => {
   try {
     const { weekLabel, date, shopId, employeeId } = req.query;
-    const week = getWeekRange(date || new Date());
+    let dateToUse = date;
+    if (weekLabel) {
+      const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+      if (firstPart) dateToUse = firstPart;
+    }
+    const week = getWeekRange(dateToUse || new Date());
     const targetWeekLabel = weekLabel || week.weekLabel;
 
     const query = {
-      dateString: { $gte: week.startDateString, $lte: week.endDateString }
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
     };
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
@@ -638,8 +646,8 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
 
       const rec = empMap[key];
       if (a.status !== 'Absent') rec.workingDays += 1;
-      if (a.status === 'Present') rec.presentDays += 1;
-      else if (a.status === 'Late') rec.lateDays += 1;
+      if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
+      if (a.status === 'Late') rec.lateDays += 1;
       else if (a.status === 'Half') rec.halfDays += 1;
       else if (a.status === 'Absent') rec.absentDays += 1;
 
@@ -691,11 +699,19 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
 exports.exportWeeklyAttendanceExcel = async (req, res) => {
   try {
     const { weekLabel, date, shopId, employeeId } = req.query;
-    const week = getWeekRange(date || new Date());
+    let dateToUse = date;
+    if (weekLabel) {
+      const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+      if (firstPart) dateToUse = firstPart;
+    }
+    const week = getWeekRange(dateToUse || new Date());
     const targetWeekLabel = weekLabel || week.weekLabel;
 
     const query = {
-      dateString: { $gte: week.startDateString, $lte: week.endDateString }
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
     };
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
@@ -723,8 +739,8 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
       }
       const rec = empMap[key];
       if (a.status !== 'Absent') rec.workingDays += 1;
-      if (a.status === 'Present') rec.presentDays += 1;
-      else if (a.status === 'Late') rec.lateDays += 1;
+      if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
+      if (a.status === 'Late') rec.lateDays += 1;
       else if (a.status === 'Half') rec.halfDays += 1;
       else if (a.status === 'Absent') rec.absentDays += 1;
       rec.scheduledHours += (a.scheduledHours || 0);
@@ -770,11 +786,19 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
 exports.exportWeeklyAttendancePDF = async (req, res) => {
   try {
     const { weekLabel, date, shopId, employeeId } = req.query;
-    const week = getWeekRange(date || new Date());
+    let dateToUse = date;
+    if (weekLabel) {
+      const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+      if (firstPart) dateToUse = firstPart;
+    }
+    const week = getWeekRange(dateToUse || new Date());
     const targetWeekLabel = weekLabel || week.weekLabel;
 
     const query = {
-      dateString: { $gte: week.startDateString, $lte: week.endDateString }
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
     };
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
@@ -802,8 +826,8 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
       }
       const rec = empMap[key];
       if (a.status !== 'Absent') rec.workingDays += 1;
-      if (a.status === 'Present') rec.presentDays += 1;
-      else if (a.status === 'Late') rec.lateDays += 1;
+      if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
+      if (a.status === 'Late') rec.lateDays += 1;
       else if (a.status === 'Half') rec.halfDays += 1;
       else if (a.status === 'Absent') rec.absentDays += 1;
       rec.scheduledHours += (a.scheduledHours || 0);
@@ -1281,7 +1305,7 @@ exports.exportEmployeeMonthlyPDF = async (req, res) => {
     const employee = await Employee.findById(employeeId).populate('assignedShop');
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
-    const { targetYear, monthStart, monthEnd, monthLabel } = period;
+    const { targetYear, targetMonth, monthStart, monthEnd, monthLabel } = period;
 
     const startStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
     const lastDay = new Date(targetYear, targetMonth, 0).getDate();
