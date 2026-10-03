@@ -91,6 +91,13 @@ export default function WeeklySalaryPage() {
   const [adjReason, setAdjReason] = useState('');
   const [adjSaving, setAdjSaving] = useState(false);
 
+  // Direct Deduction Modal state
+  const [deductionModalOpen, setDeductionModalOpen] = useState(false);
+  const [deductionTargetSalary, setDeductionTargetSalary] = useState(null);
+  const [deductionAmountInput, setDeductionAmountInput] = useState('');
+  const [deductionReasonInput, setDeductionReasonInput] = useState('');
+  const [deductionSaving, setDeductionSaving] = useState(false);
+
   // Finalize state
   const [finalizing, setFinalizing] = useState(false);
 
@@ -284,6 +291,41 @@ export default function WeeklySalaryPage() {
       }
     } catch (err) {
       showNotification(err.response?.data?.message || 'Failed to remove adjustment.', true);
+    }
+  };
+
+  const openEditDeductionModal = (salary) => {
+    setDeductionTargetSalary(salary);
+    setDeductionAmountInput(salary.manualDeductions ? String(salary.manualDeductions) : '0');
+    setDeductionReasonInput('Manual deduction adjustment');
+    setDeductionModalOpen(true);
+  };
+
+  const handleSaveDeduction = async (e) => {
+    e.preventDefault();
+    const amount = Number(deductionAmountInput);
+    if (isNaN(amount) || amount < 0) {
+      showNotification('Deduction amount must be 0 or a positive number.', true);
+      return;
+    }
+    setDeductionSaving(true);
+    try {
+      const res = await axios.put(`${API_BASE_URL}/salaries/${deductionTargetSalary._id}/deduction`, {
+        deductionAmount: amount,
+        reason: deductionReasonInput.trim() || 'Manual deduction adjustment'
+      });
+      if (res.data.success) {
+        showNotification(res.data.message || 'Weekly salary deduction updated.');
+        setDeductionModalOpen(false);
+        if (detailSalary && detailSalary._id === deductionTargetSalary._id) {
+          await handleViewDetail(deductionTargetSalary);
+        }
+        fetchWeekInfoAndSalaries();
+      }
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to update deduction.', true);
+    } finally {
+      setDeductionSaving(false);
     }
   };
 
@@ -633,13 +675,24 @@ export default function WeeklySalaryPage() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', gap: '4px' }}
-                        onClick={() => handleViewDetail(s)}
-                      >
-                        <Eye size={13} /> Details
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', borderColor: '#fca5a5' }}
+                          onClick={() => openEditDeductionModal(s)}
+                          disabled={isFinalized(s)}
+                          title="Edit Employee Deduction"
+                        >
+                          <Edit2 size={12} /> Edit Ded.
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => handleViewDetail(s)}
+                        >
+                          <Eye size={13} /> Details
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -850,8 +903,19 @@ export default function WeeklySalaryPage() {
                     borderRadius: '10px',
                     padding: '16px 18px'
                   }}>
-                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#475569', textTransform: 'uppercase', marginBottom: '12px' }}>
-                      Final Salary Calculation
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>
+                        Final Salary Calculation
+                      </div>
+                      {!isFinalized(activeSalary) && (
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: '11px', padding: '3px 10px', color: '#dc2626', borderColor: '#fca5a5' }}
+                          onClick={() => openEditDeductionModal(activeSalary)}
+                        >
+                          <Edit2 size={12} /> Edit Salary Deduction
+                        </button>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1184,6 +1248,106 @@ export default function WeeklySalaryPage() {
                 <button type="button" className="btn btn-outline" onClick={() => setAdjModalOpen(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={adjSaving}>
                   {adjSaving ? 'Saving...' : adjEditTarget ? 'Update Adjustment' : 'Add Adjustment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== EDIT WEEKLY DEDUCTION MODAL ===== */}
+      {deductionModalOpen && deductionTargetSalary && (
+        <div className="modal-overlay" style={{ zIndex: 10002 }}>
+          <div className="modal-card" style={{ maxWidth: '480px' }}>
+            <div className="modal-header" style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca' }}>
+              <div>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <TrendingDown size={18} color="#dc2626" />
+                  Edit Salary Deduction
+                </h2>
+                <div style={{ fontSize: '12px', color: '#7f1d1d', marginTop: '2px' }}>
+                  Worker: <strong>{deductionTargetSalary.employeeName}</strong> • Period: {deductionTargetSalary.weekLabel}
+                </div>
+              </div>
+              <button onClick={() => setDeductionModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X size={18} color="#991b1b" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDeduction}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Summary calculation pill */}
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748b' }}>Net Attendance Pay:</span>
+                    <span style={{ fontWeight: 600 }}>£{(deductionTargetSalary.netAttendancePay || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748b' }}>Allowances &amp; Commission:</span>
+                    <span style={{ fontWeight: 600, color: '#16a34a' }}>
+                      +£{((deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0)).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, color: '#0f172a' }}>
+                    Deduction Amount (£) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="form-input"
+                    placeholder="Enter deduction amount in £"
+                    style={{ fontSize: '15px', fontWeight: 700, color: '#dc2626' }}
+                    value={deductionAmountInput}
+                    onChange={(e) => setDeductionAmountInput(e.target.value)}
+                    required
+                  />
+                  <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                    Enter 0 to clear all manual deductions for this worker's weekly salary.
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, color: '#0f172a' }}>
+                    Reason / Notes for Deduction
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Salary advance, equipment damage, manual adjustment"
+                    value={deductionReasonInput}
+                    onChange={(e) => setDeductionReasonInput(e.target.value)}
+                  />
+                </div>
+
+                {/* Live Preview of recalculated final weekly salary */}
+                {(() => {
+                  const att = deductionTargetSalary.netAttendancePay || 0;
+                  const allow = (deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0);
+                  const ded = Number(deductionAmountInput) || 0;
+                  const newFinal = Math.max(0, att + allow - ded);
+
+                  return (
+                    <div style={{ background: '#ecfdf5', padding: '12px 14px', borderRadius: '8px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>New Final Weekly Salary</div>
+                        <div style={{ fontSize: '11px', color: '#047857' }}>Calculated dynamically after deduction</div>
+                      </div>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>
+                        £{newFinal.toFixed(2)}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setDeductionModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ background: '#dc2626', borderColor: '#dc2626' }} disabled={deductionSaving}>
+                  {deductionSaving ? 'Saving...' : 'Save Salary Deduction'}
                 </button>
               </div>
             </form>

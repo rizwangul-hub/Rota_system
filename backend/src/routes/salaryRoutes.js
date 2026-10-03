@@ -16,10 +16,11 @@ router.get('/:id', authenticate, authorize('ADMIN', 'SALARY_DISTRIBUTOR'), salar
 router.get('/:id/payments', authenticate, authorize('ADMIN', 'SALARY_DISTRIBUTOR'), salaryController.getSalaryPayments);
 router.get('/ledger/employee/:employeeId', authenticate, authorize('ADMIN', 'SALARY_DISTRIBUTOR'), salaryController.getEmployeeLedger);
 
-// Admin adds/edits/removes adjustments
+// Admin adds/edits/removes adjustments & deductions
 router.post('/:id/adjustments', authenticate, authorize('ADMIN'), salaryController.addAdjustment);
 router.put('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), salaryController.updateAdjustment);
 router.delete('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), salaryController.removeAdjustment);
+router.put('/:id/deduction', authenticate, authorize('ADMIN'), salaryController.updateSalaryDeduction);
 
 // Admin finalizes weekly salary
 router.post('/:id/finalize', authenticate, authorize('ADMIN'), salaryController.finalizeWeeklySalary);

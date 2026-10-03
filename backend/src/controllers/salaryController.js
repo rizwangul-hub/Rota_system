@@ -582,6 +582,82 @@ exports.removeAdjustment = async (req, res) => {
 };
 
 /**
+ * Admin directly updates/edits deduction on a weekly salary record
+ */
+exports.updateSalaryDeduction = async (req, res) => {
+  try {
+    const { id } = req.params; // weeklySalary id
+    const { deductionAmount, reason } = req.body;
+
+    const salary = await WeeklySalary.findById(id);
+    if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
+
+    if (['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status)) {
+      return res.status(403).json({ success: false, message: 'Cannot edit deduction on finalized salary.' });
+    }
+
+    const numAmount = Number(deductionAmount);
+    if (deductionAmount === undefined || isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, message: 'Deduction amount must be a valid non-negative number.' });
+    }
+
+    const adjReason = (reason && reason.trim()) ? reason.trim() : 'Manual deduction adjustment';
+
+    // Find any existing MANUAL_DEDUCTION or OTHER_DEDUCTION adjustment for this weekly salary
+    let manualAdj = await SalaryAdjustment.findOne({
+      weeklySalary: salary._id,
+      type: { $in: ['MANUAL_DEDUCTION', 'OTHER_DEDUCTION'] }
+    });
+
+    if (numAmount === 0) {
+      // Remove deduction adjustments for this weekly salary
+      await SalaryAdjustment.deleteMany({
+        weeklySalary: salary._id,
+        type: { $in: ['MANUAL_DEDUCTION', 'OTHER_DEDUCTION'] }
+      });
+    } else if (manualAdj) {
+      // Update existing deduction adjustment
+      manualAdj.amount = numAmount;
+      manualAdj.reason = adjReason;
+      manualAdj.type = 'MANUAL_DEDUCTION';
+      await manualAdj.save();
+    } else {
+      // Create new MANUAL_DEDUCTION adjustment
+      await SalaryAdjustment.create({
+        weeklySalary: salary._id,
+        employee: salary.employee,
+        type: 'MANUAL_DEDUCTION',
+        amount: numAmount,
+        reason: adjReason,
+        addedBy: req.user._id,
+        addedByName: req.user.name || 'Admin'
+      });
+    }
+
+    await recalculateWeeklySalary(salary);
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: 'SALARY_DEDUCTION_UPDATED',
+      recordType: 'WeeklySalary',
+      recordId: salary._id,
+      details: `Updated deduction to £${numAmount.toFixed(2)} (${adjReason}) for ${salary.employeeName} for week ${salary.weekLabel}`,
+      req
+    });
+
+    res.json({
+      success: true,
+      message: `Deduction updated to £${numAmount.toFixed(2)} for ${salary.employeeName}.`,
+      salary
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to update salary deduction.');
+  }
+};
+
+/**
  * Admin finalizes weekly salary (Locks salary & creates Ledger entry without duplicates)
  */
 exports.finalizeWeeklySalary = async (req, res) => {
