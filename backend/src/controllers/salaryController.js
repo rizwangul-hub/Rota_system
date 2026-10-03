@@ -8,7 +8,7 @@ const SalaryAdjustment = require('../models/SalaryAdjustment');
 const SalaryPayment = require('../models/SalaryPayment');
 const Bonus = require('../models/Bonus');
 const LedgerTransaction = require('../models/LedgerTransaction');
-const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents } = require('../utils/calc');
+const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { validatePaymentAmount, calculatePaymentState } = require('../utils/payment');
 
@@ -178,20 +178,27 @@ exports.generateWeeklySalary = async (req, res) => {
       const scheduledHours = Number(records.reduce((sum, r) => sum + (r.scheduledHours || 0), 0).toFixed(2));
       const actualHours = Number(records.reduce((sum, r) => sum + (r.actualHours || 0), 0).toFixed(2));
 
-      const grossDailyWages = Number(records.reduce((sum, r) => {
+      // Dynamically calculate lateness deductions and pay for each attendance record
+      records.forEach(r => {
         const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
-        return sum + wage;
-      }, 0).toFixed(2));
+        r.dailyWage = wage;
+        const calcResult = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || r.shiftStart || '09:00',
+          workerEndTime: r.workerEndTime || r.shiftEnd || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+        r.lateMinutes = calcResult.lateMinutes;
+        r.lateDeduction = calcResult.lateDeduction;
+        r.attendancePay = calcResult.attendancePay;
+      });
 
+      const grossDailyWages = Number(records.reduce((sum, r) => sum + (r.dailyWage || 50), 0).toFixed(2));
       const lateDeductions = Number(records.reduce((sum, r) => sum + (r.lateDeduction || 0), 0).toFixed(2));
-
-      const netAttendancePay = Number(records.reduce((sum, r) => {
-        const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
-        const attPay = (r.attendancePay && r.attendancePay > 0)
-          ? r.attendancePay
-          : (r.status === 'Absent' ? 0 : Math.max(0, wage - (r.lateDeduction || 0)));
-        return sum + attPay;
-      }, 0).toFixed(2));
+      const netAttendancePay = Number(records.reduce((sum, r) => sum + (r.attendancePay || 0), 0).toFixed(2));
 
       // Shops worked during the week
       const shopsWorked = Array.from(new Set(records.map(r => r.shopName).filter(Boolean)));
@@ -203,10 +210,6 @@ exports.generateWeeklySalary = async (req, res) => {
 
       // Build day-by-day attendance breakdown
       const breakdown = records.map(r => {
-        const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
-        const attPay = (r.attendancePay && r.attendancePay > 0)
-          ? r.attendancePay
-          : (r.status === 'Absent' ? 0 : Math.max(0, wage - (r.lateDeduction || 0)));
         return {
           attendanceId: r._id,
           dateString: r.dateString,
@@ -219,10 +222,10 @@ exports.generateWeeklySalary = async (req, res) => {
           scheduledHours: r.scheduledHours || 0,
           actualHours: r.actualHours || 0,
           status: r.status,
-          dailyWage: wage,
+          dailyWage: r.dailyWage || 50,
           lateMinutes: r.lateMinutes || 0,
           lateDeduction: r.lateDeduction || 0,
-          attendancePay: attPay,
+          attendancePay: r.attendancePay || 0,
           remarks: r.remarks || ''
         };
       });
@@ -285,11 +288,21 @@ exports.generateWeeklySalary = async (req, res) => {
         console.warn('Recalculate warning:', recalcErr.message);
       }
 
-      // Link attendance records to weeklySalary
-      await Attendance.updateMany(
-        { _id: { $in: records.map(r => r._id) } },
-        { $set: { weeklySalary: salaryDoc._id } }
-      );
+      // Link attendance records to weeklySalary and save updated lateness deductions
+      for (const r of records) {
+        await Attendance.updateOne(
+          { _id: r._id },
+          {
+            $set: {
+              weeklySalary: salaryDoc._id,
+              lateMinutes: r.lateMinutes,
+              lateDeduction: r.lateDeduction,
+              attendancePay: r.attendancePay,
+              dailyWage: r.dailyWage
+            }
+          }
+        );
+      }
 
       generatedSalaries.push(salaryDoc);
     }

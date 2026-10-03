@@ -974,12 +974,18 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
         }
         const rec = empMap[key];
         const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-        const attPay = (a.attendancePay && a.attendancePay > 0)
-          ? a.attendancePay
-          : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+        const calcResult = calculateAttendanceRecord({
+          dailyWage: effectiveWage,
+          shiftStart: a.shiftStart || '09:00',
+          shiftEnd: a.shiftEnd || '19:00',
+          timeReached: a.timeReached || a.shiftStart || '09:00',
+          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+          status: a.status,
+          gracePeriodMinutes: 15
+        });
         rec.grossDailyWages += effectiveWage;
-        rec.lateDeductions += (a.lateDeduction || 0);
-        rec.netAttendancePay += attPay;
+        rec.lateDeductions += calcResult.lateDeduction;
+        rec.netAttendancePay += calcResult.attendancePay;
       });
 
       salaries = Object.values(empMap).map(rec => {
@@ -1155,6 +1161,26 @@ exports.getEmployeeMonthlyReport = async (req, res) => {
     const attendances = await Attendance.find({
       employee: employeeId,
       dateString: { $gte: startStr, $lte: endStr }
+    });
+
+    attendances.forEach(r => {
+      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      r.dailyWage = wage;
+      if (r.status !== 'Absent') {
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || '09:00',
+          workerEndTime: r.workerEndTime || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+        r.hourlyWage = calc.hourlyWage;
+        r.lateMinutes = calc.lateMinutes;
+        r.lateDeduction = calc.lateDeduction;
+        r.attendancePay = calc.attendancePay;
+      }
     });
 
     const attendanceSummary = {
@@ -1347,6 +1373,25 @@ exports.exportEmployeeMonthlyPDF = async (req, res) => {
     const endStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     const attendances = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } });
+    attendances.forEach(r => {
+      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      r.dailyWage = wage;
+      if (r.status !== 'Absent') {
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || '09:00',
+          workerEndTime: r.workerEndTime || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+        r.hourlyWage = calc.hourlyWage;
+        r.lateMinutes = calc.lateMinutes;
+        r.lateDeduction = calc.lateDeduction;
+        r.attendancePay = calc.attendancePay;
+      }
+    });
     const attendanceSummary = {
       workingDays: attendances.filter(a => a.status !== 'Absent').length,
       present: attendances.filter(a => a.status === 'Present').length,
