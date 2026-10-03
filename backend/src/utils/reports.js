@@ -966,6 +966,75 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
 }
 
 /**
+ * Generate Excel workbook for Weekly Salary Report
+ */
+async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Weekly Salary');
+
+  sheet.mergeCells('A1:L1');
+  const title = sheet.getCell('A1');
+  title.value = `PixxTechnologies UK - Weekly Salary Report (${weekLabel})`;
+  title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  title.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 30;
+
+  const headers = [
+    'Shop', 'ID', 'Employee Name', 'Week Period',
+    'Attendance Pay (£)', 'Allowances (£)', 'Bonus (£)',
+    'Deductions (£)', 'Final Salary (£)', 'Paid (£)', 'Outstanding (£)', 'Status'
+  ];
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+
+  salaries.forEach(s => {
+    const allow = (s.travelAllowance || 0) + (s.otherAllowances || 0);
+    sheet.addRow([
+      s.shopName || '',
+      s.employeeId || '',
+      s.employeeName || '',
+      s.weekLabel || weekLabel,
+      Number((s.netAttendancePay || 0).toFixed(2)),
+      Number(allow.toFixed(2)),
+      Number((s.bonus || 0).toFixed(2)),
+      Number((s.manualDeductions || 0).toFixed(2)),
+      Number((s.finalSalary || 0).toFixed(2)),
+      Number((s.totalPaid || 0).toFixed(2)),
+      Number((s.balanceRemaining || 0).toFixed(2)),
+      s.status || 'FINALIZED'
+    ]);
+  });
+
+  sheet.addRow([]);
+  const sumRow = sheet.addRow([
+    'TOTALS', '', '', `Staff: ${salaries.length}`,
+    Number((totals.totalAttendancePay || 0).toFixed(2)),
+    Number((totals.totalAllowances || 0).toFixed(2)),
+    Number((totals.totalBonus || 0).toFixed(2)),
+    Number((totals.totalDeductions || 0).toFixed(2)),
+    Number((totals.totalFinalSalary || 0).toFixed(2)),
+    Number((totals.totalPaid || 0).toFixed(2)),
+    Number((totals.totalOutstanding || 0).toFixed(2)),
+    ''
+  ]);
+  sumRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  });
+
+  sheet.columns.forEach(col => { col.width = 16; });
+  sheet.getColumn(3).width = 24;
+  sheet.getColumn(4).width = 24;
+  return workbook;
+}
+
+/**
  * Generate PDF for Weekly Salary Report
  */
 async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, generatedBy = 'Admin') {
@@ -1081,6 +1150,71 @@ async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, 
 }
 
 /**
+ * Generate Excel workbook for Employee Yearly Report
+ */
+async function buildEmployeeYearlyExcel(employeeName, employeeId, shopName, year, monthlyRows, yearlyTotals = {}) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet(`Yearly ${year}`);
+
+  sheet.mergeCells('A1:J1');
+  const title = sheet.getCell('A1');
+  title.value = `PixxTechnologies UK - Annual Employee Payroll Report (${year}): ${employeeName.toUpperCase()} (${employeeId})`;
+  title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  title.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 30;
+
+  const headers = [
+    'Month', 'Work Days', 'Hours Worked', 'Attendance Pay (£)', 'Allowances (£)',
+    'Bonus (£)', 'Deductions (£)', 'Final Salary (£)', 'Total Paid (£)', 'Outstanding (£)'
+  ];
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+
+  monthlyRows.forEach(m => {
+    sheet.addRow([
+      m.monthName,
+      m.workingDays || 0,
+      Number((m.actualHours || 0).toFixed(2)),
+      Number((m.attendancePay || 0).toFixed(2)),
+      Number((m.allowances || 0).toFixed(2)),
+      Number((m.bonus || 0).toFixed(2)),
+      Number((m.deductions || 0).toFixed(2)),
+      Number((m.finalSalary || 0).toFixed(2)),
+      Number((m.paid || 0).toFixed(2)),
+      Number((m.outstanding || 0).toFixed(2))
+    ]);
+  });
+
+  sheet.addRow([]);
+  const sumRow = sheet.addRow([
+    `ANNUAL TOTAL (${year})`,
+    yearlyTotals.totalWorkingDays || 0,
+    Number((yearlyTotals.totalActualHours || 0).toFixed(2)),
+    Number((yearlyTotals.totalAttendancePay || 0).toFixed(2)),
+    Number((yearlyTotals.totalAllowances || 0).toFixed(2)),
+    Number((yearlyTotals.totalBonus || 0).toFixed(2)),
+    Number((yearlyTotals.totalDeductions || 0).toFixed(2)),
+    Number((yearlyTotals.totalFinalSalary || 0).toFixed(2)),
+    Number((yearlyTotals.totalPaid || 0).toFixed(2)),
+    Number((yearlyTotals.totalOutstanding || 0).toFixed(2))
+  ]);
+  sumRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
+  });
+
+  sheet.columns.forEach(col => { col.width = 16; });
+  sheet.getColumn(1).width = 18;
+  return workbook;
+}
+
+/**
  * Generate PDF for Employee Yearly Report
  */
 async function buildEmployeeYearlyPDF(res, employeeName, employeeId, shopName, year, monthlyRows, yearlyTotals = {}, generatedBy = 'Admin') {
@@ -1181,6 +1315,79 @@ async function buildBonusPDF(res, bonuses, month, year, totals = {}, generatedBy
 }
 
 /**
+ * Generate Excel workbook for Shop Labour Hours
+ */
+async function buildShopLabourExcel(shopData, periodLabel = '', includeWageCost = true) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Shop Labour Hours');
+
+  const columnCount = includeWageCost ? 8 : 7;
+  sheet.mergeCells(1, 1, 1, columnCount);
+  const title = sheet.getCell('A1');
+  title.value = `PixxTechnologies UK - Shop Labour Hours Report (${periodLabel})`;
+  title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  title.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 30;
+
+  const headers = [
+    'Shop Location', 'Employee ID', 'Employee Name', 'Work Days',
+    'Scheduled Hours', 'Actual Hours Worked', 'Late (min)',
+    ...(includeWageCost ? ['Attendance Pay (£)'] : [])
+  ];
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+
+  let grandDays = 0, grandSched = 0, grandActual = 0, grandLate = 0, grandCost = 0;
+
+  shopData.forEach(s => {
+    (s.employees || []).forEach(e => {
+      grandDays += e.workingDays || 0;
+      grandSched += e.scheduledHours || 0;
+      grandActual += e.hours || 0;
+      grandLate += e.lateMinutes || 0;
+      grandCost += e.wageCost || 0;
+
+      sheet.addRow([
+        s.shopName,
+        e.employeeId || '',
+        e.employeeName || '',
+        e.workingDays || 0,
+        Number((e.scheduledHours || 0).toFixed(2)),
+        Number((e.hours || 0).toFixed(2)),
+        e.lateMinutes || 0,
+        ...(includeWageCost ? [Number((e.wageCost || 0).toFixed(2))] : [])
+      ]);
+    });
+  });
+
+  sheet.addRow([]);
+  const sumRow = sheet.addRow([
+    'TOTALS',
+    '', '',
+    grandDays,
+    Number(grandSched.toFixed(2)),
+    Number(grandActual.toFixed(2)),
+    grandLate,
+    ...(includeWageCost ? [Number(grandCost.toFixed(2))] : [])
+  ]);
+  sumRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  });
+
+  sheet.columns.forEach(col => { col.width = 16; });
+  sheet.getColumn(1).width = 20;
+  sheet.getColumn(3).width = 22;
+  return workbook;
+}
+
+/**
  * Generate PDF for Shop Labour Hours Report
  */
 async function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy = 'Admin', includeWageCost = true) {
@@ -1246,6 +1453,68 @@ async function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy =
 }
 
 /**
+ * Generate Excel workbook for Salary Payments
+ */
+async function buildPaymentsExcel(payments, periodLabel = '', totals = {}, cashBankSummary = {}) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Salary Payments');
+
+  sheet.mergeCells('A1:J1');
+  const title = sheet.getCell('A1');
+  title.value = `PixxTechnologies UK - Salary Payment Disbursement Report (${periodLabel})`;
+  title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  title.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 30;
+
+  const headers = [
+    'Employee ID', 'Employee Name', 'Shop', 'Salary Week', 'Payment Date',
+    'Amount (£)', 'Method', 'Paid By', 'Reference', 'Notes'
+  ];
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+
+  payments.forEach(p => {
+    sheet.addRow([
+      p.employeeId || '',
+      p.employeeName || '',
+      p.shopName || '',
+      p.weekLabel || '',
+      p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB') : '',
+      Number((p.amount || 0).toFixed(2)),
+      p.paymentMethod || 'Cash',
+      p.paidByName || '',
+      p.clientReference || '',
+      p.notes || ''
+    ]);
+  });
+
+  sheet.addRow([]);
+  const sumRow = sheet.addRow([
+    'TOTALS',
+    `Payments: ${payments.length}`,
+    '', '', '',
+    Number((totals.totalPaid || 0).toFixed(2)),
+    `Cash: £${(cashBankSummary.cashTotal || 0).toFixed(2)} | Bank: £${(cashBankSummary.bankTotal || 0).toFixed(2)}`,
+    '', '', ''
+  ]);
+  sumRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  });
+
+  sheet.columns.forEach(col => { col.width = 16; });
+  sheet.getColumn(2).width = 22;
+  sheet.getColumn(4).width = 22;
+  return workbook;
+}
+
+/**
  * Generate PDF for Salary Payments Report
  */
 async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, cashBankSummary = {}, generatedBy = 'Admin') {
@@ -1292,6 +1561,64 @@ async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, ca
 
   drawPdfSignatures(doc, y + 15, true);
   return await sendPdfOrBuffer(res, doc, `Salary_Payments_${periodLabel.replace(/\s+/g, '_')}.pdf`);
+}
+
+/**
+ * Generate Excel workbook for Employee Salary Ledger
+ */
+async function buildLedgerExcel(employee, transactions, summary = {}) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Salary Ledger');
+
+  sheet.mergeCells('A1:G1');
+  const title = sheet.getCell('A1');
+  title.value = `PixxTechnologies UK - Employee Financial Ledger: ${employee.name.toUpperCase()} (${employee.employeeId})`;
+  title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  title.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 30;
+
+  const headers = [
+    'Transaction Date', 'Type', 'Description', 'Reference Type',
+    'Earned / Credit (£)', 'Paid / Debit (£)', 'Running Balance (£)'
+  ];
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+
+  transactions.forEach(t => {
+    sheet.addRow([
+      t.date ? new Date(t.date).toLocaleDateString('en-GB') : '',
+      t.transactionType || '',
+      t.description || '',
+      t.referenceType || '',
+      Number((t.amountEarned || 0).toFixed(2)),
+      Number((t.amountPaid || 0).toFixed(2)),
+      Number((t.runningBalance || 0).toFixed(2))
+    ]);
+  });
+
+  sheet.addRow([]);
+  const sumRow = sheet.addRow([
+    'TOTALS & BALANCE',
+    `Transactions: ${transactions.length}`,
+    '', '',
+    Number((summary.totalEarned || 0).toFixed(2)),
+    Number((summary.totalPaid || 0).toFixed(2)),
+    Number((summary.outstanding || 0).toFixed(2))
+  ]);
+  sumRow.eachCell(cell => {
+    cell.font = { name: 'Arial', size: 10, bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  });
+
+  sheet.columns.forEach(col => { col.width = 18; });
+  sheet.getColumn(3).width = 30;
+  return workbook;
 }
 
 /**
