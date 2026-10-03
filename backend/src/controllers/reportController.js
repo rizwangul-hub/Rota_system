@@ -659,14 +659,22 @@ function buildWeeklyAttendanceData(attendances) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const empMap = {};
 
-  attendances.forEach(a => {
-    const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
-    if (!empMap[key]) {
-      empMap[key] = {
-        employee: a.employee,
-        employeeName: a.employeeName,
-        shopId: a.shop,
-        shopName: a.shopName,
+  (attendances || []).forEach(a => {
+    if (!a) return;
+    const empObj = a.employee;
+    const empKey = empObj
+      ? (empObj._id ? empObj._id.toString() : empObj.toString())
+      : (a.employeeId || a.employeeName || (a._id ? a._id.toString() : 'unknown'));
+
+    const empName = a.employeeName || (empObj && empObj.name) || 'Worker';
+    const sName = a.shopName || (a.shop && a.shop.name) || 'Shop';
+
+    if (!empMap[empKey]) {
+      empMap[empKey] = {
+        employee: empObj ? (empObj._id || empObj) : null,
+        employeeName: empName,
+        shopId: a.shop ? (a.shop._id || a.shop) : null,
+        shopName: sName,
         dailySchedule: { Sun: 'Off', Mon: 'Off', Tue: 'Off', Wed: 'Off', Thu: 'Off', Fri: 'Off', Sat: 'Off' },
         workingDays: 0,
         presentDays: 0,
@@ -679,12 +687,13 @@ function buildWeeklyAttendanceData(attendances) {
       };
     }
 
-    const rec = empMap[key];
-    const dayIdx = getDayOfWeekUK(a.dateString);
+    const rec = empMap[empKey];
+    const dateVal = a.dateString || a.date;
+    const dayIdx = getDayOfWeekUK(dateVal);
     const dayName = dayNames[dayIdx];
     if (dayName) {
       if (a.status !== 'Absent') {
-        rec.dailySchedule[dayName] = a.shopName || 'Present';
+        rec.dailySchedule[dayName] = sName || 'Present';
       } else {
         rec.dailySchedule[dayName] = 'Off';
       }
@@ -721,7 +730,7 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
   try {
     const { weekLabel, date, shopId, employeeId } = req.query;
     let dateToUse = date;
-    if (weekLabel) {
+    if (weekLabel && typeof weekLabel === 'string') {
       const firstPart = weekLabel.split(/–|-|to/)[0].trim();
       if (firstPart) dateToUse = firstPart;
     }
@@ -739,6 +748,7 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
 
     const attendances = await Attendance.find(query)
       .populate('employee')
+      .populate('shop')
       .sort({ shopName: 1, employeeName: 1, dateString: 1 });
 
     const { records, summary } = buildWeeklyAttendanceData(attendances);

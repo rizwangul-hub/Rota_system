@@ -130,12 +130,20 @@ function calculateAttendanceRecord({
  * Get day of week (0=Sunday ... 6=Saturday) in UK London time
  */
 function getDayOfWeekUK(dateInput = new Date()) {
-  const d = typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
-    ? new Date(`${dateInput}T12:00:00Z`)
-    : new Date(dateInput);
-  const dayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/London', weekday: 'short' }).format(d);
-  const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return map[dayStr] !== undefined ? map[dayStr] : d.getDay();
+  try {
+    let d;
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      d = new Date(`${dateInput}T12:00:00Z`);
+    } else {
+      d = new Date(dateInput || Date.now());
+    }
+    if (isNaN(d.getTime())) d = new Date();
+    const dayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/London', weekday: 'short' }).format(d);
+    const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return map[dayStr] !== undefined ? map[dayStr] : d.getDay();
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -160,35 +168,48 @@ function getDefaultShiftTimesForDate(dateObj = new Date()) {
  */
 function formatUKDate(dateInput) {
   if (!dateInput) return '';
-  const d = typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
-    ? new Date(`${dateInput}T12:00:00Z`)
-    : new Date(dateInput);
-  if (isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(d);
+  try {
+    let d = typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
+      ? new Date(`${dateInput}T12:00:00Z`)
+      : new Date(dateInput);
+    if (isNaN(d.getTime())) return String(dateInput || '');
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(d);
+  } catch {
+    return String(dateInput || '');
+  }
 }
 
 /**
  * Get date string "YYYY-MM-DD" in UK London time
  */
 function getUKDateString(dateInput = new Date()) {
-  const d = typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
-    ? new Date(`${dateInput}T12:00:00Z`)
-    : new Date(dateInput);
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(d);
-  const year = parts.find(p => p.type === 'year').value;
-  const month = parts.find(p => p.type === 'month').value;
-  const day = parts.find(p => p.type === 'day').value;
-  return `${year}-${month}-${day}`;
+  try {
+    let d = typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
+      ? new Date(`${dateInput}T12:00:00Z`)
+      : new Date(dateInput || Date.now());
+    if (isNaN(d.getTime())) d = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(d);
+    const year = parts.find(p => p.type === 'year')?.value || String(d.getFullYear());
+    const month = parts.find(p => p.type === 'month')?.value || String(d.getMonth() + 1).padStart(2, '0');
+    const day = parts.find(p => p.type === 'day')?.value || String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 }
 
 
