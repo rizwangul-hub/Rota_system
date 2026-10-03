@@ -34,7 +34,7 @@ const {
   getShopColor,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
-const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, safeObjectId } = require('../utils/calc');
+const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, safeObjectId, getDayOfWeekUK } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const {
   attendanceOperatorRecord,
