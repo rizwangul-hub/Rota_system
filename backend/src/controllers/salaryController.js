@@ -3,6 +3,7 @@ const WeeklySalary = require('../models/WeeklySalary');
 const { sendServerError } = require('../utils/httpErrors');
 const Attendance = require('../models/Attendance');
 const Employee = require('../models/Employee');
+const Shop = require('../models/Shop');
 const SalaryAdjustment = require('../models/SalaryAdjustment');
 const SalaryPayment = require('../models/SalaryPayment');
 const Bonus = require('../models/Bonus');
@@ -119,7 +120,7 @@ exports.generateWeeklySalary = async (req, res) => {
     };
     if (shopId) attendanceQuery.shop = shopId;
 
-    const attendances = await Attendance.find(attendanceQuery);
+    const attendances = await Attendance.find(attendanceQuery).populate('employee').populate('shop');
 
     // 2. Query pending attendance for warning count
     const pendingQuery = {
@@ -143,26 +144,32 @@ exports.generateWeeklySalary = async (req, res) => {
     // 3. Group by employee
     const employeeMap = {};
     for (const att of attendances) {
-      const empId = att.employee.toString();
-      if (!employeeMap[empId]) {
-        employeeMap[empId] = {
-          employee: att.employee,
-          employeeName: att.employeeName,
-          employeeId: att.employeeId,
-          shop: att.shop,
-          shopName: att.shopName,
+      const empObj = att.employee;
+      const empKey = empObj
+        ? (empObj._id ? empObj._id.toString() : empObj.toString())
+        : (att.employeeId || att.employeeName || att._id.toString());
+
+      if (!employeeMap[empKey]) {
+        employeeMap[empKey] = {
+          employee: empObj ? (empObj._id || empObj) : att.employee,
+          employeeName: att.employeeName || empObj?.name || 'Worker',
+          employeeId: att.employeeId || empObj?.employeeId || 'EMP',
+          shop: att.shop ? (att.shop._id || att.shop) : null,
+          shopName: att.shopName || att.shop?.name || 'Shop',
           records: []
         };
       }
-      employeeMap[empId].records.push(att);
+      employeeMap[empKey].records.push(att);
     }
 
     const generatedSalaries = [];
     const skippedFinalized = [];
     const { getDayOfWeekUK } = require('../utils/calc');
 
-    for (const empId of Object.keys(employeeMap)) {
-      const group = employeeMap[empId];
+    const defaultShopDoc = await Shop.findOne({ isActive: true }) || await Shop.findOne();
+
+    for (const empKey of Object.keys(employeeMap)) {
+      const group = employeeMap[empKey];
       // Sort records chronologically
       const records = group.records.sort((a, b) => (a.dateString || '').localeCompare(b.dateString || ''));
 
@@ -170,43 +177,67 @@ exports.generateWeeklySalary = async (req, res) => {
       const workingDays = records.filter(r => r.status !== 'Absent').length;
       const scheduledHours = Number(records.reduce((sum, r) => sum + (r.scheduledHours || 0), 0).toFixed(2));
       const actualHours = Number(records.reduce((sum, r) => sum + (r.actualHours || 0), 0).toFixed(2));
-      const grossDailyWages = Number(records.reduce((sum, r) => sum + (r.dailyWage || 0), 0).toFixed(2));
+
+      const grossDailyWages = Number(records.reduce((sum, r) => {
+        const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+        return sum + wage;
+      }, 0).toFixed(2));
+
       const lateDeductions = Number(records.reduce((sum, r) => sum + (r.lateDeduction || 0), 0).toFixed(2));
-      const netAttendancePay = Number(records.reduce((sum, r) => sum + (r.attendancePay || 0), 0).toFixed(2));
+
+      const netAttendancePay = Number(records.reduce((sum, r) => {
+        const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+        const attPay = (r.attendancePay && r.attendancePay > 0)
+          ? r.attendancePay
+          : (r.status === 'Absent' ? 0 : Math.max(0, wage - (r.lateDeduction || 0)));
+        return sum + attPay;
+      }, 0).toFixed(2));
 
       // Shops worked during the week
       const shopsWorked = Array.from(new Set(records.map(r => r.shopName).filter(Boolean)));
-      const primaryShop = records[records.length - 1].shop || group.shop;
-      const primaryShopName = shopsWorked.length === 1 ? shopsWorked[0] : shopsWorked.join(' / ');
+      const lastRecShop = records[records.length - 1].shop;
+      let primaryShop = (lastRecShop ? (lastRecShop._id || lastRecShop) : null) || group.shop || defaultShopDoc?._id;
+      let primaryShopName = shopsWorked.length === 1
+        ? shopsWorked[0]
+        : (shopsWorked.length > 1 ? shopsWorked.join(' / ') : (group.shopName || defaultShopDoc?.name || 'Shop'));
 
       // Build day-by-day attendance breakdown
-      const breakdown = records.map(r => ({
-        attendanceId: r._id,
-        dateString: r.dateString,
-        dayOfWeek: getDayOfWeekUK(r.dateString),
-        shopName: r.shopName,
-        shiftStart: r.shiftStart,
-        shiftEnd: r.shiftEnd,
-        timeReached: r.timeReached,
-        workerEndTime: r.workerEndTime,
-        scheduledHours: r.scheduledHours,
-        actualHours: r.actualHours,
-        status: r.status,
-        dailyWage: r.dailyWage,
-        lateMinutes: r.lateMinutes,
-        lateDeduction: r.lateDeduction,
-        attendancePay: r.attendancePay,
-        remarks: r.remarks || ''
-      }));
-
-      let salaryDoc = await WeeklySalary.findOne({
-        employee: group.employee,
-        $or: [
-          { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
-          { weekStartDateString: week.startDateString },
-          { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
-        ]
+      const breakdown = records.map(r => {
+        const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+        const attPay = (r.attendancePay && r.attendancePay > 0)
+          ? r.attendancePay
+          : (r.status === 'Absent' ? 0 : Math.max(0, wage - (r.lateDeduction || 0)));
+        return {
+          attendanceId: r._id,
+          dateString: r.dateString,
+          dayOfWeek: getDayOfWeekUK(r.dateString),
+          shopName: r.shopName || 'Shop',
+          shiftStart: r.shiftStart,
+          shiftEnd: r.shiftEnd,
+          timeReached: r.timeReached,
+          workerEndTime: r.workerEndTime,
+          scheduledHours: r.scheduledHours || 0,
+          actualHours: r.actualHours || 0,
+          status: r.status,
+          dailyWage: wage,
+          lateMinutes: r.lateMinutes || 0,
+          lateDeduction: r.lateDeduction || 0,
+          attendancePay: attPay,
+          remarks: r.remarks || ''
+        };
       });
+
+      let salaryDoc = null;
+      if (group.employee) {
+        salaryDoc = await WeeklySalary.findOne({
+          employee: group.employee,
+          $or: [
+            { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
+            { weekStartDateString: week.startDateString },
+            { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
+          ]
+        });
+      }
 
       if (salaryDoc && ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salaryDoc.status)) {
         skippedFinalized.push(group.employeeName);
