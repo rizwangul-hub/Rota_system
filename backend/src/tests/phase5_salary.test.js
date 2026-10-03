@@ -69,17 +69,17 @@ async function runPhase5Tests() {
     const uniqueSuffix = Date.now().toString().slice(-4);
 
     // ----------------------------------------------------
-    // TEST 1 — Monday-Sunday Week Calculation (Requirement 1 & 2)
+    // TEST 1 — Sunday-Saturday Week Calculation (Requirement 1 & 2)
     // ----------------------------------------------------
-    console.log('[TEST 1] Testing automatic Monday–Sunday week range from 06/08/2026...');
+    console.log('[TEST 1] Testing automatic Sunday–Saturday week range from 06/08/2026...');
     const weekCalc = getWeekRange('2026-08-06'); // Thursday 6 August 2026
-    const expectedLabel = '03/08/2026 – 09/08/2026';
-    const isMonToSun = weekCalc.weekLabel === expectedLabel &&
-      weekCalc.startDateString === '2026-08-03' &&
-      weekCalc.endDateString === '2026-08-09';
+    const expectedLabel = '02/08/2026 – 08/08/2026';
+    const isSunToSat = weekCalc.weekLabel === expectedLabel &&
+      weekCalc.startDateString === '2026-08-02' &&
+      weekCalc.endDateString === '2026-08-08';
 
-    if (isMonToSun) {
-      console.log(`✓ PASS: getWeekRange('2026-08-06') resolved: ${weekCalc.weekLabel} (Mon: ${weekCalc.startDateString}, Sun: ${weekCalc.endDateString})`);
+    if (isSunToSat) {
+      console.log(`✓ PASS: getWeekRange('2026-08-06') resolved: ${weekCalc.weekLabel} (Sun: ${weekCalc.startDateString}, Sat: ${weekCalc.endDateString})`);
       passed++;
     } else {
       console.error('✗ FAIL: Test 1 failed:', weekCalc);

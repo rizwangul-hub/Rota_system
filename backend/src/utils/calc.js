@@ -193,7 +193,7 @@ function getUKDateString(dateInput = new Date()) {
 
 
 /**
- * Get ISO Monday and Sunday for a date (UK weekly period: Monday to Sunday)
+ * Get Sunday and Saturday for a date (Weekly period: Sunday to Saturday)
  */
 function getWeekRange(dateInput = new Date()) {
   let dateStr;
@@ -211,22 +211,22 @@ function getWeekRange(dateInput = new Date()) {
   // Noon UTC avoids daylight saving shifts
   const utcDate = new Date(Date.UTC(year, month - 1, dayOfMonth, 12, 0, 0));
   const dayOfWeek = utcDate.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const diffToSunday = -dayOfWeek;
 
-  const mondayUtc = new Date(utcDate);
-  mondayUtc.setUTCDate(utcDate.getUTCDate() + diffToMonday);
+  const sundayUtc = new Date(utcDate);
+  sundayUtc.setUTCDate(utcDate.getUTCDate() + diffToSunday);
 
-  const sundayUtc = new Date(mondayUtc);
-  sundayUtc.setUTCDate(mondayUtc.getUTCDate() + 6);
+  const saturdayUtc = new Date(sundayUtc);
+  saturdayUtc.setUTCDate(sundayUtc.getUTCDate() + 6);
 
-  const startYear = mondayUtc.getUTCFullYear();
-  const startMonth = String(mondayUtc.getUTCMonth() + 1).padStart(2, '0');
-  const startDay = String(mondayUtc.getUTCDate()).padStart(2, '0');
+  const startYear = sundayUtc.getUTCFullYear();
+  const startMonth = String(sundayUtc.getUTCMonth() + 1).padStart(2, '0');
+  const startDay = String(sundayUtc.getUTCDate()).padStart(2, '0');
   const startDateString = `${startYear}-${startMonth}-${startDay}`;
 
-  const endYear = sundayUtc.getUTCFullYear();
-  const endMonth = String(sundayUtc.getUTCMonth() + 1).padStart(2, '0');
-  const endDay = String(sundayUtc.getUTCDate()).padStart(2, '0');
+  const endYear = saturdayUtc.getUTCFullYear();
+  const endMonth = String(saturdayUtc.getUTCMonth() + 1).padStart(2, '0');
+  const endDay = String(saturdayUtc.getUTCDate()).padStart(2, '0');
   const endDateString = `${endYear}-${endMonth}-${endDay}`;
 
   const formattedStartDate = `${startDay}/${startMonth}/${startYear}`;

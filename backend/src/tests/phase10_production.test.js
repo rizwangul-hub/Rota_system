@@ -221,10 +221,10 @@ async function run() {
       assert.equal(outsideGrace.attendancePay, 47.5);
     });
 
-    test('weekly salary uses Monday through Sunday across year boundary', () => {
+    test('weekly salary uses Sunday through Saturday across year boundary', () => {
       const week = getWeekRange('2026-01-01');
-      assert.equal(week.startDateString, '2025-12-29');
-      assert.equal(week.endDateString, '2026-01-04');
+      assert.equal(week.startDateString, '2025-12-28');
+      assert.equal(week.endDateString, '2026-01-03');
     });
 
     test('a monthly bonus is counted once in an explicitly calculated weekly salary', () => {

@@ -85,8 +85,8 @@ async function runPhase7Tests() {
     });
 
     // Week range for test
-    const testWeek = getWeekRange('2026-09-14'); // Monday 14 Sep 2026 – Sunday 20 Sep 2026
-    const weekLabel = `14/09/2026 – 20/09/2026 (P7-${uniqueSuffix})`;
+    const testWeek = getWeekRange('2026-09-14');
+    const weekLabel = `${testWeek.weekLabel} (P7-${uniqueSuffix})`;
 
     // Create checked attendance records for this employee
     const att1 = await Attendance.create({
