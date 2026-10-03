@@ -407,7 +407,7 @@ export default function ReportsPage() {
                 onChange={(e) => setSelectedEmployee(e.target.value)}
               >
                 {['employee_monthly', 'employee_yearly', 'ledger'].includes(activeTab) ? null : <option value="">All Employees</option>}
-                {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.employeeId})</option>)}
+                {employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
               </select>
             </div>
           )}

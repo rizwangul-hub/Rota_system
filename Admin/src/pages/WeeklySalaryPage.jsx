@@ -591,7 +591,6 @@ export default function WeeklySalaryPage() {
                   <tr key={s._id}>
                     <td>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>{s.employeeName}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>{s.employeeId}</div>
                     </td>
                     <td><span style={{ fontSize: '12px', fontWeight: 500 }}>{s.shopName}</span></td>
                     <td>
@@ -673,7 +672,6 @@ export default function WeeklySalaryPage() {
                 </h2>
                 <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                   Period: <strong>{activeSalary?.weekLabel}</strong>
-                  {' '}• Staff ID: <strong>{activeSalary?.employeeId}</strong>
                   {' '}•{' '}
                   <span className={`badge badge-${(activeSalary?.status || 'generated').toLowerCase()}`} style={{ fontSize: '11px' }}>
                     {activeSalary?.status || 'Generated'}
