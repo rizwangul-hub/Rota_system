@@ -57,19 +57,33 @@ function calculateLateMinutes(shiftStart, timeReached) {
 }
 
 /**
- * Core lateness & wage calculation:
+ * Calculate early departure in minutes (leaving before shiftEnd)
+ */
+function calculateEarlyLeaveMinutes(shiftEnd, workerEndTime) {
+  if (!shiftEnd || !workerEndTime) return 0;
+  const endMin = timeToMinutes(shiftEnd);
+  const leftMin = timeToMinutes(workerEndTime);
+  return Math.max(0, endMin - leftMin);
+}
+
+/**
+ * Core lateness, early leave & wage calculation:
  *
- * Daily wage = £50
- * If scheduled hours = 10 -> Hourly rate = £50 / 10 = £5
+ * Daily wage = £50 (or custom employee daily wage)
+ * Scheduled hours = shiftEnd - shiftStart (e.g. 10 hours) -> Hourly rate = £50 / 10 = £5/hr
  *
+ * ARRIVAL LATENESS:
  * IF Late Minutes <= gracePeriodMinutes (default 15):
- *   Late Deduction = £0
+ *   Arrival Deduction = £0
  * IF Late Minutes > gracePeriodMinutes:
- *   Late Deduction = Hourly Rate * (Late Minutes / 60)
+ *   Arrival Deduction = Hourly Rate * (Late Minutes / 60)
  *
- * Example: 30 minutes late with £5/hr:
- *   Deduction = £5 * (30/60) = £2.50
- *   Attendance Pay = £50 - £2.50 = £47.50
+ * EARLY DEPARTURE:
+ * IF Worker left before shiftEnd:
+ *   Early Leave Deduction = Hourly Rate * (Early Leave Minutes / 60)
+ *
+ * Total Deduction = Arrival Deduction + Early Leave Deduction
+ * Attendance Pay = Math.max(0, Base Pay - Total Deduction)
  */
 function calculateAttendanceRecord({
   dailyWage = 0,
@@ -89,38 +103,53 @@ function calculateAttendanceRecord({
       scheduledHours,
       actualHours: 0,
       lateMinutes: 0,
+      earlyLeaveMinutes: 0,
       hourlyWage,
       lateDeduction: 0,
+      arrivalDeduction: 0,
+      earlyLeaveDeduction: 0,
       attendancePay: 0,
       status: 'Absent'
     };
   }
 
   const lateMinutes = calculateLateMinutes(shiftStart, timeReached);
+  const earlyLeaveMinutes = calculateEarlyLeaveMinutes(shiftEnd, workerEndTime);
+
   let computedStatus = status;
   if (!status || status === 'Present' || status === 'Late') {
     computedStatus = lateMinutes > gracePeriodMinutes ? 'Late' : 'Present';
   }
 
-  let lateDeduction = 0;
+  let arrivalDeduction = 0;
   if (lateMinutes > gracePeriodMinutes) {
-    lateDeduction = Number((hourlyWage * (lateMinutes / 60)).toFixed(2));
+    arrivalDeduction = Number((hourlyWage * (lateMinutes / 60)).toFixed(2));
   }
+
+  let earlyLeaveDeduction = 0;
+  if (earlyLeaveMinutes > 0 && computedStatus !== 'Half') {
+    earlyLeaveDeduction = Number((hourlyWage * (earlyLeaveMinutes / 60)).toFixed(2));
+  }
+
+  const totalDeduction = Number((arrivalDeduction + earlyLeaveDeduction).toFixed(2));
 
   let basePay = wage;
   if (computedStatus === 'Half') {
     basePay = Number((wage / 2).toFixed(2));
   }
 
-  const attendancePay = Number(Math.max(0, basePay - lateDeduction).toFixed(2));
+  const attendancePay = Number(Math.max(0, basePay - totalDeduction).toFixed(2));
   const actualHours = calculateWorkedHours(timeReached, workerEndTime, scheduledHours, computedStatus);
 
   return {
     scheduledHours,
     actualHours,
     lateMinutes,
+    earlyLeaveMinutes,
     hourlyWage: Number(hourlyWage.toFixed(2)),
-    lateDeduction,
+    lateDeduction: totalDeduction,
+    arrivalDeduction,
+    earlyLeaveDeduction,
     attendancePay,
     status: computedStatus
   };

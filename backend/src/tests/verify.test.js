@@ -90,6 +90,33 @@ assert.strictEqual(tLate30.attendancePay, 47.50, 'Net attendance pay must be £4
 assert.strictEqual(tLate30.status, 'Late');
 console.log(' 4. 30-minute late test passed (£2.50 deduction, £47.50 pay)');
 
+// Early leave test: Arrives on time 09:00, leaves 1 hour early at 18:00 (shift end 19:00) -> £5 deduction, £45 pay
+const tEarlyLeave = calculateAttendanceRecord({
+  dailyWage: 50,
+  shiftStart: '09:00',
+  shiftEnd: '19:00',
+  timeReached: '09:00',
+  workerEndTime: '18:00',
+  status: 'Present'
+});
+assert.strictEqual(tEarlyLeave.earlyLeaveMinutes, 60, '1 hour early leave is 60 minutes');
+assert.strictEqual(tEarlyLeave.earlyLeaveDeduction, 5.00, '1 hour early leave with £5/hr rate is £5.00 deduction');
+assert.strictEqual(tEarlyLeave.attendancePay, 45.00, 'Net attendance pay must be £45.00');
+console.log(' 4b. Early leave test passed (£5.00 deduction, £45.00 pay)');
+
+// Combined late arrival + early leave test: 30m late (£2.50) + 1h early leave (£5.00) = £7.50 deduction
+const tCombined = calculateAttendanceRecord({
+  dailyWage: 50,
+  shiftStart: '09:00',
+  shiftEnd: '19:00',
+  timeReached: '09:30',
+  workerEndTime: '18:00',
+  status: 'Late'
+});
+assert.strictEqual(tCombined.lateDeduction, 7.50, 'Combined deduction must equal £7.50');
+assert.strictEqual(tCombined.attendancePay, 42.50, 'Net attendance pay must be £42.50');
+console.log(' 4c. Combined late arrival + early leave test passed (£7.50 deduction, £42.50 pay)');
+
 // Half day test
 const tHalf = calculateAttendanceRecord({
   dailyWage: 50,
