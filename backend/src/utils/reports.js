@@ -897,41 +897,128 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
   drawKpiCard(doc, 565, kpiY, 250, 'TOTAL HOURS WORKED', `${(summary.totalWorkedHours || 0).toFixed(1)}h`, '#d97706');
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
-  doc.text('Shop', 32, y + 6);
-  doc.text('Employee Name', 115, y + 6);
-  doc.text('Sun', 230, y + 6);
-  doc.text('Mon', 285, y + 6);
-  doc.text('Tue', 340, y + 6);
-  doc.text('Wed', 395, y + 6);
-  doc.text('Thu', 450, y + 6);
-  doc.text('Fri', 505, y + 6);
-  doc.text('Sat', 560, y + 6);
-  doc.text('Work Days', 620, y + 6);
-  doc.text('Hours (h)', 690, y + 6);
-  y += 20;
 
-  records.forEach((r, idx) => {
-    if (y > 470) {
+  // Group records by shop (with Absent at bottom)
+  const shopGroups = {};
+  records.forEach(r => {
+    const sName = r.status === 'Absent' ? 'ABSENT / OFF' : (r.shopName || 'Unknown Shop');
+    if (!shopGroups[sName]) shopGroups[sName] = [];
+    shopGroups[sName].push(r);
+  });
+
+  const sortedShopNames = Object.keys(shopGroups).sort((a, b) => {
+    if (a === 'ABSENT / OFF') return 1;
+    if (b === 'ABSENT / OFF') return -1;
+    return a.localeCompare(b);
+  });
+
+  const sectionHeaderH = 18;
+  const tableHeaderH = 16;
+  const rowH = 16;
+
+  sortedShopNames.forEach(shopName => {
+    const group = shopGroups[shopName];
+    const isAbsentGroup = shopName === 'ABSENT / OFF';
+    const sc = getShopColor(isAbsentGroup ? 'ABSENT / OFF' : shopName);
+
+    // Check page overflow
+    if (y + sectionHeaderH + tableHeaderH + rowH > 520) {
       doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
       y = 30;
     }
-    const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
-    doc.rect(25, y, 790, 16).fill(bg);
-    doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
-    doc.text((r.shopName || '').slice(0, 14), 32, y + 4);
-    doc.font('Helvetica-Bold').text((r.employeeName || '').slice(0, 20), 115, y + 4).font('Helvetica');
-    doc.text((r.dailySchedule?.Sun || 'Off').slice(0, 8), 230, y + 4);
-    doc.text((r.dailySchedule?.Mon || 'Off').slice(0, 8), 285, y + 4);
-    doc.text((r.dailySchedule?.Tue || 'Off').slice(0, 8), 340, y + 4);
-    doc.text((r.dailySchedule?.Wed || 'Off').slice(0, 8), 395, y + 4);
-    doc.text((r.dailySchedule?.Thu || 'Off').slice(0, 8), 450, y + 4);
-    doc.text((r.dailySchedule?.Fri || 'Off').slice(0, 8), 505, y + 4);
-    doc.text((r.dailySchedule?.Sat || 'Off').slice(0, 8), 560, y + 4);
-    doc.text(String(r.workingDays || 0), 620, y + 4);
-    doc.text(`${(r.actualHours || 0).toFixed(1)}h`, 690, y + 4);
-    y += 16;
+
+    // 1. Shop Header Banner Bar
+    const headerBg = sc.primary || '#1e293b';
+    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fill(headerBg);
+    doc.circle(34, y + 9, 2.5).fill('#ffffff');
+
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+       .text(isAbsentGroup ? 'ABSENT / OFF DUTY' : `${shopName.toUpperCase()} CYCLES`, 42, y + 4.5, { lineBreak: false });
+
+    const countText = isAbsentGroup
+      ? `${group.length} Staff Off / Absent`
+      : `${group.length} ${group.length === 1 ? 'Worker' : 'Workers'} Assigned`;
+
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
+       .text(countText, 550, y + 5, { width: 255, align: 'right', lineBreak: false });
+
+    y += sectionHeaderH;
+
+    // 2. Table Column Headers
+    doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
+    doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
+
+    doc.text('WORKER NAME', 35, y + 4, { width: 175, lineBreak: false });
+    doc.text('Sun', 220, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Mon', 275, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Tue', 330, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Wed', 385, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Thu', 440, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Fri', 495, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Sat', 550, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('Work Days', 615, y + 4, { width: 60, align: 'center', lineBreak: false });
+    doc.text('Hours (h)', 690, y + 4, { width: 70, align: 'center', lineBreak: false });
+
+    y += tableHeaderH;
+
+    // 3. Rows for this Shop
+    let shopDays = 0;
+    let shopHours = 0;
+
+    group.forEach((r, idx) => {
+      if (y + rowH > 520) {
+        doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+        y = 30;
+        doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
+        doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
+        doc.text('WORKER NAME', 35, y + 4, { width: 175, lineBreak: false });
+        doc.text('Sun', 220, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Mon', 275, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Tue', 330, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Wed', 385, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Thu', 440, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Fri', 495, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Sat', 550, y + 4, { width: 50, align: 'center', lineBreak: false });
+        doc.text('Work Days', 615, y + 4, { width: 60, align: 'center', lineBreak: false });
+        doc.text('Hours (h)', 690, y + 4, { width: 70, align: 'center', lineBreak: false });
+        y += tableHeaderH;
+      }
+
+      shopDays += r.workingDays || 0;
+      shopHours += r.actualHours || 0;
+
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      doc.rect(25, y, 790, rowH).fill(bg);
+      doc.rect(25, y, 3, rowH).fill(sc.primary || '#2563eb');
+
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
+      doc.text((r.employeeName || '').slice(0, 24), 35, y + 3.5, { width: 175, lineBreak: false });
+      doc.font('Helvetica').fontSize(7.5);
+      doc.text((r.dailySchedule?.Sun || 'Off').slice(0, 8), 220, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text((r.dailySchedule?.Mon || 'Off').slice(0, 8), 275, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text((r.dailySchedule?.Tue || 'Off').slice(0, 8), 330, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text((r.dailySchedule?.Wed || 'Off').slice(0, 8), 385, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text((r.dailySchedule?.Thu || 'Off').slice(0, 8), 440, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text((r.dailySchedule?.Fri || 'Off').slice(0, 8), 495, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text((r.dailySchedule?.Sat || 'Off').slice(0, 8), 550, y + 4, { width: 50, align: 'center', lineBreak: false });
+      doc.text(String(r.workingDays || 0), 615, y + 4, { width: 60, align: 'center', lineBreak: false });
+      doc.text(`${(r.actualHours || 0).toFixed(1)}h`, 690, y + 4, { width: 70, align: 'center', lineBreak: false });
+      y += rowH;
+    });
+
+    // Shop Subtotal Bar
+    if (y + 15 > 520) {
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      y = 30;
+    }
+    doc.rect(25, y, 790, 15).fill(sc.lightBg || '#f1f5f9');
+    doc.rect(25, y, 3, 15).fill(sc.primary || '#2563eb');
+    doc.fillColor(sc.text || '#0f172a').font('Helvetica-Bold').fontSize(7.5);
+    doc.text(`SUBTOTAL — ${shopName.toUpperCase()}`, 35, y + 3.5, { lineBreak: false });
+    doc.text(`Staff: ${group.length}`, 450, y + 3.5, { lineBreak: false });
+    doc.text(`Total Days: ${shopDays}`, 600, y + 3.5, { lineBreak: false });
+    doc.text(`Total Hours: ${shopHours.toFixed(1)}h`, 690, y + 3.5, { lineBreak: false });
+    y += 21;
   });
 
   drawPdfSignatures(doc, y + 15, true);
@@ -1022,42 +1109,126 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
   drawKpiCard(doc, 695, kpiY, 120, 'OUTSTANDING', `£${(totals.totalOutstanding || 0).toFixed(2)}`, '#dc2626');
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
-  doc.text('Shop', 32, y + 6);
-  doc.text('Employee Name', 135, y + 6);
-  doc.text('Attendance Pay', 265, y + 6);
-  doc.text('Allowances', 345, y + 6);
-  doc.text('Bonus', 415, y + 6);
-  doc.text('Deductions', 475, y + 6);
-  doc.text('Final Salary', 545, y + 6);
-  doc.text('Paid (£)', 625, y + 6);
-  doc.text('Outstanding', 695, y + 6);
-  doc.text('Status', 765, y + 6);
-  y += 20;
 
-  salaries.forEach((s, idx) => {
-    if (y > 470) {
+  // Group salaries by shop
+  const shopGroups = {};
+  salaries.forEach(s => {
+    const sName = s.shopName || 'Unknown Shop';
+    if (!shopGroups[sName]) shopGroups[sName] = [];
+    shopGroups[sName].push(s);
+  });
+
+  const sortedShopNames = Object.keys(shopGroups).sort((a, b) => a.localeCompare(b));
+
+  const sectionHeaderH = 18;
+  const tableHeaderH = 16;
+  const rowH = 16;
+
+  sortedShopNames.forEach(shopName => {
+    const group = shopGroups[shopName];
+    const sc = getShopColor(shopName);
+
+    // Check page overflow
+    if (y + sectionHeaderH + tableHeaderH + rowH > 520) {
       doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
       y = 30;
     }
-    const allowances = (s.travelAllowance || 0) + (s.otherAllowances || 0);
-    const deductions = s.manualDeductions || 0;
-    const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
 
-    doc.rect(25, y, 790, 16).fill(bg);
-    doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
-    doc.text((s.shopName || '').slice(0, 14), 32, y + 4);
-    doc.font('Helvetica-Bold').text((s.employeeName || '').slice(0, 20), 135, y + 4).font('Helvetica');
-    doc.text(`£${(s.netAttendancePay || 0).toFixed(2)}`, 265, y + 4);
-    doc.text(`£${allowances.toFixed(2)}`, 345, y + 4);
-    doc.text(`£${(s.bonus || 0).toFixed(2)}`, 415, y + 4);
-    doc.text(`£${deductions.toFixed(2)}`, 475, y + 4);
-    doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(s.finalSalary || 0).toFixed(2)}`, 545, y + 4).font('Helvetica').fillColor('#0f172a');
-    doc.fillColor('#059669').text(`£${(s.totalPaid || 0).toFixed(2)}`, 625, y + 4).fillColor('#0f172a');
-    doc.font('Helvetica-Bold').fillColor(s.balanceRemaining > 0 ? '#dc2626' : '#64748b').text(`£${(s.balanceRemaining || 0).toFixed(2)}`, 695, y + 4).font('Helvetica').fillColor('#0f172a');
-    doc.text(s.status || 'Generated', 765, y + 4);
-    y += 16;
+    // 1. Shop Header Banner Bar
+    const headerBg = sc.primary || '#1e293b';
+    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fill(headerBg);
+    doc.circle(34, y + 9, 2.5).fill('#ffffff');
+
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+       .text(`${shopName.toUpperCase()} CYCLES`, 42, y + 4.5, { lineBreak: false });
+
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
+       .text(`${group.length} ${group.length === 1 ? 'Worker' : 'Workers'} Payroll`, 550, y + 5, { width: 255, align: 'right', lineBreak: false });
+
+    y += sectionHeaderH;
+
+    // 2. Table Column Headers
+    doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
+    doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
+
+    doc.text('EMPLOYEE NAME', 35, y + 4, { width: 170, lineBreak: false });
+    doc.text('Attendance Pay', 215, y + 4, { width: 75, align: 'right', lineBreak: false });
+    doc.text('Allowances', 295, y + 4, { width: 65, align: 'right', lineBreak: false });
+    doc.text('Bonus', 365, y + 4, { width: 55, align: 'right', lineBreak: false });
+    doc.text('Deductions', 425, y + 4, { width: 65, align: 'right', lineBreak: false });
+    doc.text('Final Salary', 495, y + 4, { width: 80, align: 'right', lineBreak: false });
+    doc.text('Paid (£)', 580, y + 4, { width: 70, align: 'right', lineBreak: false });
+    doc.text('Outstanding', 655, y + 4, { width: 75, align: 'right', lineBreak: false });
+    doc.text('Status', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
+
+    y += tableHeaderH;
+
+    // 3. Shop Subtotal Aggregators
+    let subAtt = 0, subAllow = 0, subBonus = 0, subDed = 0, subFinal = 0, subPaid = 0, subBal = 0;
+
+    group.forEach((s, idx) => {
+      if (y + rowH > 520) {
+        doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+        y = 30;
+        doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
+        doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
+        doc.text('EMPLOYEE NAME', 35, y + 4, { width: 170, lineBreak: false });
+        doc.text('Attendance Pay', 215, y + 4, { width: 75, align: 'right', lineBreak: false });
+        doc.text('Allowances', 295, y + 4, { width: 65, align: 'right', lineBreak: false });
+        doc.text('Bonus', 365, y + 4, { width: 55, align: 'right', lineBreak: false });
+        doc.text('Deductions', 425, y + 4, { width: 65, align: 'right', lineBreak: false });
+        doc.text('Final Salary', 495, y + 4, { width: 80, align: 'right', lineBreak: false });
+        doc.text('Paid (£)', 580, y + 4, { width: 70, align: 'right', lineBreak: false });
+        doc.text('Outstanding', 655, y + 4, { width: 75, align: 'right', lineBreak: false });
+        doc.text('Status', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
+        y += tableHeaderH;
+      }
+
+      const allowances = (s.travelAllowance || 0) + (s.otherAllowances || 0);
+      const deductions = s.manualDeductions || 0;
+      subAtt += (s.netAttendancePay || 0);
+      subAllow += allowances;
+      subBonus += (s.bonus || 0);
+      subDed += deductions;
+      subFinal += (s.finalSalary || 0);
+      subPaid += (s.totalPaid || 0);
+      subBal += (s.balanceRemaining || 0);
+
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      doc.rect(25, y, 790, rowH).fill(bg);
+      doc.rect(25, y, 3, rowH).fill(sc.primary || '#2563eb');
+
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
+      doc.text((s.employeeName || '').slice(0, 24), 35, y + 3.5, { width: 170, lineBreak: false });
+      doc.font('Helvetica').fontSize(7.5);
+      doc.text(`£${(s.netAttendancePay || 0).toFixed(2)}`, 215, y + 4, { width: 75, align: 'right', lineBreak: false });
+      doc.text(`£${allowances.toFixed(2)}`, 295, y + 4, { width: 65, align: 'right', lineBreak: false });
+      doc.text(`£${(s.bonus || 0).toFixed(2)}`, 365, y + 4, { width: 55, align: 'right', lineBreak: false });
+      doc.text(`£${deductions.toFixed(2)}`, 425, y + 4, { width: 65, align: 'right', lineBreak: false });
+      doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(s.finalSalary || 0).toFixed(2)}`, 495, y + 4, { width: 80, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
+      doc.fillColor('#059669').text(`£${(s.totalPaid || 0).toFixed(2)}`, 580, y + 4, { width: 70, align: 'right', lineBreak: false }).fillColor('#0f172a');
+      doc.font('Helvetica-Bold').fillColor(s.balanceRemaining > 0 ? '#dc2626' : '#64748b').text(`£${(s.balanceRemaining || 0).toFixed(2)}`, 655, y + 4, { width: 75, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
+      doc.text(s.status || 'Generated', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
+      y += rowH;
+    });
+
+    // Shop Subtotal Bar
+    if (y + 15 > 520) {
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      y = 30;
+    }
+    doc.rect(25, y, 790, 15).fill(sc.lightBg || '#f1f5f9');
+    doc.rect(25, y, 3, 15).fill(sc.primary || '#2563eb');
+    doc.fillColor(sc.text || '#0f172a').font('Helvetica-Bold').fontSize(7.5);
+    doc.text(`SUBTOTAL — ${shopName.toUpperCase()}`, 35, y + 3.5, { lineBreak: false });
+    doc.text(`£${subAtt.toFixed(2)}`, 215, y + 3.5, { width: 75, align: 'right', lineBreak: false });
+    doc.text(`£${subAllow.toFixed(2)}`, 295, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    doc.text(`£${subBonus.toFixed(2)}`, 365, y + 3.5, { width: 55, align: 'right', lineBreak: false });
+    doc.text(`£${subDed.toFixed(2)}`, 425, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    doc.text(`£${subFinal.toFixed(2)}`, 495, y + 3.5, { width: 80, align: 'right', lineBreak: false });
+    doc.text(`£${subPaid.toFixed(2)}`, 580, y + 3.5, { width: 70, align: 'right', lineBreak: false });
+    doc.text(`£${subBal.toFixed(2)}`, 655, y + 3.5, { width: 75, align: 'right', lineBreak: false });
+    y += 21;
   });
 
   drawPdfSignatures(doc, y + 15, true);
@@ -1379,37 +1550,103 @@ async function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy =
   }
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
-  doc.text('Shop Location', 32, y + 6);
-  doc.text('Employee Name', 180, y + 6);
-  doc.text('Work Days', 350, y + 6);
-  doc.text('Sched Hours', 430, y + 6);
-  doc.text('Actual Hours', 520, y + 6);
-  doc.text('Late (min)', 610, y + 6);
-  if (includeWageCost) doc.text('Attendance Pay (£)', 695, y + 6);
-  y += 20;
+  const sectionHeaderH = 18;
+  const tableHeaderH = 16;
+  const rowH = 16;
 
-  let rowIdx = 0;
   shopData.forEach(s => {
-    (s.employees || []).forEach(e => {
-      if (y > 470) {
+    const shopName = s.shopName || 'Shop';
+    const sc = getShopColor(shopName);
+    const employees = s.employees || [];
+
+    if (y + sectionHeaderH + tableHeaderH + rowH > 520) {
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      y = 30;
+    }
+
+    // 1. Shop Header Banner Bar
+    const headerBg = sc.primary || '#1e293b';
+    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fill(headerBg);
+    doc.circle(34, y + 9, 2.5).fill('#ffffff');
+
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+       .text(`${shopName.toUpperCase()} CYCLES`, 42, y + 4.5, { lineBreak: false });
+
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
+       .text(`${employees.length} Staff Members`, 550, y + 5, { width: 255, align: 'right', lineBreak: false });
+
+    y += sectionHeaderH;
+
+    // 2. Table Column Headers
+    doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
+    doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
+
+    doc.text('WORKER NAME', 35, y + 4, { width: 220, lineBreak: false });
+    doc.text('Work Days', 320, y + 4, { width: 70, align: 'center', lineBreak: false });
+    doc.text('Sched Hours', 410, y + 4, { width: 85, align: 'right', lineBreak: false });
+    doc.text('Actual Hours', 510, y + 4, { width: 85, align: 'right', lineBreak: false });
+    doc.text('Late (min)', 610, y + 4, { width: 65, align: 'right', lineBreak: false });
+    if (includeWageCost) doc.text('Attendance Pay (£)', 690, y + 4, { width: 115, align: 'right', lineBreak: false });
+
+    y += tableHeaderH;
+
+    let sDays = 0, sSched = 0, sActual = 0, sLate = 0, sCost = 0;
+
+    employees.forEach((e, idx) => {
+      if (y + rowH > 520) {
         doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
         y = 30;
+        doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
+        doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
+        doc.text('WORKER NAME', 35, y + 4, { width: 220, lineBreak: false });
+        doc.text('Work Days', 320, y + 4, { width: 70, align: 'center', lineBreak: false });
+        doc.text('Sched Hours', 410, y + 4, { width: 85, align: 'right', lineBreak: false });
+        doc.text('Actual Hours', 510, y + 4, { width: 85, align: 'right', lineBreak: false });
+        doc.text('Late (min)', 610, y + 4, { width: 65, align: 'right', lineBreak: false });
+        if (includeWageCost) doc.text('Attendance Pay (£)', 690, y + 4, { width: 115, align: 'right', lineBreak: false });
+        y += tableHeaderH;
       }
-      const bg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
-      rowIdx++;
-      doc.rect(25, y, 790, 16).fill(bg);
-      doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
-      doc.text((s.shopName || '').slice(0, 16), 32, y + 4);
-      doc.font('Helvetica-Bold').text((e.employeeName || '').slice(0, 20), 180, y + 4).font('Helvetica');
-      doc.text(String(e.workingDays || 0), 350, y + 4);
-      doc.text(`${(e.scheduledHours || 0).toFixed(1)}h`, 430, y + 4);
-      doc.text(`${(e.hours || 0).toFixed(1)}h`, 520, y + 4);
-      doc.text(`${e.lateMinutes || 0}m`, 610, y + 4);
-      if (includeWageCost) doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(e.wageCost || 0).toFixed(2)}`, 695, y + 4).font('Helvetica').fillColor('#0f172a');
-      y += 16;
+
+      sDays += e.workingDays || 0;
+      sSched += e.scheduledHours || 0;
+      sActual += e.hours || 0;
+      sLate += e.lateMinutes || 0;
+      sCost += e.wageCost || 0;
+
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      doc.rect(25, y, 790, rowH).fill(bg);
+      doc.rect(25, y, 3, rowH).fill(sc.primary || '#2563eb');
+
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
+      doc.text((e.employeeName || '').slice(0, 26), 35, y + 3.5, { width: 220, lineBreak: false });
+      doc.font('Helvetica').fontSize(7.5);
+      doc.text(String(e.workingDays || 0), 320, y + 4, { width: 70, align: 'center', lineBreak: false });
+      doc.text(`${(e.scheduledHours || 0).toFixed(1)}h`, 410, y + 4, { width: 85, align: 'right', lineBreak: false });
+      doc.text(`${(e.hours || 0).toFixed(1)}h`, 510, y + 4, { width: 85, align: 'right', lineBreak: false });
+      doc.text(`${e.lateMinutes || 0}m`, 610, y + 4, { width: 65, align: 'right', lineBreak: false });
+      if (includeWageCost) {
+        doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(e.wageCost || 0).toFixed(2)}`, 690, y + 4, { width: 115, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
+      }
+      y += rowH;
     });
+
+    // Shop Subtotal Bar
+    if (y + 15 > 520) {
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      y = 30;
+    }
+    doc.rect(25, y, 790, 15).fill(sc.lightBg || '#f1f5f9');
+    doc.rect(25, y, 3, 15).fill(sc.primary || '#2563eb');
+    doc.fillColor(sc.text || '#0f172a').font('Helvetica-Bold').fontSize(7.5);
+    doc.text(`SUBTOTAL — ${shopName.toUpperCase()}`, 35, y + 3.5, { lineBreak: false });
+    doc.text(String(sDays), 320, y + 3.5, { width: 70, align: 'center', lineBreak: false });
+    doc.text(`${sSched.toFixed(1)}h`, 410, y + 3.5, { width: 85, align: 'right', lineBreak: false });
+    doc.text(`${sActual.toFixed(1)}h`, 510, y + 3.5, { width: 85, align: 'right', lineBreak: false });
+    doc.text(`${sLate}m`, 610, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    if (includeWageCost) {
+      doc.text(`£${sCost.toFixed(2)}`, 690, y + 3.5, { width: 115, align: 'right', lineBreak: false });
+    }
+    y += 21;
   });
 
   drawPdfSignatures(doc, y + 15, true);
