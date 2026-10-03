@@ -920,37 +920,114 @@ exports.getWeeklyStaffReport = async (req, res) => {
 // 3. WEEKLY SALARY REPORT
 // ============================================================
 
+async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employeeId, status, paymentStatus }) {
+  let dateToUse = date;
+  if (weekLabel) {
+    const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+    if (firstPart) dateToUse = firstPart;
+  }
+  const week = getWeekRange(dateToUse || new Date());
+  const targetWeekLabel = weekLabel || week.weekLabel;
+  const altLabel = targetWeekLabel.includes(' – ')
+    ? targetWeekLabel.replace(' – ', ' to ')
+    : targetWeekLabel.replace(' to ', ' – ');
+
+  const query = {
+    $or: [
+      { weekLabel: { $in: [targetWeekLabel, altLabel, week.weekLabel, week.legacyWeekLabel] } },
+      { weekStartDateString: week.startDateString },
+      { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
+    ]
+  };
+
+  if (shopId) query.shop = shopId;
+  if (employeeId) query.employee = employeeId;
+  if (status) query.status = status;
+
+  if (paymentStatus === 'PAID') {
+    query.balanceRemaining = { $lte: 0 };
+    query.finalSalary = { $gt: 0 };
+  } else if (paymentStatus === 'PARTIALLY_PAID') {
+    query.totalPaid = { $gt: 0 };
+    query.balanceRemaining = { $gt: 0 };
+  } else if (paymentStatus === 'UNPAID') {
+    query.totalPaid = { $lte: 0 };
+  }
+
+  let salaries = await WeeklySalary.find(query)
+    .populate('employee')
+    .populate('shop')
+    .sort({ shopName: 1, employeeName: 1 });
+
+  if (salaries.length === 0) {
+    const attQuery = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+    if (shopId) attQuery.shop = shopId;
+    if (employeeId) attQuery.employee = employeeId;
+
+    const attendances = await Attendance.find(attQuery).sort({ shopName: 1, employeeName: 1 });
+
+    if (attendances.length > 0) {
+      const empMap = {};
+      attendances.forEach(a => {
+        const key = a.employee ? a.employee.toString() : a.employeeName;
+        if (!empMap[key]) {
+          empMap[key] = {
+            _id: 'calc_' + key,
+            employee: a.employee,
+            employeeId: a.employeeId || '',
+            employeeName: a.employeeName || 'Worker',
+            shop: a.shop,
+            shopName: a.shopName || 'Shop',
+            weekLabel: targetWeekLabel,
+            netAttendancePay: 0,
+            grossDailyWages: 0,
+            travelAllowance: 0,
+            otherAllowances: 0,
+            bonus: 0,
+            manualDeductions: 0,
+            lateDeductions: 0,
+            finalSalary: 0,
+            totalPaid: 0,
+            balanceRemaining: 0,
+            status: 'Calculated'
+          };
+        }
+        const rec = empMap[key];
+        rec.grossDailyWages += (a.dailyWage || 0);
+        rec.lateDeductions += (a.lateDeduction || 0);
+        rec.netAttendancePay += (a.attendancePay || 0);
+      });
+
+      salaries = Object.values(empMap).map(rec => {
+        rec.netAttendancePay = Number(rec.netAttendancePay.toFixed(2));
+        rec.grossDailyWages = Number(rec.grossDailyWages.toFixed(2));
+        rec.lateDeductions = Number(rec.lateDeductions.toFixed(2));
+        rec.finalSalary = rec.netAttendancePay;
+        rec.balanceRemaining = rec.netAttendancePay;
+        return rec;
+      });
+
+      if (paymentStatus === 'PAID') {
+        salaries = salaries.filter(s => s.balanceRemaining <= 0 && s.finalSalary > 0);
+      } else if (paymentStatus === 'PARTIALLY_PAID') {
+        salaries = salaries.filter(s => s.totalPaid > 0 && s.balanceRemaining > 0);
+      } else if (paymentStatus === 'UNPAID') {
+        salaries = salaries.filter(s => s.totalPaid <= 0);
+      }
+    }
+  }
+
+  return { salaries, targetWeekLabel, week };
+}
+
 exports.getWeeklySalaryReport = async (req, res) => {
   try {
-    const { weekLabel, date, shopId, employeeId, status, paymentStatus } = req.query;
-    const query = {};
-
-    if (weekLabel) {
-      const altLabel = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
-      query.weekLabel = { $in: [weekLabel, altLabel] };
-    } else if (date) {
-      const week = getWeekRange(date);
-      query.weekLabel = { $in: [week.weekLabel, week.legacyWeekLabel] };
-    }
-
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
-    if (status) query.status = status;
-
-    if (paymentStatus === 'PAID') {
-      query.balanceRemaining = { $lte: 0 };
-      query.finalSalary = { $gt: 0 };
-    } else if (paymentStatus === 'PARTIALLY_PAID') {
-      query.totalPaid = { $gt: 0 };
-      query.balanceRemaining = { $gt: 0 };
-    } else if (paymentStatus === 'UNPAID') {
-      query.totalPaid = { $lte: 0 };
-    }
-
-    const salaries = await WeeklySalary.find(query)
-      .populate('employee')
-      .populate('shop')
-      .sort({ shopName: 1, employeeName: 1 });
+    const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
 
     const totals = {
       count: salaries.length,
@@ -965,6 +1042,7 @@ exports.getWeeklySalaryReport = async (req, res) => {
 
     res.json({
       success: true,
+      weekLabel: targetWeekLabel,
       count: salaries.length,
       totals,
       salaries
@@ -976,18 +1054,7 @@ exports.getWeeklySalaryReport = async (req, res) => {
 
 exports.exportWeeklySalaryExcel = async (req, res) => {
   try {
-    const { weekLabel, date, shopId, employeeId, status } = req.query;
-    const targetWeek = weekLabel || getWeekRange(date || new Date()).weekLabel;
-    const query = {};
-    if (weekLabel) {
-      const altLabel = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
-      query.weekLabel = { $in: [weekLabel, altLabel] };
-    }
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
-    if (status) query.status = status;
-
-    const salaries = await WeeklySalary.find(query).sort({ shopName: 1, employeeName: 1 });
+    const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
       totalAttendancePay: salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0),
       totalAllowances: salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0),
@@ -998,18 +1065,18 @@ exports.exportWeeklySalaryExcel = async (req, res) => {
       totalOutstanding: salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0)
     };
 
-    const workbook = await buildWeeklySalaryExcel(salaries, targetWeek, totals);
+    const workbook = await buildWeeklySalaryExcel(salaries, targetWeekLabel, totals);
 
     await logAction({
       user: req.user,
       action: 'REPORT_EXPORTED_EXCEL',
       recordType: 'WeeklySalary',
-      details: `Exported Weekly Salary Excel for ${targetWeek}`,
+      details: `Exported Weekly Salary Excel for ${targetWeekLabel}`,
       req
     });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="Weekly_Salary_${targetWeek.replace(/[\/–\s]/g, '_')}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Weekly_Salary_${targetWeekLabel.replace(/[\/–\s]/g, '_')}.xlsx"`);
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
@@ -1019,18 +1086,7 @@ exports.exportWeeklySalaryExcel = async (req, res) => {
 
 exports.exportWeeklySalaryPDF = async (req, res) => {
   try {
-    const { weekLabel, date, shopId, employeeId, status } = req.query;
-    const targetWeek = weekLabel || getWeekRange(date || new Date()).weekLabel;
-    const query = {};
-    if (weekLabel) {
-      const altLabel = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
-      query.weekLabel = { $in: [weekLabel, altLabel] };
-    }
-    if (shopId) query.shop = shopId;
-    if (employeeId) query.employee = employeeId;
-    if (status) query.status = status;
-
-    const salaries = await WeeklySalary.find(query).sort({ shopName: 1, employeeName: 1 });
+    const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
       totalAttendancePay: salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0),
       totalAllowances: salaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0),
@@ -1045,11 +1101,11 @@ exports.exportWeeklySalaryPDF = async (req, res) => {
       user: req.user,
       action: 'REPORT_EXPORTED_PDF',
       recordType: 'WeeklySalary',
-      details: `Exported Weekly Salary PDF for ${targetWeek}`,
+      details: `Exported Weekly Salary PDF for ${targetWeekLabel}`,
       req
     });
 
-    buildWeeklySalaryPDF(res, salaries, targetWeek, totals, req.user?.name || 'Admin');
+    await buildWeeklySalaryPDF(res, salaries, targetWeekLabel, totals, req.user?.name || 'Admin');
   } catch (error) {
     return sendServerError(res, error, 'Failed to export weekly salary PDF.');
   }
