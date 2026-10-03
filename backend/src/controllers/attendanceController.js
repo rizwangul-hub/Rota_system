@@ -77,8 +77,8 @@ exports.saveAttendance = async (req, res) => {
       });
     }
 
-    // Historical wage snapshot: preserve existing daily wage if editing; use current employee wage if new
-    const dailyWage = existing ? existing.dailyWage : employee.dailyWage;
+    // Historical wage snapshot: preserve existing non-zero daily wage if editing; use current employee wage if new or 0
+    const dailyWage = (existing && existing.dailyWage > 0) ? existing.dailyWage : (employee.dailyWage || 50);
     const gracePeriod = await getGracePeriod();
 
     const start = isAbsent ? '' : (shiftStart || '09:00');
@@ -224,8 +224,8 @@ exports.saveAttendanceBatch = async (req, res) => {
       }
 
       const isAbsent = item.status === 'Absent';
-      // Preserve historical daily wage if existing; snapshot current if new
-      const dailyWage = existing ? existing.dailyWage : employee.dailyWage;
+      // Preserve historical non-zero daily wage if existing; snapshot current if new or 0
+      const dailyWage = (existing && existing.dailyWage > 0) ? existing.dailyWage : (employee.dailyWage || 50);
       const start = isAbsent ? '' : (item.shiftStart || '09:00');
       const end = isAbsent ? '' : (item.shiftEnd || '19:00');
       const reached = isAbsent ? '' : (item.timeReached || start);

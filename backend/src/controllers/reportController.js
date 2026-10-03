@@ -34,7 +34,7 @@ const {
   getShopColor,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
-const { getWeekRange, formatUKDate, getUKDateString } = require('../utils/calc');
+const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const {
   attendanceOperatorRecord,
@@ -88,6 +88,25 @@ exports.getDailyAttendanceReport = async (req, res) => {
       .populate('employee')
       .populate('shop')
       .sort({ shopName: 1, employeeName: 1 });
+
+    records.forEach(r => {
+      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      r.dailyWage = wage;
+      if ((!r.attendancePay || r.attendancePay === 0) && r.status !== 'Absent') {
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || '09:00',
+          workerEndTime: r.workerEndTime || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+        r.hourlyWage = calc.hourlyWage;
+        r.lateDeduction = calc.lateDeduction;
+        r.attendancePay = calc.attendancePay;
+      }
+    });
 
     const sortedRecords = sortDailyAttendanceRecords(records);
 
@@ -159,7 +178,25 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
       ];
     }
 
-    const records = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const records = await Attendance.find(query).populate('employee').populate('shop').sort({ shopName: 1, employeeName: 1 });
+    records.forEach(r => {
+      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      r.dailyWage = wage;
+      if ((!r.attendancePay || r.attendancePay === 0) && r.status !== 'Absent') {
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || '09:00',
+          workerEndTime: r.workerEndTime || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+        r.hourlyWage = calc.hourlyWage;
+        r.lateDeduction = calc.lateDeduction;
+        r.attendancePay = calc.attendancePay;
+      }
+    });
     const sortedRecords = sortDailyAttendanceRecords(records);
     const workbook = await buildDailyAttendanceExcel(sortedRecords, formatUKDate(dateStr));
     const shopDoc = shopId ? await Shop.findById(shopId).select('name') : null;
@@ -201,7 +238,25 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       ];
     }
 
-    const records = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const records = await Attendance.find(query).populate('employee').populate('shop').sort({ shopName: 1, employeeName: 1 });
+    records.forEach(r => {
+      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      r.dailyWage = wage;
+      if ((!r.attendancePay || r.attendancePay === 0) && r.status !== 'Absent') {
+        const calc = calculateAttendanceRecord({
+          dailyWage: wage,
+          shiftStart: r.shiftStart || '09:00',
+          shiftEnd: r.shiftEnd || '19:00',
+          timeReached: r.timeReached || '09:00',
+          workerEndTime: r.workerEndTime || '19:00',
+          status: r.status,
+          gracePeriodMinutes: 15
+        });
+        r.hourlyWage = calc.hourlyWage;
+        r.lateDeduction = calc.lateDeduction;
+        r.attendancePay = calc.attendancePay;
+      }
+    });
     const shopDoc = shopId ? await Shop.findById(shopId) : null;
 
     await logAction({
@@ -619,11 +674,13 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
 
-    const attendances = await Attendance.find(query).sort({ shopName: 1, employeeName: 1, dateString: 1 });
+    const attendances = await Attendance.find(query)
+      .populate('employee')
+      .sort({ shopName: 1, employeeName: 1, dateString: 1 });
 
     const empMap = {};
     attendances.forEach(a => {
-      const key = a.employee ? a.employee.toString() : a.employeeName;
+      const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
       if (!empMap[key]) {
         empMap[key] = {
           employee: a.employee,
@@ -651,11 +708,16 @@ exports.getWeeklyAttendanceReport = async (req, res) => {
       else if (a.status === 'Half') rec.halfDays += 1;
       else if (a.status === 'Absent') rec.absentDays += 1;
 
+      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const attPay = (a.attendancePay && a.attendancePay > 0)
+        ? a.attendancePay
+        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+
       rec.scheduledHours = Number((rec.scheduledHours + (a.scheduledHours || 0)).toFixed(2));
       rec.actualHours = Number((rec.actualHours + (a.actualHours || 0)).toFixed(2));
       rec.lateMinutes += (a.lateMinutes || 0);
       rec.lateDeduction = Number((rec.lateDeduction + (a.lateDeduction || 0)).toFixed(2));
-      rec.attendancePay = Number((rec.attendancePay + (a.attendancePay || 0)).toFixed(2));
+      rec.attendancePay = Number((rec.attendancePay + attPay).toFixed(2));
     });
 
     const records = Object.values(empMap);
@@ -716,10 +778,10 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
 
-    const attendances = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const empMap = {};
     attendances.forEach(a => {
-      const key = a.employee ? a.employee.toString() : a.employeeName;
+      const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
       if (!empMap[key]) {
         empMap[key] = {
           employeeId: a.employeeId,
@@ -747,7 +809,12 @@ exports.exportWeeklyAttendanceExcel = async (req, res) => {
       rec.actualHours += (a.actualHours || 0);
       rec.lateMinutes += (a.lateMinutes || 0);
       rec.lateDeduction += (a.lateDeduction || 0);
-      rec.attendancePay += (a.attendancePay || 0);
+
+      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const attPay = (a.attendancePay && a.attendancePay > 0)
+        ? a.attendancePay
+        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+      rec.attendancePay += attPay;
     });
 
     const records = Object.values(empMap);
@@ -803,10 +870,10 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
 
-    const attendances = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const empMap = {};
     attendances.forEach(a => {
-      const key = a.employee ? a.employee.toString() : a.employeeName;
+      const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
       if (!empMap[key]) {
         empMap[key] = {
           employeeId: a.employeeId,
@@ -834,7 +901,12 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
       rec.actualHours += (a.actualHours || 0);
       rec.lateMinutes += (a.lateMinutes || 0);
       rec.lateDeduction += (a.lateDeduction || 0);
-      rec.attendancePay += (a.attendancePay || 0);
+
+      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const attPay = (a.attendancePay && a.attendancePay > 0)
+        ? a.attendancePay
+        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+      rec.attendancePay += attPay;
     });
 
     const records = Object.values(empMap);
@@ -969,12 +1041,12 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
     if (shopId) attQuery.shop = shopId;
     if (employeeId) attQuery.employee = employeeId;
 
-    const attendances = await Attendance.find(attQuery).sort({ shopName: 1, employeeName: 1 });
+    const attendances = await Attendance.find(attQuery).populate('employee').sort({ shopName: 1, employeeName: 1 });
 
     if (attendances.length > 0) {
       const empMap = {};
       attendances.forEach(a => {
-        const key = a.employee ? a.employee.toString() : a.employeeName;
+        const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
         if (!empMap[key]) {
           empMap[key] = {
             _id: 'calc_' + key,
@@ -998,9 +1070,13 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
           };
         }
         const rec = empMap[key];
-        rec.grossDailyWages += (a.dailyWage || 0);
+        const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        const attPay = (a.attendancePay && a.attendancePay > 0)
+          ? a.attendancePay
+          : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+        rec.grossDailyWages += effectiveWage;
         rec.lateDeductions += (a.lateDeduction || 0);
-        rec.netAttendancePay += (a.attendancePay || 0);
+        rec.netAttendancePay += attPay;
       });
 
       salaries = Object.values(empMap).map(rec => {
@@ -1849,7 +1925,7 @@ exports.getShopLabourHours = async (req, res) => {
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
 
-    const attendances = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
 
     const shopLabourMap = {};
     attendances.forEach(a => {
@@ -1867,7 +1943,7 @@ exports.getShopLabourHours = async (req, res) => {
         };
       }
 
-      const empId = a.employee?.toString() || a.employeeName;
+      const empId = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
       if (!shopLabourMap[sName].employees[empId]) {
         shopLabourMap[sName].employees[empId] = {
           employeeName: a.employeeName,
@@ -1888,12 +1964,18 @@ exports.getShopLabourHours = async (req, res) => {
       empEntry.scheduledHours = Number((empEntry.scheduledHours + (a.scheduledHours || 0)).toFixed(2));
       empEntry.hours = Number((empEntry.hours + (a.actualHours || 0)).toFixed(2));
       empEntry.lateMinutes += (a.lateMinutes || 0);
-      empEntry.wageCost = Number((empEntry.wageCost + (a.attendancePay || 0)).toFixed(2));
+
+      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const attPay = (a.attendancePay && a.attendancePay > 0)
+        ? a.attendancePay
+        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+
+      empEntry.wageCost = Number((empEntry.wageCost + attPay).toFixed(2));
 
       shopLabourMap[sName].totalScheduledHours = Number((shopLabourMap[sName].totalScheduledHours + (a.scheduledHours || 0)).toFixed(2));
       shopLabourMap[sName].totalHours = Number((shopLabourMap[sName].totalHours + (a.actualHours || 0)).toFixed(2));
       shopLabourMap[sName].totalLateMinutes += (a.lateMinutes || 0);
-      shopLabourMap[sName].totalWageCost = Number((shopLabourMap[sName].totalWageCost + (a.attendancePay || 0)).toFixed(2));
+      shopLabourMap[sName].totalWageCost = Number((shopLabourMap[sName].totalWageCost + attPay).toFixed(2));
     });
 
     const result = Object.values(shopLabourMap).map(s => ({
@@ -1949,14 +2031,20 @@ exports.getMonthlyShopLabourSummary = async (req, res) => {
         shop: shop._id,
         dateString: { $gte: startStr, $lte: endStr },
         approvalStatus: { $in: ['Checked', 'Finalized'] }
-      });
+      }).populate('employee');
 
-      const uniqueWorkers = new Set(attendances.map(a => a.employee?.toString() || a.employeeName));
+      const uniqueWorkers = new Set(attendances.map(a => a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName));
       const workingDays = attendances.filter(a => a.status !== 'Absent').length;
       const scheduledHours = Number(attendances.reduce((sum, a) => sum + (a.scheduledHours || 0), 0).toFixed(2));
       const actualHours = Number(attendances.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
       const lateDeductions = Number(attendances.reduce((sum, a) => sum + (a.lateDeduction || 0), 0).toFixed(2));
-      const attendancePay = Number(attendances.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2));
+      const attendancePay = Number(attendances.reduce((sum, a) => {
+        const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        const attPay = (a.attendancePay && a.attendancePay > 0)
+          ? a.attendancePay
+          : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+        return sum + attPay;
+      }, 0).toFixed(2));
 
       // Finalized salary cost where available
       const salaries = req.user.role === 'ADMIN'
@@ -2017,12 +2105,12 @@ exports.exportShopLabourExcel = async (req, res) => {
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
 
-    const attendances = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const shopLabourMap = {};
     attendances.forEach(a => {
       const sName = a.shopName || 'Shop';
       if (!shopLabourMap[sName]) shopLabourMap[sName] = { shopName: sName, employees: {} };
-      const empId = a.employee?.toString() || a.employeeName;
+      const empId = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
       if (!shopLabourMap[sName].employees[empId]) {
         shopLabourMap[sName].employees[empId] = {
           employeeName: a.employeeName,
@@ -2039,7 +2127,12 @@ exports.exportShopLabourExcel = async (req, res) => {
       e.scheduledHours += (a.scheduledHours || 0);
       e.hours += (a.actualHours || 0);
       e.lateMinutes += (a.lateMinutes || 0);
-      e.wageCost += (a.attendancePay || 0);
+
+      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const attPay = (a.attendancePay && a.attendancePay > 0)
+        ? a.attendancePay
+        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+      e.wageCost += attPay;
     });
 
     const shopData = Object.values(shopLabourMap).map(s => ({
@@ -2075,12 +2168,12 @@ exports.exportShopLabourPDF = async (req, res) => {
     if (shopId) query.shop = shopId;
     if (employeeId) query.employee = employeeId;
 
-    const attendances = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+    const attendances = await Attendance.find(query).populate('employee').sort({ shopName: 1, employeeName: 1 });
     const shopLabourMap = {};
     attendances.forEach(a => {
       const sName = a.shopName || 'Shop';
       if (!shopLabourMap[sName]) shopLabourMap[sName] = { shopName: sName, employees: {} };
-      const empId = a.employee?.toString() || a.employeeName;
+      const empId = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
       if (!shopLabourMap[sName].employees[empId]) {
         shopLabourMap[sName].employees[empId] = {
           employeeName: a.employeeName,
@@ -2097,7 +2190,12 @@ exports.exportShopLabourPDF = async (req, res) => {
       e.scheduledHours += (a.scheduledHours || 0);
       e.hours += (a.actualHours || 0);
       e.lateMinutes += (a.lateMinutes || 0);
-      e.wageCost += (a.attendancePay || 0);
+
+      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const attPay = (a.attendancePay && a.attendancePay > 0)
+        ? a.attendancePay
+        : (a.status === 'Absent' ? 0 : Math.max(0, effectiveWage - (a.lateDeduction || 0)));
+      e.wageCost += attPay;
     });
 
     const shopData = Object.values(shopLabourMap).map(s => ({
