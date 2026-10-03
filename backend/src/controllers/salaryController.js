@@ -202,12 +202,13 @@ exports.generateWeeklySalary = async (req, res) => {
       let salaryDoc = await WeeklySalary.findOne({
         employee: group.employee,
         $or: [
-          { weekLabel: week.weekLabel },
-          { weekLabel: week.legacyWeekLabel }
+          { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
+          { weekStartDateString: week.startDateString },
+          { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
         ]
       });
 
-      if (salaryDoc && ['FINALIZED', 'PAID', 'Finalized', 'Paid'].includes(salaryDoc.status)) {
+      if (salaryDoc && ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salaryDoc.status)) {
         skippedFinalized.push(group.employeeName);
         generatedSalaries.push(salaryDoc);
         continue;
@@ -227,8 +228,8 @@ exports.generateWeeklySalary = async (req, res) => {
           weekEndDateString: week.endDateString,
           weekLabel: week.weekLabel,
           status: 'Generated',
-          createdBy: req.user._id,
-          createdByName: req.user.name
+          createdBy: req.user?._id,
+          createdByName: req.user?.name || req.user?.username || 'Admin'
         });
       }
 
@@ -247,7 +248,11 @@ exports.generateWeeklySalary = async (req, res) => {
       salaryDoc.attendanceBreakdown = breakdown;
 
       await salaryDoc.save();
-      await recalculateWeeklySalary(salaryDoc);
+      try {
+        await recalculateWeeklySalary(salaryDoc);
+      } catch (recalcErr) {
+        console.warn('Recalculate warning:', recalcErr.message);
+      }
 
       // Link attendance records to weeklySalary
       await Attendance.updateMany(
@@ -260,9 +265,7 @@ exports.generateWeeklySalary = async (req, res) => {
 
     const action = isRegenerate ? 'WEEKLY_SALARY_REGENERATED' : 'WEEKLY_SALARY_GENERATED';
     await logAction({
-      user: req.user._id,
-      username: req.user.name,
-      role: req.user.role,
+      user: req.user,
       action,
       recordType: 'WeeklySalary',
       details: `${isRegenerate ? 'Regenerated' : 'Generated'} weekly salary for week ${week.weekLabel} (${generatedSalaries.length} employees)${pendingCount > 0 ? ` [${pendingCount} pending attendance records excluded]` : ''}`,
