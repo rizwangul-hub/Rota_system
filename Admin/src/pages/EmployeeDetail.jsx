@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import { downloadReportFile } from '../utils/downloadReportFile';
 import { formatTime12Hour } from '../utils/formatTime';
-import { ArrowLeft, Download, Banknote, Clock, Award, ShieldAlert, FileText } from 'lucide-react';
+import { ArrowLeft, Download, Banknote, Clock, Award, ShieldAlert, FileText, Trash2 } from 'lucide-react';
 
 function getApiFailureMessage(error, fallback) {
   if (!error.response) {
@@ -15,8 +15,26 @@ function getApiFailureMessage(error, fallback) {
 
 export default function EmployeeDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const handleDeleteWorker = async () => {
+    if (!profile?.employee) return;
+    const emp = profile.employee;
+    if (!window.confirm(`Are you sure you want to permanently delete worker ${emp.name} (${emp.employeeId})?\n\nThis will remove the worker and all associated records. This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await axios.delete(`${API_BASE_URL}/employees/${emp._id}`);
+      if (res.data.success) {
+        alert(res.data.message || `Worker ${emp.name} deleted successfully.`);
+        navigate('/employees');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete worker');
+    }
+  };
 
   // Monthly Report State (Matching Image 2)
   const [reportMonth, setReportMonth] = useState('5'); // May
@@ -145,6 +163,14 @@ export default function EmployeeDetail() {
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-outline btn-sm" onClick={downloadMonthlyExcel} disabled={downloadingMonthlyExcel}>
               <Download size={14} /> {downloadingMonthlyExcel ? 'Preparing Excel...' : 'Export Monthly Excel'}
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+              onClick={handleDeleteWorker}
+              title="Delete Worker Permanently"
+            >
+              <Trash2 size={14} /> Delete Worker
             </button>
           </div>
         </div>

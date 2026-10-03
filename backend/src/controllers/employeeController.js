@@ -5,6 +5,11 @@ const Attendance = require('../models/Attendance');
 const WeeklySalary = require('../models/WeeklySalary');
 const Bonus = require('../models/Bonus');
 const LedgerTransaction = require('../models/LedgerTransaction');
+const WeeklyRota = require('../models/WeeklyRota');
+const SalaryAdjustment = require('../models/SalaryAdjustment');
+const SalaryPayment = require('../models/SalaryPayment');
+const RotaAssignmentClaim = require('../models/RotaAssignmentClaim');
+const RotaAvailability = require('../models/RotaAvailability');
 const { logAction } = require('../utils/audit');
 const { employeeAttendanceRosterEntry } = require('../utils/attendanceViews');
 
@@ -351,5 +356,54 @@ exports.getEmployeeProfile = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, error, 'Error retrieving employee profile.');
+  }
+};
+
+exports.deleteEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found.' });
+    }
+
+    const empName = employee.name;
+    const empIdStr = employee.employeeId;
+
+    await Promise.all([
+      Employee.findByIdAndDelete(id),
+      Attendance.deleteMany({ employee: id }),
+      WeeklySalary.deleteMany({ employee: id }),
+      Bonus.deleteMany({ employee: id }),
+      LedgerTransaction.deleteMany({ employee: id }),
+      SalaryAdjustment.deleteMany({ employee: id }),
+      SalaryPayment.deleteMany({ employee: id }),
+      RotaAssignmentClaim.deleteMany({ employeeId: id }),
+      RotaAvailability.deleteMany({ employeeId: id }),
+      WeeklyRota.updateMany(
+        {},
+        {
+          $pull: {
+            'shopRoster.$[].employeeIds': id,
+            assignments: { employeeId: id }
+          }
+        }
+      )
+    ]);
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: 'EMPLOYEE_DELETED',
+      recordType: 'Employee',
+      recordId: id,
+      details: `Deleted worker ${empName} (${empIdStr}) and removed all associated records`,
+      req
+    });
+
+    res.json({ success: true, message: `Worker ${empName} (${empIdStr}) deleted successfully.` });
+  } catch (error) {
+    return sendServerError(res, error, 'Error deleting worker.');
   }
 };

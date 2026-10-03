@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
-import { Search, Edit, Eye, UserPlus, X, ArrowUpRight, UserCheck, UserX, ArrowUpDown } from 'lucide-react';
+import { Search, Edit, Eye, UserPlus, X, ArrowUpRight, UserCheck, UserX, ArrowUpDown, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 
@@ -55,6 +55,21 @@ export default function Employees() {
       }
     } catch (err) {
       alert(err.response?.data?.message || `Failed to ${action} employee`);
+    }
+  };
+
+  const handleDeleteWorker = async (employee) => {
+    if (!window.confirm(`Are you sure you want to permanently delete worker ${employee.name} (${employee.employeeId})?\n\nThis will remove the worker and all associated records. This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await axios.delete(`${API_BASE_URL}/employees/${employee._id}`);
+      if (res.data.success) {
+        alert(res.data.message || `Worker ${employee.name} deleted successfully.`);
+        fetchEmployees();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete worker');
     }
   };
 
@@ -244,6 +259,14 @@ export default function Employees() {
                       >
                         {emp.employmentStatus === 'Active' ? <UserX size={13} /> : <UserCheck size={13} />}
                         {emp.employmentStatus === 'Active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: '4px 8px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5' }}
+                        onClick={() => handleDeleteWorker(emp)}
+                        title="Delete Worker Permanently"
+                      >
+                        <Trash2 size={13} /> Delete
                       </button>
                     </div>
                   </td>

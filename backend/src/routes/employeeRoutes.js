@@ -10,5 +10,6 @@ router.get('/:id', authenticate, employeeController.getEmployeeById);
 router.post('/', authenticate, authorize('ADMIN'), employeeController.createEmployee);
 router.put('/:id', authenticate, authorize('ADMIN'), employeeController.updateEmployee);
 router.patch('/:id/toggle-status', authenticate, authorize('ADMIN'), employeeController.toggleEmployeeStatus);
+router.delete('/:id', authenticate, authorize('ADMIN'), employeeController.deleteEmployee);
 
 module.exports = router;
