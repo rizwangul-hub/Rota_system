@@ -159,7 +159,7 @@ export default function WeeklyRotaPlanner() {
       });
 
       if (rota?.shopRoster && Array.isArray(rota.shopRoster) && rota.shopRoster.length > 0) {
-        // Use saved shop roster
+        // Use saved shop roster (source of truth when available)
         rota.shopRoster.forEach(sr => {
           const sId = String(sr.shopId?._id || sr.shopId);
           if (rosters[sId]) {
@@ -167,29 +167,39 @@ export default function WeeklyRotaPlanner() {
           }
         });
       } else if (rota?.assignments && rota.assignments.length > 0) {
-        // Rota exists with assignments but no shopRoster saved yet — rebuild from assignments
+        // Rota exists with assignments but no shopRoster saved yet — rebuild from assignments.
+        // IMPORTANT: use homeShopId (the worker's home shop) not shopId (which is the target
+        // shop for LOANED workers). This ensures loaned workers appear under their home shop row.
         rota.assignments.forEach(a => {
-          const sId = String(a.shopId?._id || a.shopId);
+          const homeId = String(a.homeShopId?._id || a.homeShopId || a.shopId?._id || a.shopId);
           const eId = String(a.employeeId?._id || a.employeeId);
-          if (rosters[sId] && !rosters[sId].includes(eId)) {
-            rosters[sId].push(eId);
+          if (rosters[homeId] && !rosters[homeId].includes(eId)) {
+            rosters[homeId].push(eId);
           }
         });
       }
 
       setShopRosters(rosters);
 
-      // 2. Build Cells map from existing assignments
+      // 2. Build Cells map from existing assignments.
+      // Cell key format: `${homeShopId}:${employeeId}:${dateKey}`
+      // For LOANED workers: assignment.shopId = target shop, assignment.homeShopId = home shop.
+      // We key the cell by homeShopId so it renders under the correct home-shop row.
       const newCells = {};
       (rota?.assignments || []).forEach(a => {
-        const sId = String(a.shopId?._id || a.shopId);
+        const rawShopId = String(a.shopId?._id || a.shopId);
+        const rawHomeId = String(a.homeShopId?._id || a.homeShopId || rawShopId);
         const eId = String(a.employeeId?._id || a.employeeId);
         const dKey = String(a.dateKey).slice(0, 10);
-        const cellKey = `${sId}:${eId}:${dKey}`;
+
+        const isLoaned = a.status === 'LOANED' || rawHomeId !== rawShopId;
+        // Key under home shop so cell appears in correct shop row
+        const cellKey = `${rawHomeId}:${eId}:${dKey}`;
 
         newCells[cellKey] = {
           status: a.status || 'AVAILABLE',
-          targetShopId: a.homeShopId && String(a.homeShopId) !== sId ? sId : null,
+          // targetShopId = where they actually work when loaned
+          targetShopId: isLoaned ? rawShopId : null,
           targetShopName: '',
           note: a.note || '',
           startTime: a.startTime || '09:00',
@@ -734,24 +744,28 @@ export default function WeeklyRotaPlanner() {
       const newCells = {};
 
       (prevRota.assignments || []).forEach(a => {
-        const sId = String(a.shopId?._id || a.shopId);
+        const rawShopId = String(a.shopId?._id || a.shopId);
+        const rawHomeId = String(a.homeShopId?._id || a.homeShopId || rawShopId);
         const eId = String(a.employeeId?._id || a.employeeId);
         const aDate = String(a.dateKey).slice(0, 10);
         const dayIdx = prevDays.findIndex(d => d.dateKey === aDate);
 
         if (dayIdx >= 0 && dayIdx < weekDays.length) {
           const targetDateKey = weekDays[dayIdx].dateKey;
-          const cellKey = `${sId}:${eId}:${targetDateKey}`;
+          const isLoaned = a.status === 'LOANED' || rawHomeId !== rawShopId;
+          // Key by homeShopId so cell appears under the correct home shop row
+          const cellKey = `${rawHomeId}:${eId}:${targetDateKey}`;
           newCells[cellKey] = {
             status: a.status || 'AVAILABLE',
-            targetShopId: a.homeShopId && String(a.homeShopId) !== sId ? sId : null,
+            targetShopId: isLoaned ? rawShopId : null,
             targetShopName: '',
             note: a.note || '',
             startTime: a.startTime || '09:00',
             endTime: a.endTime || '17:00'
           };
-          if (newRosters[sId] && !newRosters[sId].includes(eId)) {
-            newRosters[sId].push(eId);
+          // Add to home shop roster (not target shop)
+          if (newRosters[rawHomeId] && !newRosters[rawHomeId].includes(eId)) {
+            newRosters[rawHomeId].push(eId);
           }
         }
       });

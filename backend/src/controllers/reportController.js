@@ -2619,6 +2619,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     const now = new Date();
     const targetYear = Number(year) || now.getFullYear();
     const currentWeek = weekLabel || getWeekRange(now).weekLabel;
+    const sId = safeObjectId(shopId);
 
     // 1. Active workforce
     const activeEmployees = await Employee.countDocuments({ employmentStatus: 'Active' });
