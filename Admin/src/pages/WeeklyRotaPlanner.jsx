@@ -1026,7 +1026,7 @@ export default function WeeklyRotaPlanner() {
   const downloadPdf = async () => {
     try {
       const token = localStorage.getItem('pixx_token');
-      const response = await axios.post(`${API}/week/${weekStart}/export.pdf`, buildCurrentRotaPayload(), {
+      const response = await axios.get(`${API}/week/${weekStart}/export.pdf`, {
         responseType: 'blob',
         headers: { Authorization: `Bearer ${token}` },
       });

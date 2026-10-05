@@ -21,6 +21,7 @@ const {
   buildWeeklyAttendancePDF,
   buildWeeklySalaryExcel,
   buildWeeklySalaryPDF,
+  buildWeeklySalaryDailyBreakdown,
   buildEmployeeMonthlyPDF,
   buildEmployeeYearlyExcel,
   buildEmployeeYearlyPDF,
@@ -976,6 +977,7 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
 
     if (attendances.length > 0) {
       const empMap = {};
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       attendances.forEach(a => {
         const key = a.employee ? (a.employee._id ? a.employee._id.toString() : a.employee.toString()) : a.employeeName;
         if (!empMap[key]) {
@@ -997,6 +999,7 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
             finalSalary: 0,
             totalPaid: 0,
             balanceRemaining: 0,
+            attendanceBreakdown: [],
             status: 'Calculated'
           };
         }
@@ -1014,6 +1017,12 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
         rec.grossDailyWages = Number(rec.grossDailyWages || 0) + Number(effectiveWage || 0);
         rec.lateDeductions = Number(rec.lateDeductions || 0) + Number(calcResult.lateDeduction || 0);
         rec.netAttendancePay = Number(rec.netAttendancePay || 0) + Number(calcResult.attendancePay || 0);
+        rec.attendanceBreakdown.push({
+          dateString: a.dateString || (a.date instanceof Date ? a.date.toISOString().slice(0, 10) : ''),
+          dayOfWeek: dayNames[getDayOfWeekUK(a.dateString || a.date)],
+          status: a.status,
+          attendancePay: Number(calcResult.attendancePay || 0)
+        });
       });
 
       salaries = Object.values(empMap).map(rec => {
@@ -1040,25 +1049,36 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
 
 exports.getWeeklySalaryReport = async (req, res) => {
   try {
-    const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
+    const { salaries, targetWeekLabel, week } = await fetchWeeklySalariesWithFallback(req.query);
+    const weekDays = buildWeeklySalaryDailyBreakdown({}, week.startDateString);
+    const salaryRows = salaries.map(salary => ({
+      ...(typeof salary.toObject === 'function' ? salary.toObject() : salary),
+      dailyAttendance: buildWeeklySalaryDailyBreakdown(salary, week.startDateString)
+    }));
 
     const totals = {
-      count: salaries.length,
-      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
-      totalAllowances: Number(salaries.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
-      totalBonus: Number(salaries.reduce((sum, s) => sum + (Number(s.bonus) || 0), 0).toFixed(2)),
-      totalDeductions: Number(salaries.reduce((sum, s) => sum + (Number(s.manualDeductions) || 0), 0).toFixed(2)),
-      totalFinalSalary: Number(salaries.reduce((sum, s) => sum + (Number(s.finalSalary) || 0), 0).toFixed(2)),
-      totalPaid: Number(salaries.reduce((sum, s) => sum + (Number(s.totalPaid) || 0), 0).toFixed(2)),
-      totalOutstanding: Number(salaries.reduce((sum, s) => sum + (Number(s.balanceRemaining) || 0), 0).toFixed(2))
+      count: salaryRows.length,
+      totalAttendancePay: Number(salaryRows.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
+      totalAllowances: Number(salaryRows.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
+      totalBonus: Number(salaryRows.reduce((sum, s) => sum + (Number(s.bonus) || 0), 0).toFixed(2)),
+      totalDeductions: Number(salaryRows.reduce((sum, s) => sum + (Number(s.manualDeductions) || 0), 0).toFixed(2)),
+      totalFinalSalary: Number(salaryRows.reduce((sum, s) => sum + (Number(s.finalSalary) || 0), 0).toFixed(2)),
+      totalPaid: Number(salaryRows.reduce((sum, s) => sum + (Number(s.totalPaid) || 0), 0).toFixed(2)),
+      totalOutstanding: Number(salaryRows.reduce((sum, s) => sum + (Number(s.balanceRemaining) || 0), 0).toFixed(2)),
+      dailyAttendance: weekDays.map((day, dayIndex) => ({
+        dateString: day.dateString,
+        attendancePay: Number(salaryRows.reduce((sum, salary) => sum + (salary.dailyAttendance[dayIndex]?.attendancePay || 0), 0).toFixed(2))
+      }))
     };
 
     res.json({
       success: true,
       weekLabel: targetWeekLabel,
-      count: salaries.length,
+      weekStartDateString: week.startDateString,
+      weekEndDateString: week.endDateString,
+      count: salaryRows.length,
       totals,
-      salaries
+      salaries: salaryRows
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to fetch weekly salary report.');
@@ -1067,7 +1087,7 @@ exports.getWeeklySalaryReport = async (req, res) => {
 
 exports.exportWeeklySalaryExcel = async (req, res) => {
   try {
-    const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
+    const { salaries, targetWeekLabel, week } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
       totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
       totalAllowances: Number(salaries.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
@@ -1078,7 +1098,7 @@ exports.exportWeeklySalaryExcel = async (req, res) => {
       totalOutstanding: Number(salaries.reduce((sum, s) => sum + (Number(s.balanceRemaining) || 0), 0).toFixed(2))
     };
 
-    const workbook = await buildWeeklySalaryExcel(salaries, targetWeekLabel, totals);
+    const workbook = await buildWeeklySalaryExcel(salaries, targetWeekLabel, totals, week.startDateString);
 
     await logAction({
       user: req.user,
@@ -1099,7 +1119,7 @@ exports.exportWeeklySalaryExcel = async (req, res) => {
 
 exports.exportWeeklySalaryPDF = async (req, res) => {
   try {
-    const { salaries, targetWeekLabel } = await fetchWeeklySalariesWithFallback(req.query);
+    const { salaries, targetWeekLabel, week } = await fetchWeeklySalariesWithFallback(req.query);
     const totals = {
       totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (Number(s.netAttendancePay) || 0), 0).toFixed(2)),
       totalAllowances: Number(salaries.reduce((sum, s) => sum + (Number(s.travelAllowance) || 0) + (Number(s.otherAllowances) || 0), 0).toFixed(2)),
@@ -1118,7 +1138,7 @@ exports.exportWeeklySalaryPDF = async (req, res) => {
       req
     });
 
-    await buildWeeklySalaryPDF(res, salaries, targetWeekLabel, totals, req.user?.name || 'Admin');
+    await buildWeeklySalaryPDF(res, salaries, targetWeekLabel, totals, req.user?.name || 'Admin', week.startDateString);
   } catch (error) {
     return sendServerError(res, error, 'Failed to export weekly salary PDF.');
   }

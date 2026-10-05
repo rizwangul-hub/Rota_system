@@ -211,6 +211,14 @@ export default function ReportsPage() {
 
   const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const yearOptions = [2025, 2026, 2027];
+  const weeklySalaryDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(`${weeklySalaryData?.weekStartDateString || selectedDate}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + index);
+    return {
+      dateString: date.toISOString().slice(0, 10),
+      label: new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'UTC' }).format(date)
+    };
+  });
 
   const handleTabChange = (newTab) => {
     setActiveTab(newTab);
@@ -740,6 +748,7 @@ export default function ReportsPage() {
                     <th>Shop</th>
                     <th>Employee Name</th>
                     <th>Week</th>
+                    {weeklySalaryDays.map(day => <th key={day.dateString}>{day.label}<br />Wages (£)</th>)}
                     <th>Attendance Pay</th>
                     <th>Allowances</th>
                     <th>Bonus</th>
@@ -753,11 +762,25 @@ export default function ReportsPage() {
                 <tbody>
                   {weeklySalaryData.salaries?.map(s => {
                     const allow = (s.travelAllowance || 0) + (s.otherAllowances || 0);
+                    const dailyAttendanceByDate = new Map(
+                      (s.dailyAttendance || []).map(day => [day.dateString, day])
+                    );
                     return (
                       <tr key={s._id}>
                         <td style={{ fontWeight: 600 }}>{s.shopName}</td>
                         <td style={{ fontWeight: 500 }}>{s.employeeName}</td>
                         <td style={{ fontSize: '12px' }}>{s.weekLabel}</td>
+                        {weeklySalaryDays.map(day => {
+                          const attendance = dailyAttendanceByDate.get(day.dateString);
+                          return (
+                            <td key={day.dateString} style={{ minWidth: '90px', textAlign: 'center' }}>
+                              <div style={{ fontWeight: 600 }}>£{(attendance?.attendancePay || 0).toFixed(2)}</div>
+                              <div style={{ color: attendance ? '#64748b' : '#94a3b8', fontSize: '10px' }}>
+                                {attendance?.status || 'No record'}
+                              </div>
+                            </td>
+                          );
+                        })}
                         <td>£{(s.netAttendancePay || 0).toFixed(2)}</td>
                         <td>£{allow.toFixed(2)}</td>
                         <td>£{(s.bonus || 0).toFixed(2)}</td>
@@ -777,12 +800,33 @@ export default function ReportsPage() {
                   })}
                   {(!weeklySalaryData.salaries || weeklySalaryData.salaries.length === 0) && (
                     <tr>
-                      <td colSpan="11" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={18} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly salary records found for this period.
                       </td>
                     </tr>
                   )}
                 </tbody>
+                {weeklySalaryData.salaries?.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
+                      <td>Daily totals</td>
+                      <td />
+                      <td>{weeklySalaryData.weekLabel}</td>
+                      {weeklySalaryDays.map(day => {
+                        const total = weeklySalaryData.totals?.dailyAttendance?.find(item => item.dateString === day.dateString);
+                        return <td key={day.dateString}>£{(total?.attendancePay || 0).toFixed(2)}</td>;
+                      })}
+                      <td>£{(weeklySalaryData.totals?.totalAttendancePay || 0).toFixed(2)}</td>
+                      <td>£{(weeklySalaryData.totals?.totalAllowances || 0).toFixed(2)}</td>
+                      <td>£{(weeklySalaryData.totals?.totalBonus || 0).toFixed(2)}</td>
+                      <td>£{(weeklySalaryData.totals?.totalDeductions || 0).toFixed(2)}</td>
+                      <td>£{(weeklySalaryData.totals?.totalFinalSalary || 0).toFixed(2)}</td>
+                      <td>£{(weeklySalaryData.totals?.totalPaid || 0).toFixed(2)}</td>
+                      <td>£{(weeklySalaryData.totals?.totalOutstanding || 0).toFixed(2)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>

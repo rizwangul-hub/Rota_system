@@ -1007,11 +1007,40 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
 /**
  * Generate Excel workbook for Weekly Salary Report
  */
-async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
+function buildWeeklySalaryDailyBreakdown(salary, weekStartDateString) {
+  const startDate = weekStartDateString || salary.weekStartDateString;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || '')) return [];
+
+  const records = salary.finalizationSnapshot?.attendanceBreakdown || salary.attendanceBreakdown || [];
+  const recordsByDate = new Map();
+  records.forEach(record => {
+    const dateString = String(record.dateString || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return;
+    const dayRecords = recordsByDate.get(dateString) || [];
+    dayRecords.push(record);
+    recordsByDate.set(dateString, dayRecords);
+  });
+
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    const dateString = date.toISOString().slice(0, 10);
+    const dayRecords = recordsByDate.get(dateString) || [];
+    return {
+      dateString,
+      dayOfWeek: new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(date),
+      attendancePay: Number(dayRecords.reduce((sum, record) => sum + (Number(record.attendancePay) || 0), 0).toFixed(2)),
+      status: dayRecords.length ? [...new Set(dayRecords.map(record => record.status).filter(Boolean))].join(', ') : ''
+    };
+  });
+}
+
+async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}, weekStartDateString) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Weekly Salary');
 
-  sheet.mergeCells('A1:K1');
+  sheet.mergeCells('A1:R1');
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Weekly Salary Report (${weekLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1021,6 +1050,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
 
   const headers = [
     'Shop', 'Employee Name', 'Week Period',
+    ...buildWeeklySalaryDailyBreakdown({}, weekStartDateString).map(day => `${day.dayOfWeek} ${day.dateString}`),
     'Attendance Pay (£)', 'Allowances (£)', 'Bonus (£)',
     'Deductions (£)', 'Final Salary (£)', 'Paid (£)', 'Outstanding (£)', 'Status'
   ];
@@ -1034,10 +1064,12 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
 
   salaries.forEach(s => {
     const allow = (s.travelAllowance || 0) + (s.otherAllowances || 0);
+    const dailyBreakdown = buildWeeklySalaryDailyBreakdown(s, weekStartDateString);
     sheet.addRow([
       s.shopName || '',
       s.employeeName || '',
       s.weekLabel || weekLabel,
+      ...dailyBreakdown.map(day => day.attendancePay),
       Number((s.netAttendancePay || 0).toFixed(2)),
       Number(allow.toFixed(2)),
       Number((s.bonus || 0).toFixed(2)),
@@ -1052,6 +1084,10 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
   sheet.addRow([]);
   const sumRow = sheet.addRow([
     'TOTALS', `Staff: ${salaries.length}`, '',
+    ...Array.from({ length: 7 }, (_, dayIndex) => Number(salaries.reduce((sum, salary) => {
+      const day = buildWeeklySalaryDailyBreakdown(salary, weekStartDateString)[dayIndex];
+      return sum + (day?.attendancePay || 0);
+    }, 0).toFixed(2))),
     Number((totals.totalAttendancePay || 0).toFixed(2)),
     Number((totals.totalAllowances || 0).toFixed(2)),
     Number((totals.totalBonus || 0).toFixed(2)),
@@ -1069,13 +1105,14 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}) {
   sheet.columns.forEach(col => { col.width = 16; });
   sheet.getColumn(2).width = 24;
   sheet.getColumn(3).width = 24;
+  for (let column = 4; column <= 10; column++) sheet.getColumn(column).width = 14;
   return workbook;
 }
 
 /**
  * Generate PDF for Weekly Salary Report
  */
-async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, generatedBy = 'Admin') {
+async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, generatedBy = 'Admin', weekStartDateString) {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
   drawPdfBanner(doc, 'Weekly Salary Report', 'Weekly Payroll & Salary Distribution', `Week: ${weekLabel}`, true);
 
@@ -1209,6 +1246,54 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
     doc.text(`£${subBal.toFixed(2)}`, 655, y + 3.5, { width: 75, align: 'right', lineBreak: false });
     y += 21;
   });
+
+  const hasDailyBreakdown = salaries.some(s => buildWeeklySalaryDailyBreakdown(s, weekStartDateString).length === 7);
+  if (hasDailyBreakdown) {
+    doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+    drawPdfBanner(doc, 'Weekly Attendance Wage Breakdown', 'Daily attendance pay Sunday to Saturday', `Week: ${weekLabel}`, true);
+    y = 105;
+    const dailyColumns = buildWeeklySalaryDailyBreakdown({}, weekStartDateString);
+    const nameWidth = 155;
+    const dayWidth = 90;
+    const drawDailyHeader = () => {
+      doc.rect(25, y, 790, 20).fill('#1e293b');
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7);
+      doc.text('EMPLOYEE / SHOP', 30, y + 6, { width: nameWidth - 5, lineBreak: false });
+      dailyColumns.forEach((day, index) => {
+        const date = new Date(`${day.dateString}T00:00:00.000Z`);
+        const label = `${day.dayOfWeek} ${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(date)}`;
+        doc.text(label, 25 + nameWidth + index * dayWidth, y + 6, { width: dayWidth, align: 'center', lineBreak: false });
+      });
+      y += 20;
+    };
+    drawDailyHeader();
+    const dailyTotals = new Array(7).fill(0);
+    salaries.forEach((salary, rowIndex) => {
+      if (y + 24 > 520) {
+        doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+        y = 30;
+        drawDailyHeader();
+      }
+      const row = buildWeeklySalaryDailyBreakdown(salary, weekStartDateString);
+      doc.rect(25, y, 790, 24).fill(rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc');
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7);
+      doc.text(`${salary.employeeName || ''} — ${salary.shopName || ''}`.slice(0, 34), 30, y + 4, { width: nameWidth - 5, lineBreak: false });
+      doc.font('Helvetica').fontSize(6);
+      row.forEach((day, index) => {
+        dailyTotals[index] += day.attendancePay;
+        const cellX = 25 + nameWidth + index * dayWidth;
+        doc.fillColor('#0f172a').text(`£${day.attendancePay.toFixed(2)}`, cellX, y + 3, { width: dayWidth, align: 'center', lineBreak: false });
+        doc.fillColor('#64748b').text(day.status || 'No attendance', cellX, y + 12, { width: dayWidth, align: 'center', lineBreak: false });
+      });
+      y += 24;
+    });
+    doc.rect(25, y, 790, 18).fill('#e2e8f0');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7);
+    doc.text('DAILY TOTAL', 30, y + 5, { width: nameWidth - 5, lineBreak: false });
+    dailyTotals.forEach((amount, index) => {
+      doc.text(`£${amount.toFixed(2)}`, 25 + nameWidth + index * dayWidth, y + 5, { width: dayWidth, align: 'center', lineBreak: false });
+    });
+  }
 
   drawPdfSignatures(doc, y + 15, true);
   return await sendPdfOrBuffer(res, doc, `Weekly_Salary_${weekLabel.replace(/[\/–\s]/g, '_')}.pdf`);
@@ -1926,6 +2011,7 @@ module.exports = {
   buildWeeklyAttendancePDF,
   buildWeeklySalaryExcel,
   buildWeeklySalaryPDF,
+  buildWeeklySalaryDailyBreakdown,
   buildEmployeeMonthlyPDF,
   buildEmployeeYearlyExcel,
   buildEmployeeYearlyPDF,

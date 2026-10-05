@@ -1,0 +1,79 @@
+const assert = require('node:assert/strict');
+const ExcelJS = require('exceljs');
+const zlib = require('node:zlib');
+const {
+  buildWeeklySalaryDailyBreakdown,
+  buildWeeklySalaryExcel,
+  buildWeeklySalaryPDF
+} = require('../utils/reports');
+
+function extractPdfHexText(buffer) {
+  const decoded = [];
+  for (const stream of buffer.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    let content;
+    try {
+      content = zlib.inflateSync(Buffer.from(stream[1], 'latin1')).toString('latin1');
+    } catch {
+      continue;
+    }
+    for (const match of content.matchAll(/<([0-9a-f]+)>/gi)) {
+      decoded.push(Buffer.from(match[1], 'hex').toString('latin1'));
+    }
+  }
+  return decoded.join('');
+}
+
+async function run() {
+  const salary = {
+    employeeName: 'Test Worker',
+    shopName: 'Station',
+    weekLabel: '04/10/2026 – 10/10/2026',
+    netAttendancePay: 300,
+    attendanceBreakdown: [
+      { dateString: '2026-10-04', status: 'Present', attendancePay: 50 },
+      { dateString: '2026-10-05', status: 'Late', attendancePay: 45 },
+      { dateString: '2026-10-06', status: 'Present', attendancePay: 50 },
+      { dateString: '2026-10-07', status: 'Present', attendancePay: 50 },
+      { dateString: '2026-10-08', status: 'Present', attendancePay: 50 },
+      { dateString: '2026-10-09', status: 'Present', attendancePay: 50 },
+      { dateString: '2026-10-10', status: 'Half', attendancePay: 5 }
+    ]
+  };
+
+  const dailyBreakdown = buildWeeklySalaryDailyBreakdown(salary, '2026-10-04');
+  assert.equal(dailyBreakdown.length, 7);
+  assert.equal(dailyBreakdown[0].dateString, '2026-10-04');
+  assert.equal(dailyBreakdown[6].dayOfWeek, 'Sat');
+  assert.equal(dailyBreakdown[6].attendancePay, 5);
+  assert.equal(dailyBreakdown.reduce((sum, day) => sum + day.attendancePay, 0), salary.netAttendancePay);
+
+  const incompleteWeek = buildWeeklySalaryDailyBreakdown({
+    attendanceBreakdown: salary.attendanceBreakdown.slice(0, 6)
+  }, '2026-10-04');
+  assert.equal(incompleteWeek.length, 7);
+  assert.equal(incompleteWeek[6].dateString, '2026-10-10');
+  assert.equal(incompleteWeek[6].attendancePay, 0);
+  assert.equal(incompleteWeek[6].status, '');
+
+  const workbook = await buildWeeklySalaryExcel([salary], salary.weekLabel, {}, '2026-10-04');
+  const sheet = workbook.getWorksheet('Weekly Salary');
+  assert.equal(sheet.getRow(3).getCell(10).value, 'Sat 2026-10-10');
+  assert.equal(sheet.getRow(4).getCell(10).value, 5);
+  assert.equal(sheet.getRow(6).getCell(10).value, 5);
+
+  const roundTrip = new ExcelJS.Workbook();
+  await roundTrip.xlsx.load(await workbook.xlsx.writeBuffer());
+  assert.equal(roundTrip.getWorksheet('Weekly Salary').getRow(3).getCell(10).value, 'Sat 2026-10-10');
+
+  const pdf = await buildWeeklySalaryPDF(null, [salary], salary.weekLabel, {}, 'Admin', '2026-10-04');
+  const pdfText = extractPdfHexText(pdf);
+  assert.ok(pdf.subarray(0, 4).toString('ascii') === '%PDF');
+  assert.ok(pdfText.includes('Sat 10 Oct'));
+  assert.ok(pdfText.includes('£5.00'));
+  console.log('PASS weekly salary screen data, Excel and PDF include Sunday–Saturday wages, including Saturday');
+}
+
+run().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});
