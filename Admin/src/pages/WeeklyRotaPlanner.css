@@ -1548,6 +1548,19 @@
   font-weight: 700 !important;
 }
 
+/* Coloured shop badge — shown inside LOANED / cross-shop cells */
+.rota-shop-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
 .sheet-cell-custom {
   color: #0f172a;
   font-size: 10px;

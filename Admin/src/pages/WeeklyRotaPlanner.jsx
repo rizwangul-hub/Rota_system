@@ -1730,7 +1730,25 @@ export default function WeeklyRotaPlanner() {
                                 {showPreview && isUnavailable && (
                                   <span className="preview-red-tag">NOT AVAIL</span>
                                 )}
-                                <span>{cellText}</span>
+                                {/* Show coloured shop badge for loaned/cross-shop cells */}
+                                {(cell.status === 'LOANED' || crossShopName) && !crossShopIsOff
+                                  ? (() => {
+                                      const shopStyle = getShopStyle(cellText);
+                                      return (
+                                        <span
+                                          className="rota-shop-pill"
+                                          style={{
+                                            background: shopStyle.pillBg,
+                                            color: shopStyle.text,
+                                            border: `1px solid ${shopStyle.border}`
+                                          }}
+                                        >
+                                          {cellText}
+                                        </span>
+                                      );
+                                    })()
+                                  : <span>{cellText}</span>
+                                }
                               </div>
                             );
                           })}

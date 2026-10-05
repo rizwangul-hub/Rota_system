@@ -9,8 +9,34 @@ import { Link } from 'react-router-dom';
 
 // Module-level cache — survives React navigation (component unmount/remount)
 // Data is kept until the page is fully refreshed in the browser
-const _cache = { data: null, summaryData: null, fetchedAt: null };
+const _cache = { data: null, summaryData: null, fetchedAt: null, request: null };
 const CACHE_TTL_MS = 5 * 60 * 1000; // Re-fetch in background after 5 minutes
+
+function loadDashboardData() {
+  if (_cache.request) return _cache.request;
+
+  _cache.request = Promise.all([
+    axios.get(`${API_BASE_URL}/dashboard/admin`),
+    axios.get(`${API_BASE_URL}/reports/summary`)
+  ]).then(([dashRes, sumRes]) => {
+    if (!dashRes.data.success || !sumRes.data.success) {
+      throw new Error('Dashboard API returned an unsuccessful response.');
+    }
+
+    const result = {
+      data: dashRes.data.data,
+      summaryData: sumRes.data
+    };
+    _cache.data = result.data;
+    _cache.summaryData = result.summaryData;
+    _cache.fetchedAt = Date.now();
+    return result;
+  }).finally(() => {
+    _cache.request = null;
+  });
+
+  return _cache.request;
+}
 
 export default function AdminDashboard() {
   // Initialise from cache so there is NO loading flash on revisit
@@ -28,12 +54,12 @@ export default function AdminDashboard() {
 
     if (_cache.data && !needsFresh) {
       // Cache is fresh — nothing to do, data already shown instantly
-      return;
+      return () => { isMounted.current = false; };
     }
 
-    // First load or stale cache: fetch (silently if we already have cached data)
-    fetchDashboard(/* silent = */ !!_cache.data);
-
+    // First load or stale cache: fetch (silently if we already have cached data).
+    // The shared request updates the module cache even if this page unmounts.
+    void fetchDashboard(/* silent = */ !!_cache.data);
     return () => { isMounted.current = false; };
   }, []);
 
@@ -41,19 +67,10 @@ export default function AdminDashboard() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const [dashRes, sumRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/dashboard/admin`),
-        axios.get(`${API_BASE_URL}/reports/summary`)
-      ]);
+      const result = await loadDashboardData();
       if (!isMounted.current) return; // navigated away — discard
-      const newData        = dashRes.data.success ? dashRes.data.data : _cache.data;
-      const newSummaryData = sumRes.data.success  ? sumRes.data       : _cache.summaryData;
-      // Update cache
-      _cache.data        = newData;
-      _cache.summaryData = newSummaryData;
-      _cache.fetchedAt   = Date.now();
-      setData(newData);
-      setSummaryData(newSummaryData);
+      setData(result.data);
+      setSummaryData(result.summaryData);
     } catch (err) {
       if (!isMounted.current) return;
       console.error('Failed to load dashboard:', err);
