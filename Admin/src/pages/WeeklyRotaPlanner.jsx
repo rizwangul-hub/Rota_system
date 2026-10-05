@@ -806,7 +806,12 @@ export default function WeeklyRotaPlanner() {
         workerIds.forEach(empId => {
           weekDays.forEach(day => {
             const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
-            const cell = cells[cellKey] || { status: 'AVAILABLE' };
+            // CRITICAL: only save cells that were explicitly set (rawCell exists).
+            // Do NOT default blank cells to AVAILABLE — a blank means this worker
+            // is covered by another shop's assignment (cross-shop). Saving a fake
+            // AVAILABLE here would overwrite the real assignment in the DB.
+            const cell = cells[cellKey]; // undefined = not explicitly set → skip
+            if (!cell) return; // skip — not explicitly assigned for this shop/worker/day
 
             if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
               assignments.push({
@@ -817,6 +822,17 @@ export default function WeeklyRotaPlanner() {
                 endTime: cell.endTime || '17:00',
                 status: cell.status,
                 note: cell.note || '',
+                homeShopId: shop._id
+              });
+            } else if (cell.status === 'OFF') {
+              assignments.push({
+                employeeId: empId,
+                shopId: shop._id,
+                dateKey: day.dateKey,
+                startTime: '09:00',
+                endTime: '17:00',
+                status: 'OFF',
+                note: '',
                 homeShopId: shop._id
               });
             } else if (cell.status === 'LOANED' && cell.targetShopId) {

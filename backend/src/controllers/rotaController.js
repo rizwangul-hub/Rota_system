@@ -202,16 +202,13 @@ async function persistDraft(req, res, input, generationMethod = input.generation
     });
   }
   rota ||= await getOrCreateRota(week);
-  const previousByDay = new Map(rota.assignments.map(assignment =>
-    [`${id(assignment.employeeId)}:${assignment.dateKey}`, assignment]
-  ));
-  const nextByDay = new Map(input.assignments.map(assignment =>
-    [`${id(assignment.employeeId)}:${assignment.dateKey}`, assignment]
-  ));
+  // Key includes homeShopId so multi-shop workers (in multiple rosters) don't
+  // collide — each shop's view of a worker on a given day is kept separately.
+  const makeKey = a => `${id(a.homeShopId || a.shopId)}:${id(a.employeeId)}:${a.dateKey}`;
+  const previousByDay = new Map(rota.assignments.map(a => [makeKey(a), a]));
+  const nextByDay = new Map(input.assignments.map(a => [makeKey(a), a]));
   rota.assignments = input.assignments.map(assignment => {
-    const previous = rota.assignments.find(existing =>
-      id(existing.employeeId) === id(assignment.employeeId) && existing.dateKey === assignment.dateKey
-    );
+    const previous = previousByDay.get(makeKey(assignment));
     const startTime = assignment.startTime || '09:00';
     const endTime = assignment.endTime || '17:00';
     const scheduledHours = (minutes(endTime) - minutes(startTime)) / 60;
