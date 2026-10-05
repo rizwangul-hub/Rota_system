@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const ExcelJS = require('exceljs');
+const archiver = require('archiver');
 require('../utils/pdfkitFontPatch'); // Must be before PDFDocument — patches font resolution for Vercel
 const PDFDocument = require('pdfkit');
 const Employee = require('../models/Employee');
@@ -1121,7 +1122,6 @@ exports.exportPdf = async (req, res) => {
 
     const employeeDayAssignments = getEmployeeDayAssignments(rota.assignments, shopsById);
 
-    // Week days: Sun -> Sat
     const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
     const DAY_LABELS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
     const weekDates = [];
@@ -1373,6 +1373,260 @@ exports.exportPdf = async (req, res) => {
     return undefined;
   } catch (error) { return handleError(res, error); }
 };
+
+      function makePdfBuffer(draw) {
+        return new Promise((resolve, reject) => {
+          const doc = new PDFDocument({ margin: 32, size: 'A4', layout: 'landscape' });
+          const chunks = [];
+          doc.on('data', chunk => chunks.push(chunk));
+          doc.once('error', reject);
+          doc.once('end', () => resolve(Buffer.concat(chunks)));
+          draw(doc);
+          doc.end();
+        });
+      }
+
+      function safePdfFilename(value) {
+        return String(value || 'worker')
+          .normalize('NFKD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9_-]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 80) || 'worker';
+      }
+
+      function drawDetailPdfHeader(doc, title, subtitle, week) {
+        const left = 32;
+        const right = 810;
+        doc.rect(left, 24, right - left, 44).fill('#0f172a');
+        doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(15).text(title, left + 12, 33, { width: right - left - 24 });
+        doc.fillColor('#cbd5e1').font('Helvetica').fontSize(8).text(subtitle, left + 12, 53, { width: right - left - 24 });
+        doc.fillColor('#334155').font('Helvetica-Bold').fontSize(9)
+          .text(`Week: ${week.weekStart} to ${week.weekEnd}`, left, 78, { width: right - left });
+      }
+
+      function formatRotaDate(isoDate) {
+        return new Intl.DateTimeFormat('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          timeZone: 'UTC'
+        }).format(new Date(`${isoDate}T00:00:00.000Z`));
+      }
+
+      function assignmentScheduleByEmployeeDate(assignments, shopsById) {
+        const schedules = new Map();
+        assignments.forEach(assignment => {
+          const employeeId = id(assignment.employeeId);
+          const dateKey = String(assignment.dateKey).slice(0, 10);
+          const key = `${employeeId}:${dateKey}`;
+          const records = schedules.get(key) || { off: false, working: new Map() };
+          if (assignment.status === 'OFF') {
+            records.off = true;
+          } else {
+            const shopId = getActualShopId(assignment);
+            const shopAssignments = records.working.get(shopId) || [];
+            shopAssignments.push(assignment);
+            records.working.set(shopId, shopAssignments);
+          }
+          schedules.set(key, records);
+        });
+
+        return { schedules, shopsById };
+      }
+
+      exports.exportIndividualPdfs = async (req, res) => {
+        try {
+          const week = getWeek(req.params.weekStart);
+          const rota = await WeeklyRota.findOne({ weekStart: week.weekStart }).lean();
+          if (!rota) throw new RotaError(404, 'No rota exists for this week.');
+
+          const assignments = rota.assignments || [];
+          const shopIds = [...new Set([
+            ...(rota.shopRoster || []).map(roster => id(roster.shopId)),
+            ...assignments.map(assignment => id(assignment.shopId))
+          ])];
+          const employeeIds = [...new Set([
+            ...(rota.shopRoster || []).flatMap(roster => (roster.employeeIds || []).map(id)),
+            ...assignments.map(assignment => id(assignment.employeeId))
+          ])];
+          const [shops, employees] = await Promise.all([
+            shopIds.length ? Shop.find({ _id: { $in: shopIds } }).select('name').lean() : [],
+            employeeIds.length ? Employee.find({ _id: { $in: employeeIds } }).select('name employeeId').lean() : []
+          ]);
+          const shopsById = new Map(shops.map(shop => [id(shop._id), shop]));
+          const employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
+          if (shopsById.size !== shopIds.length || employeesById.size !== employeeIds.length) {
+            throw new RotaError(400, 'The rota references a shop or worker that no longer exists.');
+          }
+
+          const rosterByShop = new Map();
+          (rota.shopRoster || []).forEach(roster => {
+            const shopId = id(roster.shopId);
+            rosterByShop.set(shopId, new Set((roster.employeeIds || []).map(id)));
+          });
+          assignments.forEach(assignment => {
+            const homeShopId = id(assignment.homeShopId || assignment.shopId);
+            if (!rosterByShop.has(homeShopId)) rosterByShop.set(homeShopId, new Set());
+            rosterByShop.get(homeShopId).add(id(assignment.employeeId));
+          });
+
+          const { schedules } = assignmentScheduleByEmployeeDate(assignments, shopsById);
+          const weekDates = Array.from({ length: 7 }, (_, index) => {
+            const date = new Date(`${week.weekStart}T12:00:00.000Z`);
+            date.setUTCDate(date.getUTCDate() + index);
+            return date.toISOString().slice(0, 10);
+          });
+          const shopIdsToExport = [...new Set([
+            ...rosterByShop.keys(),
+            ...assignments.filter(assignment => assignment.status !== 'OFF')
+              .map(assignment => getActualShopId(assignment))
+          ])].filter(shopId => shopsById.has(shopId)).sort((a, b) =>
+            shopsById.get(a).name.localeCompare(shopsById.get(b).name)
+          );
+
+          const pdfFiles = [];
+          for (const shopId of shopIdsToExport) {
+            const shop = shopsById.get(shopId);
+            const workerIds = new Set(rosterByShop.get(shopId) || []);
+            assignments.forEach(assignment => {
+              if (assignment.status !== 'OFF' && getActualShopId(assignment) === shopId) {
+                workerIds.add(id(assignment.employeeId));
+              }
+            });
+            const shopWorkers = [...workerIds]
+              .map(employeeId => employeesById.get(employeeId))
+              .filter(Boolean)
+              .sort((a, b) => a.name.localeCompare(b.name));
+            const pdf = await makePdfBuffer(doc => {
+              drawDetailPdfHeader(doc, `${shop.name} — Weekly Rota`, 'Workers assigned to this shop and their daily status', week);
+              let y = 108;
+              const nameWidth = 150;
+              const dayWidth = (778 - nameWidth) / 7;
+              const headerHeight = 28;
+              const rowHeight = 25;
+              const drawTableHeader = () => {
+                doc.rect(32, y, 778, headerHeight).fill('#1e293b');
+                doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7).text('WORKER', 38, y + 10, { width: nameWidth - 10 });
+                weekDates.forEach((dateKey, index) => {
+                  const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' })
+                    .format(new Date(`${dateKey}T12:00:00.000Z`));
+                  doc.text(`${dayName} ${formatRotaDate(dateKey)}`, 32 + nameWidth + index * dayWidth, y + 10, {
+                    width: dayWidth, align: 'center', lineBreak: false
+                  });
+                });
+                y += headerHeight;
+              };
+              drawTableHeader();
+              shopWorkers.forEach((employee, rowIndex) => {
+                if (y + rowHeight > 555) {
+                  doc.addPage({ margin: 32, size: 'A4', layout: 'landscape' });
+                  drawDetailPdfHeader(doc, `${shop.name} — Weekly Rota`, 'Workers assigned to this shop and their daily status', week);
+                  y = 108;
+                  drawTableHeader();
+                }
+                doc.rect(32, y, 778, rowHeight).fill(rowIndex % 2 ? '#f8fafc' : '#ffffff');
+                doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
+                  .text(employee.name, 38, y + 8, { width: nameWidth - 10, lineBreak: false });
+                weekDates.forEach((dateKey, index) => {
+                  const schedule = schedules.get(`${id(employee._id)}:${dateKey}`);
+                  const workingShopIds = [...(schedule?.working.keys() || [])];
+                  let label = 'Available';
+                  let color = '#059669';
+                  if (workingShopIds.includes(shopId)) {
+                    const dayAssignment = schedule.working.get(shopId)[0];
+                    label = dayAssignment.status === 'CUSTOM' && dayAssignment.note
+                      ? dayAssignment.note
+                      : `Available ${dayAssignment.startTime}-${dayAssignment.endTime}`;
+                  } else if (workingShopIds.length) {
+                    label = workingShopIds.map(otherShopId => shopsById.get(otherShopId)?.name || 'Other shop').join(', ');
+                    color = '#2563eb';
+                  } else if (schedule?.off) {
+                    label = 'OFF';
+                    color = '#dc2626';
+                  }
+                  doc.fillColor(color).font('Helvetica').fontSize(7)
+                    .text(label, 32 + nameWidth + index * dayWidth + 2, y + 8, { width: dayWidth - 4, align: 'center', lineBreak: false });
+                });
+                y += rowHeight;
+              });
+              if (shopWorkers.length === 0) {
+                doc.fillColor('#64748b').font('Helvetica').fontSize(9).text('No workers are assigned to this shop for this week.', 38, y + 12);
+              }
+            });
+            pdfFiles.push({ name: `Shops/${safePdfFilename(shop.name)}_${week.weekStart}.pdf`, buffer: pdf });
+          }
+
+          const workersToExport = [...employeesById.values()].sort((a, b) => a.name.localeCompare(b.name));
+          for (const employee of workersToExport) {
+            const pdf = await makePdfBuffer(doc => {
+              drawDetailPdfHeader(doc, `${employee.name} — Weekly Rota`, 'Your work location and rota status for each day', week);
+              const left = 60;
+              let y = 112;
+              doc.rect(left, y, 720, 26).fill('#1e293b');
+              doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8)
+                .text('DAY', left + 10, y + 9, { width: 90 })
+                .text('DATE', left + 110, y + 9, { width: 120 })
+                .text('SHOP / LOCATION', left + 250, y + 9, { width: 220 })
+                .text('SHIFT / STATUS', left + 490, y + 9, { width: 210 });
+              y += 26;
+              weekDates.forEach((dateKey, index) => {
+                const schedule = schedules.get(`${id(employee._id)}:${dateKey}`);
+                const workingShopIds = [...(schedule?.working.keys() || [])];
+                let location = 'Not assigned';
+                let shift = '—';
+                let color = '#64748b';
+                if (workingShopIds.length) {
+                  location = workingShopIds.map(shopId => shopsById.get(shopId)?.name || 'Other shop').join(', ');
+                  const dayAssignment = schedule.working.get(workingShopIds[0])[0];
+                  shift = `${dayAssignment.startTime}–${dayAssignment.endTime}${dayAssignment.status === 'CUSTOM' && dayAssignment.note ? ` · ${dayAssignment.note}` : ''}`;
+                  color = workingShopIds.length > 1 ? '#b91c1c' : '#059669';
+                } else if (schedule?.off) {
+                  location = 'OFF';
+                  shift = 'Day off';
+                  color = '#dc2626';
+                }
+                doc.rect(left, y, 720, 38).fill(index % 2 ? '#f8fafc' : '#ffffff');
+                const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' })
+                  .format(new Date(`${dateKey}T12:00:00.000Z`));
+                doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8).text(dayName, left + 10, y + 14, { width: 90 });
+                doc.font('Helvetica').text(formatRotaDate(dateKey), left + 110, y + 14, { width: 120 });
+                doc.fillColor(color).font('Helvetica-Bold').text(location, left + 250, y + 14, { width: 220, lineBreak: false });
+                doc.fillColor('#334155').font('Helvetica').text(shift, left + 490, y + 14, { width: 210, lineBreak: false });
+                y += 38;
+              });
+            });
+            pdfFiles.push({
+              name: `Workers/${safePdfFilename(employee.name)}_${safePdfFilename(employee.employeeId)}_${week.weekStart}.pdf`,
+              buffer: pdf
+            });
+          }
+
+          await logAction({
+            user: req.user,
+            action: 'ROTA_EXPORTED',
+            recordType: 'WeeklyRota',
+            details: `Exported ${pdfFiles.length} individual shop and worker PDFs for ${week.weekStart}.`,
+            req
+          });
+
+          const zip = archiver('zip', { zlib: { level: 6 } });
+          const chunks = [];
+          const zipBufferPromise = new Promise((resolve, reject) => {
+            zip.on('data', chunk => chunks.push(chunk));
+            zip.once('error', reject);
+            zip.once('end', () => resolve(Buffer.concat(chunks)));
+          });
+          pdfFiles.forEach(file => zip.append(file.buffer, { name: file.name }));
+          await zip.finalize();
+          const zipBuffer = await zipBufferPromise;
+          res.setHeader('Content-Type', 'application/zip');
+          res.setHeader('Content-Length', zipBuffer.length);
+          res.setHeader('Content-Disposition', `attachment; filename="Weekly_Rota_Individual_PDFs_${week.weekStart}.zip"`);
+          return res.status(200).send(zipBuffer);
+        } catch (error) {
+          return handleError(res, error);
+        }
+      };
 
 exports.generateWithAI = async (req, res) => {
   try {

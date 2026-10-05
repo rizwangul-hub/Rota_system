@@ -14,6 +14,7 @@ router.get('/history', rotaController.history);
 router.get('/employee/:employeeId/:weekStart/export.xlsx', rotaController.exportExcel);
 router.get('/employee/:employeeId/:weekStart/export.pdf', rotaController.exportPdf);
 router.get('/employee/:employeeId/:weekStart', rotaController.employeeWeek);
+router.get('/week/:weekStart/export-pdfs.zip', rotaController.exportIndividualPdfs);
 router.get('/week/:weekStart/export.xlsx', rotaController.exportExcel);
 router.get('/week/:weekStart/export.pdf', rotaController.exportPdf);
 router.post('/week/:weekStart/export.pdf', rotaController.exportPdf);

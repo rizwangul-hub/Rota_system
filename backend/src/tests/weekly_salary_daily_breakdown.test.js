@@ -6,6 +6,9 @@ const {
   buildWeeklySalaryExcel,
   buildWeeklySalaryPDF
 } = require('../utils/reports');
+const Attendance = require('../models/Attendance');
+const WeeklySalary = require('../models/WeeklySalary');
+const reportController = require('../controllers/reportController');
 
 function extractPdfHexText(buffer) {
   const decoded = [];
@@ -55,6 +58,17 @@ async function run() {
   assert.equal(incompleteWeek[6].attendancePay, 0);
   assert.equal(incompleteWeek[6].status, '');
 
+  const restoredSaturday = buildWeeklySalaryDailyBreakdown({
+    weekStartDateString: '2026-09-27',
+    attendanceBreakdown: [{ dateString: '2026-09-27', status: 'Present', attendancePay: 50 }],
+    reportAttendanceBreakdown: [
+      { dateString: '2026-10-03', status: 'Present', attendancePay: 50 }
+    ]
+  }, '2026-09-27');
+  assert.equal(restoredSaturday[6].dateString, '2026-10-03');
+  assert.equal(restoredSaturday[6].attendancePay, 50);
+  assert.equal(restoredSaturday[6].status, 'Present');
+
   const workbook = await buildWeeklySalaryExcel([salary], salary.weekLabel, {}, '2026-10-04');
   const sheet = workbook.getWorksheet('Weekly Salary');
   assert.equal(sheet.getRow(3).getCell(10).value, 'Sat 2026-10-10');
@@ -70,6 +84,46 @@ async function run() {
   assert.ok(pdf.subarray(0, 4).toString('ascii') === '%PDF');
   assert.ok(pdfText.includes('Sat 10 Oct'));
   assert.ok(pdfText.includes('£5.00'));
+
+  const originalSalaryFind = WeeklySalary.find;
+  const originalAttendanceFind = Attendance.find;
+  const queryResult = records => ({
+    populate() { return this; },
+    sort() { return Promise.resolve(records); }
+  });
+  WeeklySalary.find = () => queryResult([{
+    employee: { _id: 'worker-1', name: 'Test Worker' },
+    employeeName: 'Test Worker',
+    shopName: 'Station',
+    weekLabel: '27/09/2026 – 03/10/2026',
+    weekStartDateString: '2026-09-27',
+    netAttendancePay: 300,
+    finalSalary: 300,
+    totalPaid: 0,
+    balanceRemaining: 300,
+    attendanceBreakdown: [
+      { dateString: '2026-09-27', status: 'Present', attendancePay: 50 }
+    ]
+  }]);
+  Attendance.find = () => queryResult([{
+    employee: { _id: 'worker-1' },
+    dateString: '2026-10-03',
+    shopName: 'Station',
+    status: 'Present',
+    attendancePay: 50
+  }]);
+  try {
+    const response = { json(data) { this.data = data; } };
+    await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
+    assert.equal(response.data.salaries[0].dailyAttendance[6].dateString, '2026-10-03');
+    assert.equal(response.data.salaries[0].dailyAttendance[6].attendancePay, 50);
+    assert.equal(response.data.salaries[0].dailyAttendance[6].status, 'Present');
+    assert.equal(response.data.totals.dailyAttendance[6].attendancePay, 50);
+  } finally {
+    WeeklySalary.find = originalSalaryFind;
+    Attendance.find = originalAttendanceFind;
+  }
+
   console.log('PASS weekly salary screen data, Excel and PDF include Sunday–Saturday wages, including Saturday');
 }
 

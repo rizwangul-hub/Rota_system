@@ -1011,7 +1011,10 @@ function buildWeeklySalaryDailyBreakdown(salary, weekStartDateString) {
   const startDate = weekStartDateString || salary.weekStartDateString;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || '')) return [];
 
-  const records = salary.finalizationSnapshot?.attendanceBreakdown || salary.attendanceBreakdown || [];
+  const records = salary.reportAttendanceBreakdown
+    || salary.finalizationSnapshot?.attendanceBreakdown
+    || salary.attendanceBreakdown
+    || [];
   const recordsByDate = new Map();
   records.forEach(record => {
     const dateString = String(record.dateString || '').slice(0, 10);

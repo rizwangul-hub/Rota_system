@@ -963,6 +963,57 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
     .populate('shop')
     .sort({ shopName: 1, employeeName: 1 });
 
+  if (salaries.length > 0) {
+    const attQuery = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+    if (sId) attQuery.shop = sId;
+    if (eId) attQuery.employee = eId;
+
+    const attendances = await Attendance.find(attQuery)
+      .populate('employee')
+      .sort({ dateString: 1 });
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const attendanceByEmployee = new Map();
+    attendances.forEach(attendance => {
+      const employee = attendance.employee;
+      const employeeId = employee?._id
+        ? employee._id.toString()
+        : employee?.toString();
+      if (!employeeId) return;
+      const records = attendanceByEmployee.get(employeeId) || [];
+      records.push({
+        dateString: attendance.dateString || getUKDateString(attendance.date),
+        dayOfWeek: dayNames[getDayOfWeekUK(attendance.dateString || attendance.date)],
+        shopName: attendance.shopName || 'Shop',
+        status: attendance.status,
+        attendancePay: Number(attendance.attendancePay) || 0
+      });
+      attendanceByEmployee.set(employeeId, records);
+    });
+
+    salaries = salaries.map(salary => {
+      const salaryData = typeof salary.toObject === 'function' ? salary.toObject() : salary;
+      const employeeId = salaryData.employee?._id
+        ? salaryData.employee._id.toString()
+        : salaryData.employee?.toString();
+      const recordsByDate = new Map();
+      const savedRecords = salaryData.finalizationSnapshot?.attendanceBreakdown
+        || salaryData.attendanceBreakdown
+        || [];
+      savedRecords.forEach(record => {
+        if (record.dateString) recordsByDate.set(String(record.dateString).slice(0, 10), record);
+      });
+      (attendanceByEmployee.get(employeeId) || []).forEach(record => {
+        recordsByDate.set(record.dateString, record);
+      });
+      return { ...salaryData, reportAttendanceBreakdown: [...recordsByDate.values()] };
+    });
+  }
+
   if (salaries.length === 0) {
     const attQuery = {
       $or: [

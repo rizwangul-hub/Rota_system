@@ -1058,6 +1058,27 @@ export default function WeeklyRotaPlanner() {
     }
   };
 
+  const downloadIndividualPdfs = async () => {
+    try {
+      const token = localStorage.getItem('pixx_token');
+      const response = await axios.get(`${API}/week/${weekStart}/export-pdfs.zip`, {
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/zip' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Weekly_Rota_Individual_PDFs_${weekStart}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Could not download the individual shop and worker PDFs.');
+      console.error(err);
+    }
+  };
+
 
   // Calculate active totals per shop per day
   const getShopDayTotal = (shopId, dateKey) => {
@@ -1226,6 +1247,13 @@ export default function WeeklyRotaPlanner() {
             title="Download PDF rota (Color-Coded Multi-Shop Spreadsheet)"
           >
             <Download size={15} /> PDF
+          </button>
+          <button
+            className="btn btn-outline btn-sm rota-btn-action"
+            onClick={downloadIndividualPdfs}
+            title="Download a ZIP with one rota PDF per shop and worker"
+          >
+            <Download size={15} /> Shop & Worker PDFs
           </button>
           <button
             className="btn btn-outline btn-sm rota-btn-action"
