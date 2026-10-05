@@ -665,8 +665,10 @@ exports.exportExcel = async (req, res) => {
       const eId = id(a.employeeId);
       const dKey = String(a.dateKey).slice(0, 10);
       cellMap[`${hId}:${eId}:${dKey}`] = a;
-      // Track where each worker actually works each day (for cross-shop blank fill)
-      if (a.status !== 'OFF') {
+      // Track where each worker actually works each day (or if they are OFF)
+      if (a.status === 'OFF') {
+        empDateMap[`${eId}:${dKey}`] = '__OFF__';
+      } else {
         const actualShop = (a.status === 'LOANED' ? shopsById[sId] : shopsById[hId]) || shopsById[sId] || '';
         empDateMap[`${eId}:${dKey}`] = actualShop;
       }
@@ -837,11 +839,15 @@ exports.exportExcel = async (req, res) => {
           c.alignment = { horizontal: 'center', vertical: 'middle' };
 
           if (!cell) {
-            // No assignment at this shop — check if worker is at another shop today
-            const crossShop = empDateMap[`${emp._id}:${weekDates[i].iso}`];
-            if (crossShop && crossShop !== roster.shopName) {
+            // No assignment at this shop — check if worker is at another shop (or OFF) today
+            const crossStatus = empDateMap[`${emp._id}:${weekDates[i].iso}`];
+            if (crossStatus === '__OFF__') {
+              // Worker is marked OFF anywhere in the system → show OFF in bold red
+              c.value = 'OFF';
+              c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } };
+            } else if (crossStatus && crossStatus !== roster.shopName) {
               // Worker is assigned to a different shop — show that shop name (blue, like LOANED)
-              c.value = crossShop;
+              c.value = crossStatus;
               c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
             } else {
               // No assignment anywhere — show Available and count in totals
@@ -973,7 +979,9 @@ exports.exportPdf = async (req, res) => {
       const sId = id(a.shopId);
       const eId = id(a.employeeId);
       const dKey = String(a.dateKey).slice(0, 10);
-      if (a.status !== 'OFF') {
+      if (a.status === 'OFF') {
+        empDateMapPdf[`${eId}:${dKey}`] = '__OFF__';
+      } else {
         const actualShop = (a.status === 'LOANED' ? shopsById[sId] : shopsById[hId]) || shopsById[sId] || '';
         empDateMapPdf[`${eId}:${dKey}`] = actualShop;
       }
@@ -1138,10 +1146,13 @@ exports.exportPdf = async (req, res) => {
               grandTotals[i]++;
             }
           } else {
-            // No assignment at this shop — check if worker is at another shop today
-            const crossShop = empDateMapPdf[`${emp._id}:${weekDates[i].iso}`];
-            if (crossShop && crossShop !== roster.shopName) {
-              label = crossShop;
+            // No assignment at this shop — check if worker is at another shop (or OFF) today
+            const crossStatus = empDateMapPdf[`${emp._id}:${weekDates[i].iso}`];
+            if (crossStatus === '__OFF__') {
+              label = 'OFF';
+              color = COLORS.offText; // bold red
+            } else if (crossStatus && crossStatus !== roster.shopName) {
+              label = crossStatus;
               color = COLORS.loanText; // blue — working at another shop
             } else {
               // No assignment anywhere — default to Available
@@ -1151,7 +1162,7 @@ exports.exportPdf = async (req, res) => {
               grandTotals[i]++;
             }
           }
-          cellText(label, x, y, DAY_COL, ROW_H, color, 5.5, cell?.status === 'OFF');
+          cellText(label, x, y, DAY_COL, ROW_H, color, 5.5, cell?.status === 'OFF' || label === 'OFF');
         }
 
         doc.strokeColor(COLORS.border).lineWidth(0.3);

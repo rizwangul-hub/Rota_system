@@ -1656,20 +1656,25 @@ export default function WeeklyRotaPlanner() {
                             // check if this worker has an assignment at another shop on this day.
                             // This fills in blank cells with the target shop name automatically.
                             let crossShopName = null;
-                            let crossShopClass = 'sheet-cell-loaned';
+                            let crossShopIsOff = false;
                             if (!rawCell) {
                               for (const otherShop of shops) {
                                 if (otherShop._id === shop._id) continue;
                                 const otherKey = `${otherShop._id}:${empId}:${d.dateKey}`;
                                 const otherCell = cells[otherKey];
-                                if (otherCell && otherCell.status !== 'OFF') {
-                                  // Worker has an assignment at another shop → show that shop name
-                                  if (otherCell.status === 'LOANED' && otherCell.targetShopId) {
-                                    crossShopName = shopMap.get(otherCell.targetShopId)?.name || otherShop.name;
+                                if (otherCell) {
+                                  if (otherCell.status === 'OFF') {
+                                    // Worker is off across the system
+                                    crossShopIsOff = true;
                                   } else {
-                                    crossShopName = otherShop.name;
+                                    // Worker is working at this other shop — show where
+                                    if (otherCell.status === 'LOANED' && otherCell.targetShopId) {
+                                      crossShopName = shopMap.get(otherCell.targetShopId)?.name || otherShop.name;
+                                    } else {
+                                      crossShopName = otherShop.name;
+                                    }
+                                    break;
                                   }
-                                  break;
                                 }
                               }
                             }
@@ -1685,10 +1690,11 @@ export default function WeeklyRotaPlanner() {
                               cellClass = 'sheet-cell-conflict';
                               cellText = '⚠️ Conflict';
                             } else if (crossShopName) {
-                              // Worker is at another shop — show where
-                              cellClass = crossShopClass;
+                              // Worker is at another shop — show where (blue)
+                              cellClass = 'sheet-cell-loaned';
                               cellText = crossShopName;
-                            } else if (cell.status === 'OFF') {
+                            } else if (crossShopIsOff || cell.status === 'OFF') {
+                              // Worker is marked OFF anywhere — show OFF (bold red)
                               cellClass = 'sheet-cell-off';
                               cellText = 'OFF';
                             } else if (cell.status === 'LOANED' && cell.targetShopId) {
