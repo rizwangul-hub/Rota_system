@@ -518,7 +518,7 @@ export default function WeeklyRotaPlanner() {
     const foundConflicts = [];
     Object.entries(scheduleTracking).forEach(([trackKey, entries]) => {
       const distinctActiveShops = new Set(entries.map(e => e.activeShopId));
-      if (distinctActiveShops.size > 1 || entries.length > 1) {
+      if (distinctActiveShops.size > 1) {
         const [empId, dateKey] = trackKey.split(':');
         const emp = employeeMap.get(empId);
         const day = weekDays.find(d => d.dateKey === dateKey);
@@ -804,12 +804,65 @@ export default function WeeklyRotaPlanner() {
     }
   };
 
+  const buildCurrentRotaPayload = () => {
+    const assignments = [];
+    const shopRosterPayload = [];
+
+    shops.forEach(shop => {
+      const workerIds = shopRosters[shop._id] || [];
+      shopRosterPayload.push({ shopId: shop._id, employeeIds: workerIds });
+
+      workerIds.forEach(empId => {
+        weekDays.forEach(day => {
+          const cell = cells[`${shop._id}:${empId}:${day.dateKey}`];
+          if (!cell) return;
+
+          if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
+            assignments.push({
+              employeeId: empId,
+              shopId: shop._id,
+              dateKey: day.dateKey,
+              startTime: cell.startTime || '09:00',
+              endTime: cell.endTime || '17:00',
+              status: cell.status,
+              note: cell.note || '',
+              homeShopId: shop._id
+            });
+          } else if (cell.status === 'OFF') {
+            assignments.push({
+              employeeId: empId,
+              shopId: shop._id,
+              dateKey: day.dateKey,
+              startTime: '09:00',
+              endTime: '17:00',
+              status: 'OFF',
+              note: '',
+              homeShopId: shop._id
+            });
+          } else if (cell.status === 'LOANED' && cell.targetShopId) {
+            assignments.push({
+              employeeId: empId,
+              shopId: cell.targetShopId,
+              dateKey: day.dateKey,
+              startTime: cell.startTime || '09:00',
+              endTime: cell.endTime || '17:00',
+              status: 'LOANED',
+              note: cell.note || `Loaned from ${shop.name}`,
+              homeShopId: shop._id
+            });
+          }
+        });
+      });
+    });
+
+    return { assignments, shopRoster: shopRosterPayload, generationMethod: 'MANUAL' };
+  };
+
   // Save Rota Draft
   const saveRota = async () => {
     if (conflicts.length > 0) {
-      if (!window.confirm(
-        `Warning: There are ${conflicts.length} worker conflict(s) (double-booking). Are you sure you want to save anyway? We recommend resolving them first.`
-      )) return;
+      setError(`Resolve the ${conflicts.length} double-booking conflict(s) shown below before saving this rota.`);
+      return;
     }
 
     setSaving(true);
@@ -817,68 +870,8 @@ export default function WeeklyRotaPlanner() {
     setNotice('');
 
     try {
-      const assignments = [];
-      const shopRosterPayload = [];
-
-      shops.forEach(shop => {
-        const workerIds = shopRosters[shop._id] || [];
-        shopRosterPayload.push({
-          shopId: shop._id,
-          employeeIds: workerIds
-        });
-
-        workerIds.forEach(empId => {
-          weekDays.forEach(day => {
-            const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
-            // CRITICAL: only save cells that were explicitly set (rawCell exists).
-            // Do NOT default blank cells to AVAILABLE — a blank means this worker
-            // is covered by another shop's assignment (cross-shop). Saving a fake
-            // AVAILABLE here would overwrite the real assignment in the DB.
-            const cell = cells[cellKey]; // undefined = not explicitly set → skip
-            if (!cell) return; // skip — not explicitly assigned for this shop/worker/day
-
-            if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
-              assignments.push({
-                employeeId: empId,
-                shopId: shop._id,
-                dateKey: day.dateKey,
-                startTime: cell.startTime || '09:00',
-                endTime: cell.endTime || '17:00',
-                status: cell.status,
-                note: cell.note || '',
-                homeShopId: shop._id
-              });
-            } else if (cell.status === 'OFF') {
-              assignments.push({
-                employeeId: empId,
-                shopId: shop._id,
-                dateKey: day.dateKey,
-                startTime: '09:00',
-                endTime: '17:00',
-                status: 'OFF',
-                note: '',
-                homeShopId: shop._id
-              });
-            } else if (cell.status === 'LOANED' && cell.targetShopId) {
-              assignments.push({
-                employeeId: empId,
-                shopId: cell.targetShopId,
-                dateKey: day.dateKey,
-                startTime: cell.startTime || '09:00',
-                endTime: cell.endTime || '17:00',
-                status: 'LOANED',
-                note: cell.note || `Loaned from ${shop.name}`,
-                homeShopId: shop._id
-              });
-            }
-          });
-        });
-      });
-
       const payload = {
-        assignments,
-        shopRoster: shopRosterPayload,
-        generationMethod: 'MANUAL',
+        ...buildCurrentRotaPayload(),
         revisePublished: currentRota?.status === 'PUBLISHED'
       };
 
@@ -888,7 +881,15 @@ export default function WeeklyRotaPlanner() {
       }
       setNotice('Weekly Rota draft saved successfully!');
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.validation?.errors?.join(', ') || err.message || 'Failed to save rota draft.';
+      const responseData = err?.response?.data;
+      const validationErrors = [
+        responseData?.validation?.errors,
+        responseData?.errors,
+        responseData?.details?.validation?.errors
+      ].find(errors => Array.isArray(errors) && errors.length > 0);
+      const msg = Array.isArray(validationErrors) && validationErrors.length
+        ? `Rota draft could not be saved:\n${validationErrors.map(item => `• ${item}`).join('\n')}`
+        : responseData?.message || err.message || 'Failed to save rota draft.';
       setError(msg);
     } finally {
       setSaving(false);
@@ -1018,7 +1019,7 @@ export default function WeeklyRotaPlanner() {
   const downloadPdf = async () => {
     try {
       const token = localStorage.getItem('pixx_token');
-      const response = await axios.get(`${API}/week/${weekStart}/export.pdf`, {
+      const response = await axios.post(`${API}/week/${weekStart}/export.pdf`, buildCurrentRotaPayload(), {
         responseType: 'blob',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1031,7 +1032,7 @@ export default function WeeklyRotaPlanner() {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      alert('Could not download PDF. Make sure the rota is saved first.');
+      alert(err?.response?.data?.message || 'Could not download the current rota PDF.');
       console.error(err);
     }
   };
@@ -1285,7 +1286,7 @@ export default function WeeklyRotaPlanner() {
       {error && (
         <div className="rota-alert-msg rota-alert-error" role="alert">
           <AlertCircle size={18} />
-          <span>{error}</span>
+          <span style={{ whiteSpace: 'pre-line' }}>{error}</span>
           <button onClick={() => setError('')} className="rota-close-alert">×</button>
         </div>
       )}

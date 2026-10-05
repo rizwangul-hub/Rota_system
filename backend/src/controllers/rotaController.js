@@ -74,7 +74,11 @@ async function buildValidation(rota, source) {
   }
   for (const duplicate of duplicateAssignments) {
     const employeeName = employeeMap.get(duplicate.employeeId)?.name || 'This employee';
-    errors.push(`${employeeName} already has a shift on ${duplicate.dateKey}. Remove the existing assignment before assigning another shop that day.`);
+    const shopNames = duplicate.shopIds
+      .map(shopId => shopMap.get(shopId)?.name || 'an unknown shop');
+    errors.push(
+      `${employeeName} has conflicting assignments on ${duplicate.dateKey}${shopNames.length ? ` at ${shopNames.join(' and ')}` : ''}. Keep only one working shop for that day.`
+    );
   }
 
   for (const assignment of assignments) {
@@ -277,7 +281,8 @@ async function persistDraft(req, res, input, generationMethod = input.generation
     !(input.assignments.length === 0 && error === 'Add at least one assignment before publishing this weekly rota.')
   );
   if (errors.length) {
-    throw new RotaError(422, 'Rota draft contains invalid assignments.', {
+    throw new RotaError(422, `Rota draft contains invalid assignments:\n${errors.map(error => `• ${error}`).join('\n')}`, {
+      errors,
       validation: { ...validation, errors }
     });
   }
@@ -1014,22 +1019,76 @@ exports.exportPdf = async (req, res) => {
 
     const weekStart = req.params.weekStart;
     const week = getWeek(weekStart);
-    const rota = await WeeklyRota.findOne({ weekStart: week.weekStart })
-      .populate('shopRoster.shopId', 'name')
-      .populate('shopRoster.employeeIds', 'name')
-      .lean();
-    if (!rota) throw new RotaError(404, 'No rota exists for this week.');
+    const currentScreenSnapshot = req.method === 'POST';
+    let rota;
+    if (currentScreenSnapshot) {
+      const assignments = req.body?.assignments;
+      const shopRoster = req.body?.shopRoster;
+      const generationMethod = req.body?.generationMethod || 'MANUAL';
+      const structuralError = validatePayload(assignments, undefined, generationMethod);
+      if (structuralError) throw new RotaError(400, structuralError);
+      if (!Array.isArray(shopRoster)) throw new RotaError(400, 'shopRoster must be an array.');
+      if (assignments.some(assignment => !dateInWeek(assignment.dateKey, week.weekStart))) {
+        throw new RotaError(400, 'All assignments must fall within the selected rota week.');
+      }
+
+      for (const assignment of assignments) {
+        checkObjectId(assignment.employeeId, 'employeeId');
+        checkObjectId(assignment.shopId, 'shopId');
+      }
+      const duplicateAssignments = findDuplicateEmployeeDates(assignments);
+      if (duplicateAssignments.length) {
+        throw new RotaError(422, 'The current rota contains conflicting assignments.', {
+          conflicts: duplicateAssignments
+        });
+      }
+      for (const roster of shopRoster) {
+        checkObjectId(roster.shopId, 'shopId');
+        if (!Array.isArray(roster.employeeIds)) throw new RotaError(400, 'Each shop roster must contain an employeeIds array.');
+        roster.employeeIds.forEach(idValue => checkObjectId(idValue, 'employeeId'));
+      }
+      rota = { assignments, shopRoster };
+    } else {
+      rota = await WeeklyRota.findOne({ weekStart: week.weekStart })
+        .populate('shopRoster.shopId', 'name')
+        .populate('shopRoster.employeeIds', 'name')
+        .lean();
+      if (!rota) throw new RotaError(404, 'No rota exists for this week.');
+    }
 
     // Fetch all shops in order
     const allShops = await Shop.find({ isActive: true }).select('name').lean();
+    const shopsById = {};
+    allShops.forEach(shop => { shopsById[id(shop._id)] = shop.name; });
+
+    let employeesById = null;
+    if (currentScreenSnapshot) {
+      const employeeIds = [...new Set(rota.shopRoster.flatMap(roster => roster.employeeIds.map(id)) )];
+      const employees = employeeIds.length
+        ? await Employee.find({ _id: { $in: employeeIds } }).select('name').lean()
+        : [];
+      employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
+      if (employeesById.size !== employeeIds.length) {
+        throw new RotaError(400, 'The current screen rota references an employee that no longer exists.');
+      }
+      if (rota.shopRoster.some(roster => !shopsById[id(roster.shopId)])) {
+        throw new RotaError(400, 'The current screen rota references a shop that is not active.');
+      }
+    }
 
     // Build shopRoster lookup
     const rosterMap = {};
     for (const sr of (rota.shopRoster || [])) {
       const sId = id(sr.shopId?._id || sr.shopId);
       rosterMap[sId] = {
-        shopName: sr.shopId?.name || '',
-        employees: (sr.employeeIds || []).map(e => ({ _id: id(e._id || e), name: e.name || '' }))
+        shopName: sr.shopId?.name || shopsById[sId] || '',
+        employees: (sr.employeeIds || []).map(e => {
+          const employeeIdValue = id(e._id || e);
+          return {
+            _id: employeeIdValue,
+            name: e.name || employeesById?.get(employeeIdValue)?.name || ''
+          };
+        })
       };
     }
 
@@ -1041,8 +1100,6 @@ exports.exportPdf = async (req, res) => {
       cellMap[`${hId}:${eId}:${dKey}`] = a;
     }
 
-    const shopsById = {};
-    allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
     const employeeDayAssignments = getEmployeeDayAssignments(rota.assignments, shopsById);
 
     // Week days: Sun -> Sat

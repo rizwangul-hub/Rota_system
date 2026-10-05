@@ -31,7 +31,23 @@ assert.deepStrictEqual(findDuplicateEmployeeDates([
   { employeeId: 'worker', dateKey: '2026-09-28', shopId: 'shop-a' },
   { employeeId: 'worker', dateKey: '2026-09-28', shopId: 'shop-a' },
   { employeeId: 'worker', dateKey: '2026-09-29', shopId: 'shop-b' }
-]), [{ employeeId: 'worker', dateKey: '2026-09-28' }]);
+]), [{ employeeId: 'worker', dateKey: '2026-09-28', shopIds: ['shop-a'] }]);
+assert.deepStrictEqual(findDuplicateEmployeeDates([
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'station', homeShopId: 'station', status: 'OFF' },
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'camden', homeShopId: 'camden', status: 'AVAILABLE' }
+]), [], 'An OFF marker at the home shop plus a working assignment elsewhere is not a conflict.');
+assert.deepStrictEqual(findDuplicateEmployeeDates([
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'camden', homeShopId: 'station', status: 'LOANED' },
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'camden', homeShopId: 'camden', status: 'AVAILABLE' }
+]), [], 'The source and destination entries for one transfer represent one working assignment.');
+assert.deepStrictEqual(findDuplicateEmployeeDates([
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'station', homeShopId: 'station', status: 'AVAILABLE' },
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'camden', homeShopId: 'camden', status: 'AVAILABLE' }
+]), [{
+  employeeId: 'worker',
+  dateKey: '2026-10-04',
+  shopIds: ['station', 'camden']
+}], 'Assignments at different working shops on the same day are returned as a conflict.');
 const transferAssignments = getEmployeeDayAssignments([
   {
     employeeId: 'worker',

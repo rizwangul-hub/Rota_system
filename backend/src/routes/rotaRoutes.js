@@ -16,6 +16,7 @@ router.get('/employee/:employeeId/:weekStart/export.pdf', rotaController.exportP
 router.get('/employee/:employeeId/:weekStart', rotaController.employeeWeek);
 router.get('/week/:weekStart/export.xlsx', rotaController.exportExcel);
 router.get('/week/:weekStart/export.pdf', rotaController.exportPdf);
+router.post('/week/:weekStart/export.pdf', rotaController.exportPdf);
 router.put('/week/:weekStart/draft', rotaController.saveDraft);
 router.delete('/week/:weekStart/draft', rotaController.discardDraft);
 router.patch('/week/:weekStart/assignment/:assignmentId/lock', rotaController.setAssignmentLock);

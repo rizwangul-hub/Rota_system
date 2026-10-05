@@ -74,12 +74,33 @@ function validatePayload(assignments, targets, method) {
 }
 
 function findDuplicateEmployeeDates(assignments) {
-  const seen = new Set();
+  const assignmentsByEmployeeDate = new Map();
+  const getId = value => String(value?._id || value || '');
+  for (const assignment of assignments || []) {
+    if (assignment.status === 'OFF') continue;
+    const employeeId = getId(assignment.employeeId);
+    const dateKey = assignment.dateKey;
+    const homeShopId = getId(assignment.homeShopId || assignment.shopId);
+    const shopId = getId(assignment.shopId);
+    const actualShopId = assignment.status === 'LOANED' || homeShopId !== shopId ? shopId : homeShopId;
+    const key = `${employeeId}:${dateKey}`;
+    const group = assignmentsByEmployeeDate.get(key) || { employeeId, dateKey, entries: [] };
+    group.entries.push({ assignment, homeShopId, actualShopId });
+    assignmentsByEmployeeDate.set(key, group);
+  }
+
   const duplicates = [];
-  for (const assignment of assignments) {
-    const key = `${assignment.employeeId}:${assignment.dateKey}`;
-    if (seen.has(key)) duplicates.push({ employeeId: String(assignment.employeeId), dateKey: assignment.dateKey });
-    seen.add(key);
+  for (const { employeeId, dateKey, entries } of assignmentsByEmployeeDate.values()) {
+    const actualShopIds = [...new Set(entries.map(entry => entry.actualShopId))];
+    if (entries.length < 2) continue;
+
+    const isMirroredTransfer = actualShopIds.length === 1 &&
+      entries.length === 2 &&
+      entries.some(entry => entry.assignment.status === 'LOANED' && entry.homeShopId !== entry.actualShopId) &&
+      entries.some(entry => entry.assignment.status !== 'LOANED' && entry.homeShopId === entry.actualShopId);
+    if (!isMirroredTransfer) {
+      duplicates.push({ employeeId, dateKey, shopIds: actualShopIds });
+    }
   }
   return duplicates;
 }
