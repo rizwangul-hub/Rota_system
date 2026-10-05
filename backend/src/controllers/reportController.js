@@ -35,7 +35,7 @@ const {
   getShopColor,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
-const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, safeObjectId, getDayOfWeekUK } = require('../utils/calc');
+const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, calculateWeeklySalaryComponents, safeObjectId, getDayOfWeekUK } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const {
   attendanceOperatorRecord,
@@ -1010,7 +1010,31 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
       (attendanceByEmployee.get(employeeId) || []).forEach(record => {
         recordsByDate.set(record.dateString, record);
       });
-      return { ...salaryData, reportAttendanceBreakdown: [...recordsByDate.values()] };
+      const reportAttendanceBreakdown = [...recordsByDate.values()];
+      const isPayrollLocked = Boolean(salaryData.finalizationSnapshot)
+        || ['FINALIZED', 'PAID', 'PARTIALLY_PAID'].includes(String(salaryData.status || '').toUpperCase().replaceAll(' ', '_'));
+      if (isPayrollLocked) return { ...salaryData, reportAttendanceBreakdown };
+
+      const netAttendancePay = Number(reportAttendanceBreakdown
+        .reduce((total, record) => total + (Number(record.attendancePay) || 0), 0)
+        .toFixed(2));
+      const recalculated = calculateWeeklySalaryComponents({
+        netAttendancePay,
+        adjustments: [
+          { type: 'TRAVEL_ALLOWANCE', amount: salaryData.travelAllowance },
+          { type: 'OTHER_ALLOWANCE', amount: salaryData.otherAllowances },
+          { type: 'MANUAL_DEDUCTION', amount: salaryData.manualDeductions }
+        ],
+        bonus: salaryData.bonus
+      });
+      const totalPaid = Number(salaryData.totalPaid) || 0;
+      return {
+        ...salaryData,
+        reportAttendanceBreakdown,
+        netAttendancePay: recalculated.netAttendancePay,
+        finalSalary: recalculated.finalSalary,
+        balanceRemaining: Number(Math.max(0, recalculated.finalSalary - totalPaid).toFixed(2))
+      };
     });
   }
 

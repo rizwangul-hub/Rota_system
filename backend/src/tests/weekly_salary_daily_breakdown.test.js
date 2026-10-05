@@ -91,7 +91,7 @@ async function run() {
     populate() { return this; },
     sort() { return Promise.resolve(records); }
   });
-  WeeklySalary.find = () => queryResult([{
+  const salaryRecord = {
     employee: { _id: 'worker-1', name: 'Test Worker' },
     employeeName: 'Test Worker',
     shopName: 'Station',
@@ -101,10 +101,18 @@ async function run() {
     finalSalary: 300,
     totalPaid: 0,
     balanceRemaining: 300,
-    attendanceBreakdown: [
-      { dateString: '2026-09-27', status: 'Present', attendancePay: 50 }
-    ]
-  }]);
+    status: 'Generated',
+    attendanceBreakdown: Array.from({ length: 6 }, (_, index) => {
+      const date = new Date('2026-09-27T12:00:00.000Z');
+      date.setUTCDate(date.getUTCDate() + index);
+      return {
+        dateString: date.toISOString().slice(0, 10),
+        status: 'Present',
+        attendancePay: 50
+      };
+    })
+  };
+  WeeklySalary.find = () => queryResult([salaryRecord]);
   Attendance.find = () => queryResult([{
     employee: { _id: 'worker-1' },
     dateString: '2026-10-03',
@@ -119,6 +127,17 @@ async function run() {
     assert.equal(response.data.salaries[0].dailyAttendance[6].attendancePay, 50);
     assert.equal(response.data.salaries[0].dailyAttendance[6].status, 'Present');
     assert.equal(response.data.totals.dailyAttendance[6].attendancePay, 50);
+    assert.equal(response.data.salaries[0].netAttendancePay, 350);
+    assert.equal(response.data.salaries[0].finalSalary, 350);
+    assert.equal(response.data.salaries[0].balanceRemaining, 350);
+    assert.equal(response.data.totals.totalAttendancePay, 350);
+    assert.equal(response.data.totals.totalFinalSalary, 350);
+
+    salaryRecord.status = 'FINALIZED';
+    salaryRecord.finalizationSnapshot = { attendanceBreakdown: salaryRecord.attendanceBreakdown };
+    await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
+    assert.equal(response.data.salaries[0].netAttendancePay, 300);
+    assert.equal(response.data.salaries[0].finalSalary, 300);
   } finally {
     WeeklySalary.find = originalSalaryFind;
     Attendance.find = originalAttendanceFind;
