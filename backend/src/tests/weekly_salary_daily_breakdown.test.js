@@ -134,6 +134,12 @@ async function run() {
     assert.equal(response.data.totals.totalAttendancePay, 350);
     assert.equal(response.data.totals.totalFinalSalary, 350);
 
+    salaryRecord.weeklySalaryOverride = 425;
+    await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
+    assert.equal(response.data.salaries[0].netAttendancePay, 425);
+    assert.equal(response.data.salaries[0].finalSalary, 425);
+
+    delete salaryRecord.weeklySalaryOverride;
     salaryRecord.finalizationSnapshot = { attendanceBreakdown: salaryRecord.attendanceBreakdown };
     await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
     assert.equal(response.data.salaries[0].netAttendancePay, 350);

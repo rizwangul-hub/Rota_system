@@ -1015,9 +1015,13 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
         .includes(String(salaryData.status || '').toUpperCase().replaceAll(' ', '_'));
       if (isPayrollLocked) return { ...salaryData, reportAttendanceBreakdown };
 
-      const netAttendancePay = Number(reportAttendanceBreakdown
+      const attendancePayTotal = Number(reportAttendanceBreakdown
         .reduce((total, record) => total + (Number(record.attendancePay) || 0), 0)
         .toFixed(2));
+      const netAttendancePay = salaryData.weeklySalaryOverride === undefined
+        || salaryData.weeklySalaryOverride === null
+        ? attendancePayTotal
+        : Number(salaryData.weeklySalaryOverride);
       const recalculated = calculateWeeklySalaryComponents({
         netAttendancePay,
         adjustments: [

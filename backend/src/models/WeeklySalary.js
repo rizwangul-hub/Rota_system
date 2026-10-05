@@ -68,6 +68,11 @@ const WeeklySalarySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  weeklySalaryOverride: {
+    type: Number,
+    default: null,
+    min: 0
+  },
   travelAllowance: {
     type: Number,
     default: 0

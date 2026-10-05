@@ -26,10 +26,11 @@ async function recalculateWeeklySalary(salaryDoc) {
   salaryDoc.bonus = Number(bonuses.reduce((sum, b) => sum + (b.bonusAmount || 0), 0).toFixed(2));
 
   const calc = calculateWeeklySalaryComponents({
-    netAttendancePay: salaryDoc.netAttendancePay,
+    netAttendancePay: salaryDoc.weeklySalaryOverride ?? salaryDoc.netAttendancePay,
     adjustments,
     bonus: salaryDoc.bonus,
   });
+  salaryDoc.netAttendancePay = calc.netAttendancePay;
   salaryDoc.travelAllowance = calc.travelAllowance;
   salaryDoc.otherAllowances = calc.otherAllowances;
   salaryDoc.manualDeductions = calc.otherDeductions;
@@ -590,7 +591,7 @@ exports.removeAdjustment = async (req, res) => {
 exports.updateSalaryDeduction = async (req, res) => {
   try {
     const { id } = req.params; // weeklySalary id
-    const { deductionAmount, reason } = req.body;
+    const { deductionAmount, weeklySalaryAmount, reason } = req.body;
 
     const salary = await WeeklySalary.findById(id);
     if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
@@ -602,6 +603,15 @@ exports.updateSalaryDeduction = async (req, res) => {
     const numAmount = Number(deductionAmount);
     if (deductionAmount === undefined || isNaN(numAmount) || numAmount < 0) {
       return res.status(400).json({ success: false, message: 'Deduction amount must be a valid non-negative number.' });
+    }
+
+    let salaryOverrideAmount;
+    if (weeklySalaryAmount !== undefined) {
+      salaryOverrideAmount = Number(weeklySalaryAmount);
+      if (!Number.isFinite(salaryOverrideAmount) || salaryOverrideAmount < 0) {
+        return res.status(400).json({ success: false, message: 'Weekly salary must be a valid non-negative number.' });
+      }
+      salary.weeklySalaryOverride = salaryOverrideAmount;
     }
 
     const adjReason = (reason && reason.trim()) ? reason.trim() : 'Manual deduction adjustment';
@@ -646,13 +656,15 @@ exports.updateSalaryDeduction = async (req, res) => {
       action: 'SALARY_DEDUCTION_UPDATED',
       recordType: 'WeeklySalary',
       recordId: salary._id,
-      details: `Updated deduction to £${numAmount.toFixed(2)} (${adjReason}) for ${salary.employeeName} for week ${salary.weekLabel}`,
+      details: `Updated weekly salary${salaryOverrideAmount === undefined ? '' : ` to £${salaryOverrideAmount.toFixed(2)}`} and deduction to £${numAmount.toFixed(2)} (${adjReason}) for ${salary.employeeName} for week ${salary.weekLabel}`,
       req
     });
 
     res.json({
       success: true,
-      message: `Deduction updated to £${numAmount.toFixed(2)} for ${salary.employeeName}.`,
+      message: salaryOverrideAmount === undefined
+        ? `Deduction updated to £${numAmount.toFixed(2)} for ${salary.employeeName}.`
+        : `Weekly salary updated to £${salaryOverrideAmount.toFixed(2)} and deduction to £${numAmount.toFixed(2)} for ${salary.employeeName}.`,
       salary
     });
   } catch (error) {

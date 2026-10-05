@@ -94,6 +94,7 @@ export default function WeeklySalaryPage() {
   // Direct Deduction Modal state
   const [deductionModalOpen, setDeductionModalOpen] = useState(false);
   const [deductionTargetSalary, setDeductionTargetSalary] = useState(null);
+  const [weeklySalaryAmountInput, setWeeklySalaryAmountInput] = useState('');
   const [deductionAmountInput, setDeductionAmountInput] = useState('');
   const [deductionReasonInput, setDeductionReasonInput] = useState('');
   const [deductionSaving, setDeductionSaving] = useState(false);
@@ -296,6 +297,7 @@ export default function WeeklySalaryPage() {
 
   const openEditDeductionModal = (salary) => {
     setDeductionTargetSalary(salary);
+    setWeeklySalaryAmountInput(String(salary.weeklySalaryOverride ?? salary.netAttendancePay ?? 0));
     setDeductionAmountInput(salary.manualDeductions ? String(salary.manualDeductions) : '0');
     setDeductionReasonInput('Manual deduction adjustment');
     setDeductionModalOpen(true);
@@ -303,14 +305,20 @@ export default function WeeklySalaryPage() {
 
   const handleSaveDeduction = async (e) => {
     e.preventDefault();
+    const weeklySalaryAmount = Number(weeklySalaryAmountInput);
     const amount = Number(deductionAmountInput);
-    if (isNaN(amount) || amount < 0) {
+    if (!Number.isFinite(weeklySalaryAmount) || weeklySalaryAmount < 0) {
+      showNotification('Weekly salary must be 0 or a positive number.', true);
+      return;
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
       showNotification('Deduction amount must be 0 or a positive number.', true);
       return;
     }
     setDeductionSaving(true);
     try {
       const res = await axios.put(`${API_BASE_URL}/salaries/${deductionTargetSalary._id}/deduction`, {
+        weeklySalaryAmount,
         deductionAmount: amount,
         reason: deductionReasonInput.trim() || 'Manual deduction adjustment'
       });
@@ -683,7 +691,7 @@ export default function WeeklySalaryPage() {
                           disabled={isFinalized(s)}
                           title="Edit Employee Deduction"
                         >
-                          <Edit2 size={12} /> Edit Ded.
+                          <Edit2 size={12} /> Edit Salary
                         </button>
                         <button
                           className="btn btn-outline btn-sm"
@@ -1255,7 +1263,7 @@ export default function WeeklySalaryPage() {
         </div>
       )}
 
-      {/* ===== EDIT WEEKLY DEDUCTION MODAL ===== */}
+      {/* ===== EDIT WEEKLY SALARY AND DEDUCTION MODAL ===== */}
       {deductionModalOpen && deductionTargetSalary && (
         <div className="modal-overlay" style={{ zIndex: 10002 }}>
           <div className="modal-card" style={{ maxWidth: '480px' }}>
@@ -1263,7 +1271,7 @@ export default function WeeklySalaryPage() {
               <div>
                 <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <TrendingDown size={18} color="#dc2626" />
-                  Edit Salary Deduction
+                  Edit Weekly Salary
                 </h2>
                 <div style={{ fontSize: '12px', color: '#7f1d1d', marginTop: '2px' }}>
                   Worker: <strong>{deductionTargetSalary.employeeName}</strong> • Period: {deductionTargetSalary.weekLabel}
@@ -1279,7 +1287,7 @@ export default function WeeklySalaryPage() {
                 {/* Summary calculation pill */}
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ color: '#64748b' }}>Net Attendance Pay:</span>
+                    <span style={{ color: '#64748b' }}>Current Weekly Salary:</span>
                     <span style={{ fontWeight: 600 }}>£{(deductionTargetSalary.netAttendancePay || 0).toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -1288,6 +1296,26 @@ export default function WeeklySalaryPage() {
                       +£{((deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0)).toFixed(2)}
                     </span>
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, color: '#0f172a' }}>
+                    Weekly Salary Amount (£) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="form-input"
+                    placeholder="Enter weekly salary amount in £"
+                    style={{ fontSize: '15px', fontWeight: 700, color: '#2563eb' }}
+                    value={weeklySalaryAmountInput}
+                    onChange={(e) => setWeeklySalaryAmountInput(e.target.value)}
+                    required
+                  />
+                  <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                    This sets the base weekly attendance salary before allowances, bonus, and deduction.
+                  </span>
                 </div>
 
                 <div className="form-group">
@@ -1325,7 +1353,7 @@ export default function WeeklySalaryPage() {
 
                 {/* Live Preview of recalculated final weekly salary */}
                 {(() => {
-                  const att = deductionTargetSalary.netAttendancePay || 0;
+                  const att = Number(weeklySalaryAmountInput) || 0;
                   const allow = (deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0);
                   const ded = Number(deductionAmountInput) || 0;
                   const newFinal = Math.max(0, att + allow - ded);
@@ -1347,7 +1375,7 @@ export default function WeeklySalaryPage() {
               <div className="modal-footer">
                 <button type="button" className="btn btn-outline" onClick={() => setDeductionModalOpen(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" style={{ background: '#dc2626', borderColor: '#dc2626' }} disabled={deductionSaving}>
-                  {deductionSaving ? 'Saving...' : 'Save Salary Deduction'}
+                  {deductionSaving ? 'Saving...' : 'Save Weekly Salary'}
                 </button>
               </div>
             </form>
