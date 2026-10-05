@@ -458,6 +458,9 @@ export default function WeeklyRotaPlanner() {
       if (otherShop._id === shopId) continue;
       const otherCell = cells[`${otherShop._id}:${employeeId}:${dateKey}`];
       if (!otherCell || otherCell.status === 'OFF') continue;
+      if (otherCell.status === 'LOANED' && otherCell.targetShopId === shopId) {
+        return { text: 'Available', status: 'AVAILABLE' };
+      }
       const targetShopName = otherCell.status === 'LOANED' && otherCell.targetShopId
         ? shopMap.get(otherCell.targetShopId)?.name || otherCell.targetShopName || otherShop.name
         : otherShop.name;
@@ -472,6 +475,27 @@ export default function WeeklyRotaPlanner() {
     return isOffElsewhere
       ? { text: 'OFF', status: 'OFF' }
       : { text: 'Available', status: 'AVAILABLE' };
+  };
+
+  const getTransferOriginShopId = (shopId, employeeId) => shops.find(homeShop =>
+    (shopRosters[homeShop._id] || []).includes(employeeId) &&
+    weekDays.some(day => {
+      const cell = cells[`${homeShop._id}:${employeeId}:${day.dateKey}`];
+      return cell?.status === 'LOANED' && cell.targetShopId === shopId;
+    })
+  )?._id;
+
+  const getShopDisplayWorkerIds = (shopId) => {
+    const workerIds = new Set((shopRosters[shopId] || []).map(String));
+    shops.forEach(homeShop => {
+      (shopRosters[homeShop._id] || []).forEach(employeeId => {
+        const cellValues = weekDays.map(day => cells[`${homeShop._id}:${employeeId}:${day.dateKey}`]);
+        if (cellValues.some(cell => cell?.status === 'LOANED' && cell.targetShopId === shopId)) {
+          workerIds.add(String(employeeId));
+        }
+      });
+    });
+    return [...workerIds];
   };
 
   // -------------------------------------------------------------
@@ -580,10 +604,14 @@ export default function WeeklyRotaPlanner() {
   // PICK & DROP / DRAG & DROP ENGINE (PREVENTS DOUBLE BOOKING!)
   // Moving a worker automatically clears them from other shops!
   // -------------------------------------------------------------
-  const moveWorkerToTarget = (employeeId, targetShopId, dateKey) => {
+  const moveWorkerToTarget = (employeeId, targetShopId, dateKey, sourceShopId) => {
     // If targetShopId is null, it means mark as OFF for this day!
     setCells(prev => {
       const next = { ...prev };
+      const originShopId = sourceShopId || shops.find(shop => {
+        const cell = prev[`${shop._id}:${employeeId}:${dateKey}`];
+        return cell?.status === 'AVAILABLE' || cell?.status === 'CUSTOM' || cell?.status === 'LOANED';
+      })?._id;
 
       // Set/update for every shop in roster that has this employee
       shops.forEach(s => {
@@ -594,8 +622,14 @@ export default function WeeklyRotaPlanner() {
         } else if (s._id === targetShopId) {
           // Target shop: they are Available!
           next[key] = { status: 'AVAILABLE', targetShopId: null, targetShopName: '', note: '' };
-        } else if (next[key]?.status === 'AVAILABLE' || next[key]?.status === 'CUSTOM') {
-          // Source or other shop: set to OFF so they are NOT in multiple shops!
+        } else if (s._id === originShopId) {
+          next[key] = {
+            status: 'LOANED',
+            targetShopId,
+            targetShopName: shopMap.get(targetShopId)?.name || '',
+            note: `At ${shopMap.get(targetShopId)?.name || 'other shop'}`
+          };
+        } else {
           next[key] = {
             status: 'OFF',
             targetShopId: null,
@@ -607,15 +641,6 @@ export default function WeeklyRotaPlanner() {
 
       return next;
     });
-
-    // Make sure worker is included in target shop roster
-    if (targetShopId) {
-      setShopRosters(prev => {
-        const list = prev[targetShopId] || [];
-        if (list.includes(employeeId)) return prev;
-        return { ...prev, [targetShopId]: [...list, employeeId] };
-      });
-    }
 
     const empName = employeeMap.get(employeeId)?.name || 'Worker';
     const day = weekDays.find(d => d.dateKey === dateKey);
@@ -652,7 +677,7 @@ export default function WeeklyRotaPlanner() {
       if (!dataStr) return;
       const data = JSON.parse(dataStr);
       if (data.employeeId) {
-        moveWorkerToTarget(data.employeeId, targetShopId, dateKey || data.dateKey);
+        moveWorkerToTarget(data.employeeId, targetShopId, dateKey || data.dateKey, data.sourceShopId);
       }
     } catch (err) {
       console.error('Drop error:', err);
@@ -977,7 +1002,7 @@ export default function WeeklyRotaPlanner() {
     `;
 
     shops.forEach(shop => {
-      const workerIds = shopRosters[shop._id] || [];
+      const workerIds = getShopDisplayWorkerIds(shop._id);
       if (workerIds.length === 0) return;
 
       html += `<div class="shop-block">
@@ -1415,14 +1440,14 @@ export default function WeeklyRotaPlanner() {
               <button
                 key={s._id}
                 className="btn btn-sm btn-pick-dest"
-                onClick={() => moveWorkerToTarget(pickedWorker.employeeId, s._id, pickedWorker.dateKey)}
+                onClick={() => moveWorkerToTarget(pickedWorker.employeeId, s._id, pickedWorker.dateKey, pickedWorker.sourceShopId)}
               >
                 {s.name}
               </button>
             ))}
             <button
               className="btn btn-sm btn-pick-off"
-              onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, pickedWorker.dateKey)}
+              onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, pickedWorker.dateKey, pickedWorker.sourceShopId)}
             >
               🔴 Set to OFF
             </button>
@@ -1479,7 +1504,7 @@ export default function WeeklyRotaPlanner() {
                     {pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
                       <button
                         className="btn btn-sm btn-primary drop-here-btn"
-                        onClick={() => moveWorkerToTarget(pickedWorker.employeeId, shop._id, selectedDailyDate)}
+                        onClick={() => moveWorkerToTarget(pickedWorker.employeeId, shop._id, selectedDailyDate, pickedWorker.sourceShopId)}
                       >
                         Drop Here
                       </button>
@@ -1530,7 +1555,7 @@ export default function WeeklyRotaPlanner() {
                               </button>
                               <button
                                 className="card-off-btn"
-                                onClick={() => moveWorkerToTarget(item.employeeId, null, selectedDailyDate)}
+                                onClick={() => moveWorkerToTarget(item.employeeId, null, selectedDailyDate, item.homeShopId)}
                                 title="Mark as OFF for this day"
                               >
                                 Set OFF
@@ -1562,7 +1587,7 @@ export default function WeeklyRotaPlanner() {
                 {pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
                   <button
                     className="btn btn-sm btn-danger drop-here-btn"
-                    onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, selectedDailyDate)}
+                    onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, selectedDailyDate, pickedWorker.sourceShopId)}
                   >
                     Drop to OFF
                   </button>
@@ -1641,9 +1666,10 @@ export default function WeeklyRotaPlanner() {
             {/* Stacked Shops */}
             {shops.map(shop => {
               const style = getShopStyle(shop.name);
-              const workerIds = shopRosters[shop._id] || [];
+              const rosterWorkerIds = shopRosters[shop._id] || [];
+              const workerIds = getShopDisplayWorkerIds(shop._id);
               const isAddingWorker = addingWorkerShopId === shop._id;
-              const availableToAdd = employees.filter(e => !workerIds.includes(String(e._id)));
+              const availableToAdd = employees.filter(e => !rosterWorkerIds.includes(String(e._id)));
               const matchingWorkers = availableToAdd.filter(emp =>
                 `${emp.name || ''} ${emp.employeeId || ''}`.toLowerCase().includes(workerSearch.trim().toLowerCase())
               );
@@ -1744,18 +1770,21 @@ export default function WeeklyRotaPlanner() {
                     workerIds.map((empId, empIdx) => {
                       const emp = employeeMap.get(empId);
                       const empName = emp?.name || 'Worker';
+                      const isHomeRosterWorker = rosterWorkerIds.includes(empId);
 
                       return (
                         <div key={empId} className={`sheet-worker-row ${empIdx % 2 === 1 ? 'sheet-row-alt' : ''}`}>
                           <div className="sheet-col-name sheet-worker-name-cell">
                             <span className="sheet-emp-name">{empName}</span>
-                            <button
-                              className="sheet-remove-btn"
-                              onClick={() => removeWorkerFromShop(shop._id, empId)}
-                              title="Remove worker from this shop roster"
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                            {isHomeRosterWorker && (
+                              <button
+                                className="sheet-remove-btn"
+                                onClick={() => removeWorkerFromShop(shop._id, empId)}
+                                title="Remove worker from this shop roster"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                           </div>
 
                           {weekDays.map((d, dIdx) => {
@@ -1796,13 +1825,18 @@ export default function WeeklyRotaPlanner() {
                                 key={d.dateKey}
                                 className={`sheet-col-day sheet-cell-interactive ${cellClass}`}
                                 onClick={(e) => {
+                                  if (!isHomeRosterWorker) return;
                                   if (showPreview && isUnavailable) {
                                     openAvailabilityModal(shop._id, empId, d.dateKey, d.dayName);
                                   } else {
                                     openCellPopover(shop._id, empId, d.dateKey, e);
                                   }
                                 }}
-                                title={showPreview && isUnavailable ? "Worker unavailable! Click to assign replacement or transfer from another shop." : "Click to edit status or transfer"}
+                                title={!isHomeRosterWorker
+                                  ? `Displayed here because this worker is assigned from ${shopMap.get(getTransferOriginShopId(shop._id, empId))?.name || 'another shop'}. Edit the assignment at their home shop.`
+                                  : showPreview && isUnavailable
+                                    ? 'Worker unavailable! Click to assign replacement or transfer from another shop.'
+                                    : 'Click to edit status or transfer'}
                               >
                                 {showPreview && isUnavailable && (
                                   <span className="preview-red-tag">NOT AVAIL</span>
@@ -1876,9 +1910,10 @@ export default function WeeklyRotaPlanner() {
           <div id="rota-print-area" className="rota-shops-container">
             {shops.map(shop => {
               const style = getShopStyle(shop.name);
-              const workerIds = shopRosters[shop._id] || [];
+              const rosterWorkerIds = shopRosters[shop._id] || [];
+              const workerIds = getShopDisplayWorkerIds(shop._id);
               const isAddingWorker = addingWorkerShopId === shop._id;
-              const availableToAdd = employees.filter(e => !workerIds.includes(String(e._id)));
+              const availableToAdd = employees.filter(e => !rosterWorkerIds.includes(String(e._id)));
               const matchingWorkers = availableToAdd.filter(emp =>
                 `${emp.name || ''} ${emp.employeeId || ''}`.toLowerCase().includes(workerSearch.trim().toLowerCase())
               );
@@ -1992,6 +2027,7 @@ export default function WeeklyRotaPlanner() {
                             const emp = employeeMap.get(empId);
                             const empName = emp?.name || 'Unknown Worker';
                             const empCode = emp?.employeeId || '';
+                            const isHomeRosterWorker = rosterWorkerIds.includes(empId);
 
                             return (
                               <tr key={empId}>
@@ -2001,14 +2037,16 @@ export default function WeeklyRotaPlanner() {
                                       <div className="worker-name-label">{empName}</div>
                                       <div className="worker-id-sub">{empCode}</div>
                                     </div>
-                                    <button
-                                      className="remove-worker-btn"
-                                      onClick={() => removeWorkerFromShop(shop._id, empId)}
-                                      title="Remove from this shop's roster"
-                                      aria-label="Remove worker"
-                                    >
-                                      <Trash2 size={13} />
-                                    </button>
+                                    {isHomeRosterWorker && (
+                                      <button
+                                        className="remove-worker-btn"
+                                        onClick={() => removeWorkerFromShop(shop._id, empId)}
+                                        title="Remove from this shop's roster"
+                                        aria-label="Remove worker"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
 
@@ -2063,9 +2101,12 @@ export default function WeeklyRotaPlanner() {
                                           type="button"
                                           className={cellClass}
                                           style={cellStyle}
-                                          draggable
-                                          onDragStart={(e) => handleDragStart(e, empId, shop._id, day.dateKey)}
+                                          draggable={isHomeRosterWorker}
+                                          onDragStart={(e) => {
+                                            if (isHomeRosterWorker) handleDragStart(e, empId, shop._id, day.dateKey);
+                                          }}
                                           onClick={(e) => {
+                                            if (!isHomeRosterWorker) return;
                                             if (showPreview && isUnavailable) {
                                               openAvailabilityModal(shop._id, empId, day.dateKey, day.dayName);
                                             } else {
