@@ -686,17 +686,32 @@ export default function WeeklyRotaPlanner() {
     const { shopId, employeeId, dateKey } = activeCell;
     const cellKey = `${shopId}:${employeeId}:${dateKey}`;
 
-    setCells(prev => ({
-      ...prev,
-      [cellKey]: {
-        status,
-        targetShopId: extra.targetShopId || null,
-        targetShopName: extra.targetShopName || '',
-        note: extra.note || '',
-        startTime: extra.startTime || '09:00',
-        endTime: extra.endTime || '17:00'
-      }
-    }));
+    const nextCell = {
+      status,
+      targetShopId: extra.targetShopId || null,
+      targetShopName: extra.targetShopName || '',
+      note: extra.note || '',
+      startTime: extra.startTime || '09:00',
+      endTime: extra.endTime || '17:00'
+    };
+
+    if (status === 'OFF') {
+      const rosterShopIds = shops
+        .filter(shop => (shopRosters[shop._id] || []).some(id => String(id) === String(employeeId)))
+        .map(shop => shop._id);
+      setCells(prev => {
+        const next = { ...prev };
+        rosterShopIds.forEach(rosterShopId => {
+          next[`${rosterShopId}:${employeeId}:${dateKey}`] = { ...nextCell };
+        });
+        return next;
+      });
+    } else {
+      setCells(prev => ({
+        ...prev,
+        [cellKey]: nextCell
+      }));
+    }
 
     closeCellPopover();
   };

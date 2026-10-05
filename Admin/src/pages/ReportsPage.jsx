@@ -24,6 +24,38 @@ function getShopBadgeStyle(shopName) {
   return match ? SHOP_COLORS[match] : { bg: '#f1f5f9', color: '#334155', border: '#cbd5e1' };
 }
 
+function getWeeklySalaryDays(weekStartDateString, selectedDate) {
+  const isValidDateKey = value => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const baseDateKey = isValidDateKey(weekStartDateString)
+    ? weekStartDateString
+    : isValidDateKey(selectedDate)
+      ? selectedDate
+      : today;
+  const baseDate = new Date(`${baseDateKey}T00:00:00.000Z`);
+  if (!isValidDateKey(weekStartDateString)) {
+    baseDate.setUTCDate(baseDate.getUTCDate() - baseDate.getUTCDay());
+  }
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(baseDate);
+    date.setUTCDate(baseDate.getUTCDate() + index);
+    return {
+      dateString: date.toISOString().slice(0, 10),
+      label: new Intl.DateTimeFormat('en-GB', {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        timeZone: 'UTC'
+      }).format(date)
+    };
+  });
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -211,14 +243,7 @@ export default function ReportsPage() {
 
   const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const yearOptions = [2025, 2026, 2027];
-  const weeklySalaryDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(`${weeklySalaryData?.weekStartDateString || selectedDate}T00:00:00.000Z`);
-    date.setUTCDate(date.getUTCDate() + index);
-    return {
-      dateString: date.toISOString().slice(0, 10),
-      label: new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'UTC' }).format(date)
-    };
-  });
+  const weeklySalaryDays = getWeeklySalaryDays(weeklySalaryData?.weekStartDateString, selectedDate);
 
   const handleTabChange = (newTab) => {
     setActiveTab(newTab);
