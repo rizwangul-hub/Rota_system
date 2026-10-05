@@ -1649,7 +1649,31 @@ export default function WeeklyRotaPlanner() {
 
                           {weekDays.map((d, dIdx) => {
                             const cellKey = `${shop._id}:${empId}:${d.dateKey}`;
-                            const cell = cells[cellKey] || { status: 'AVAILABLE' };
+                            const rawCell = cells[cellKey]; // undefined if no saved assignment
+                            const cell = rawCell || { status: 'AVAILABLE' };
+
+                            // Cross-shop lookup: if no assignment saved at this shop,
+                            // check if this worker has an assignment at another shop on this day.
+                            // This fills in blank cells with the target shop name automatically.
+                            let crossShopName = null;
+                            let crossShopClass = 'sheet-cell-loaned';
+                            if (!rawCell) {
+                              for (const otherShop of shops) {
+                                if (otherShop._id === shop._id) continue;
+                                const otherKey = `${otherShop._id}:${empId}:${d.dateKey}`;
+                                const otherCell = cells[otherKey];
+                                if (otherCell && otherCell.status !== 'OFF') {
+                                  // Worker has an assignment at another shop → show that shop name
+                                  if (otherCell.status === 'LOANED' && otherCell.targetShopId) {
+                                    crossShopName = shopMap.get(otherCell.targetShopId)?.name || otherShop.name;
+                                  } else {
+                                    crossShopName = otherShop.name;
+                                  }
+                                  break;
+                                }
+                              }
+                            }
+
                             const conflicted = isCellConflicted(shop._id, empId, d.dateKey);
                             const isUnavailable = checkIsWorkerUnavailableInPreview(shop._id, empId, d.dateKey, dIdx);
                             const isPicked = pickedWorker?.employeeId === empId && pickedWorker?.dateKey === d.dateKey;
@@ -1660,6 +1684,10 @@ export default function WeeklyRotaPlanner() {
                             if (conflicted) {
                               cellClass = 'sheet-cell-conflict';
                               cellText = '⚠️ Conflict';
+                            } else if (crossShopName) {
+                              // Worker is at another shop — show where
+                              cellClass = crossShopClass;
+                              cellText = crossShopName;
                             } else if (cell.status === 'OFF') {
                               cellClass = 'sheet-cell-off';
                               cellText = 'OFF';

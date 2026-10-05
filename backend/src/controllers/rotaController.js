@@ -655,12 +655,21 @@ exports.exportExcel = async (req, res) => {
     const shopsById = {};
     allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
 
-    // Cell lookup
+    // Cell lookup — keyed by homeShopId:empId:dateKey
     const cellMap = {};
+    // Cross-shop lookup — keyed by empId:dateKey → where they actually work
+    const empDateMap = {};
     for (const a of (rota.assignments || [])) {
       const hId = id(a.homeShopId || a.shopId);
+      const sId = id(a.shopId);
       const eId = id(a.employeeId);
-      cellMap[`${hId}:${eId}:${a.dateKey}`] = a;
+      const dKey = String(a.dateKey).slice(0, 10);
+      cellMap[`${hId}:${eId}:${dKey}`] = a;
+      // Track where each worker actually works each day (for cross-shop blank fill)
+      if (a.status !== 'OFF') {
+        const actualShop = (a.status === 'LOANED' ? shopsById[sId] : shopsById[hId]) || shopsById[sId] || '';
+        empDateMap[`${eId}:${dKey}`] = actualShop;
+      }
     }
 
     // Shop roster lookup
@@ -827,12 +836,20 @@ exports.exportExcel = async (req, res) => {
           c.border = thinBorder;
           c.alignment = { horizontal: 'center', vertical: 'middle' };
 
-          if (!cell || cell.status === 'AVAILABLE') {
-            // No assignment saved = defaults to Available (matches UI behaviour)
-            shopTotals[i]++;
-            grandTotals[i]++;
-            c.value = 'Available';
-            c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
+          if (!cell) {
+            // No assignment at this shop — check if worker is at another shop today
+            const crossShop = empDateMap[`${emp._id}:${weekDates[i].iso}`];
+            if (crossShop && crossShop !== roster.shopName) {
+              // Worker is assigned to a different shop — show that shop name (blue, like LOANED)
+              c.value = crossShop;
+              c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
+            } else {
+              // No assignment anywhere — show Available and count in totals
+              shopTotals[i]++;
+              grandTotals[i]++;
+              c.value = 'Available';
+              c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
+            }
           } else if (cell.status === 'OFF') {
             c.value = 'OFF';
             c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } }; // BOLD RED
@@ -938,14 +955,29 @@ exports.exportPdf = async (req, res) => {
     }
 
     const cellMap = {};
+    const empDateMapPdf = {};
     for (const a of (rota.assignments || [])) {
       const hId = id(a.homeShopId || a.shopId);
+      const sId = id(a.shopId);
       const eId = id(a.employeeId);
-      cellMap[`${hId}:${eId}:${a.dateKey}`] = a;
+      const dKey = String(a.dateKey).slice(0, 10);
+      cellMap[`${hId}:${eId}:${dKey}`] = a;
     }
 
     const shopsById = {};
     allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
+
+    // Build empDateMapPdf after shopsById is ready
+    for (const a of (rota.assignments || [])) {
+      const hId = id(a.homeShopId || a.shopId);
+      const sId = id(a.shopId);
+      const eId = id(a.employeeId);
+      const dKey = String(a.dateKey).slice(0, 10);
+      if (a.status !== 'OFF') {
+        const actualShop = (a.status === 'LOANED' ? shopsById[sId] : shopsById[hId]) || shopsById[sId] || '';
+        empDateMapPdf[`${eId}:${dKey}`] = actualShop;
+      }
+    }
 
     // Week days: Sun -> Sat
     const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
@@ -1091,16 +1123,29 @@ exports.exportPdf = async (req, res) => {
           const cell = cellMap[key];
           fillRect(x, y, DAY_COL, ROW_H, rowBg);
 
-          let label = '—';
-          let color = '#94a3b8';
+          let label = 'Available';
+          let color = COLORS.availText;
           if (cell) {
             if (cell.status === 'OFF') {
               label = 'OFF'; color = COLORS.offText;
             } else if (cell.status === 'LOANED') {
-              const targetShop = shopsById[id(cell.targetShopId)] || cell.note || 'Loaned';
+              const targetShop = shopsById[id(cell.shopId)] || cell.note || 'Loaned';
               label = targetShop; color = COLORS.loanText;
             } else {
               label = cell.note ? `Avail. ${cell.note}` : 'Available';
+              color = COLORS.availText;
+              totals[i]++;
+              grandTotals[i]++;
+            }
+          } else {
+            // No assignment at this shop — check if worker is at another shop today
+            const crossShop = empDateMapPdf[`${emp._id}:${weekDates[i].iso}`];
+            if (crossShop && crossShop !== roster.shopName) {
+              label = crossShop;
+              color = COLORS.loanText; // blue — working at another shop
+            } else {
+              // No assignment anywhere — default to Available
+              label = 'Available';
               color = COLORS.availText;
               totals[i]++;
               grandTotals[i]++;
