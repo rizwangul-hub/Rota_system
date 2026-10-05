@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { Writable } = require('node:stream');
 const zlib = require('node:zlib');
+const ExcelJS = require('exceljs');
 const audit = require('../utils/audit');
 
 audit.logAction = async () => {};
@@ -101,8 +102,34 @@ async function run() {
     assert.equal(response.statusCode, 200);
     assert.equal(response.headers['content-type'], 'application/pdf');
     assert.ok(response.buffer.subarray(0, 4).toString('ascii') === '%PDF');
-    assert.ok(pdfText(response.buffer).includes('targetshop'));
-    console.log('PASS weekly rota PDF export includes saved assignment data');
+    const extractedText = pdfText(response.buffer);
+    const targetShopIndex = extractedText.indexOf('targetshop');
+    assert.notEqual(targetShopIndex, -1);
+    assert.ok(extractedText.slice(targetShopIndex).includes('total1'));
+
+    const excelResponse = new CaptureResponse();
+    const excelFinished = new Promise((resolve, reject) => {
+      excelResponse.once('finish', resolve);
+      excelResponse.once('error', reject);
+    });
+    await rotaController.exportExcel({
+      params: { weekStart: '2026-10-04' },
+      user: { _id: '64d000000000000000000004', role: 'ADMIN' }
+    }, excelResponse);
+    await excelFinished;
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelResponse.buffer);
+    const sheet = workbook.getWorksheet('ROTA');
+    const targetShopRow = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (row.getCell(1).value === 'Target Shop') targetShopRow.push(rowNumber);
+    });
+    assert.equal(targetShopRow.length, 1);
+    const totalRow = sheet.getRow(targetShopRow[0] + 3);
+    assert.equal(totalRow.getCell(1).value, 'Total');
+    assert.equal(totalRow.getCell(2).value, 1);
+    console.log('PASS weekly rota PDF and Excel totals include transferred workers at destination shops');
   } finally {
     for (const restore of restores.reverse()) restore();
   }

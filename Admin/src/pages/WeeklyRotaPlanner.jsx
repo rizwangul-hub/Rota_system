@@ -980,18 +980,15 @@ export default function WeeklyRotaPlanner() {
           </thead>
           <tbody>`;
 
-      const totals = new Array(7).fill(0);
+      const totals = weekDays.map(day => getShopDayTotal(shop._id, day.dateKey));
       workerIds.forEach((empId, rowIdx) => {
         const emp = employees.find(e => e._id === empId);
         if (!emp) return;
         html += `<tr class="${rowIdx % 2 === 1 ? 'alt-row' : ''}">
           <td class="name-col">${emp.name}</td>`;
 
-        weekDays.forEach((d, i) => {
+        weekDays.forEach(d => {
           const display = getWorkerDayDisplay(shop._id, empId, d.dateKey);
-          if (display.status === 'AVAILABLE' || display.status === 'CUSTOM') {
-            totals[i]++;
-          }
           const cssClass = display.status === 'LOANED'
             ? 'loaned'
             : display.status === 'OFF'
@@ -1049,31 +1046,30 @@ export default function WeeklyRotaPlanner() {
 
   // Calculate active totals per shop per day
   const getShopDayTotal = (shopId, dateKey) => {
-    let count = 0;
     const countedEmployees = new Set();
-    const workerIds = shopRosters[shopId] || [];
+    const workerIds = [...new Set((shopRosters[shopId] || []).map(String))];
     workerIds.forEach(empId => {
+      if (countedEmployees.has(empId)) return;
       const display = getWorkerDayDisplay(shopId, empId, dateKey);
       if (display.status === 'AVAILABLE' || display.status === 'CUSTOM') {
-        count++;
         countedEmployees.add(empId);
       }
     });
 
     shops.forEach(otherShop => {
-      if (otherShop._id === shopId) return;
-      const otherWorkers = shopRosters[otherShop._id] || [];
+      if (String(otherShop._id) === String(shopId)) return;
+      const otherWorkers = [...new Set((shopRosters[otherShop._id] || []).map(String))];
       otherWorkers.forEach(empId => {
         const cellKey = `${otherShop._id}:${empId}:${dateKey}`;
         const cell = cells[cellKey];
-        if (!countedEmployees.has(empId) && cell && cell.status === 'LOANED' && cell.targetShopId === shopId) {
-          count++;
+        if (!countedEmployees.has(empId) && cell?.status === 'LOANED' &&
+            String(cell.targetShopId) === String(shopId)) {
           countedEmployees.add(empId);
         }
       });
     });
 
-    return count;
+    return countedEmployees.size;
   };
 
   // Get active staff for a shop on a single day (for Board view)

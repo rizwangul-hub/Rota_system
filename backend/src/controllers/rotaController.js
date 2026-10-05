@@ -26,6 +26,12 @@ function id(value) {
   return String(value?._id || value || '');
 }
 
+function getActualShopId(assignment) {
+  const homeShopId = id(assignment.homeShopId || assignment.shopId);
+  const shopId = id(assignment.shopId);
+  return assignment.status === 'LOANED' || homeShopId !== shopId ? shopId : homeShopId;
+}
+
 function plain(value) {
   return value && typeof value.toObject === 'function' ? value.toObject() : value;
 }
@@ -833,12 +839,19 @@ exports.exportExcel = async (req, res) => {
     let currentRowNum = 4;
     const grandTotals = new Array(7).fill(0);
 
-    const shopOrder = allShops.map(s => id(s._id)).filter(sid => rosterMap[sid]);
+    const shopOrder = allShops
+      .map(s => id(s._id))
+      .filter(sid => rosterMap[sid] || (rota.assignments || []).some(assignment =>
+        assignment.status !== 'OFF' && getActualShopId(assignment) === sid
+      ));
     Object.keys(rosterMap).forEach(sid => { if (!shopOrder.includes(sid)) shopOrder.push(sid); });
 
     for (const shopId of shopOrder) {
-      const roster = rosterMap[shopId];
-      if (!roster || roster.employees.length === 0) continue;
+      const roster = rosterMap[shopId] || { shopName: shopsById[shopId] || 'Shop', employees: [] };
+      const hasAssignedWorkers = (rota.assignments || []).some(assignment =>
+        assignment.status !== 'OFF' && getActualShopId(assignment) === shopId
+      );
+      if (roster.employees.length === 0 && !hasAssignedWorkers) continue;
       const palette = getShopPalette(roster.shopName);
 
       // Shop Header Row (Merged A..H)
@@ -892,7 +905,7 @@ exports.exportExcel = async (req, res) => {
       currentRowNum++;
 
       // Worker Rows
-      const shopTotals = new Array(7).fill(0);
+      const shopWorkersByDay = Array.from({ length: 7 }, () => new Set());
       roster.employees.forEach((emp, empIdx) => {
         const row = sheet.getRow(currentRowNum);
         row.height = 20;
@@ -923,8 +936,7 @@ exports.exportExcel = async (req, res) => {
               c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
             } else {
               // No assignment anywhere — show Available and count in totals
-              shopTotals[i]++;
-              grandTotals[i]++;
+              shopWorkersByDay[i].add(id(emp._id));
               c.value = 'Available';
               c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
             }
@@ -943,8 +955,7 @@ exports.exportExcel = async (req, res) => {
             c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
           } else {
             // AVAILABLE / CUSTOM
-            shopTotals[i]++;
-            grandTotals[i]++;
+            shopWorkersByDay[i].add(id(emp._id));
             if (cell.status === 'CUSTOM' && cell.note) {
               c.value = cell.note;
               c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
@@ -956,6 +967,14 @@ exports.exportExcel = async (req, res) => {
         }
         currentRowNum++;
       });
+
+      for (const assignment of rota.assignments || []) {
+        if (assignment.status === 'OFF' || getActualShopId(assignment) !== shopId) continue;
+        const dayIndex = weekDates.findIndex(day => day.iso === String(assignment.dateKey).slice(0, 10));
+        if (dayIndex >= 0) shopWorkersByDay[dayIndex].add(id(assignment.employeeId));
+      }
+      const shopTotals = shopWorkersByDay.map(workers => workers.size);
+      shopTotals.forEach((total, index) => { grandTotals[index] += total; });
 
       // Total Row for this Shop
       const totRow = sheet.getRow(currentRowNum);
@@ -1184,12 +1203,19 @@ exports.exportPdf = async (req, res) => {
     drawPageHeader();
 
     const grandTotals = new Array(7).fill(0);
-    const shopOrder = allShops.map(s => id(s._id)).filter(sid => rosterMap[sid]);
+    const shopOrder = allShops
+      .map(s => id(s._id))
+      .filter(sid => rosterMap[sid] || (rota.assignments || []).some(assignment =>
+        assignment.status !== 'OFF' && getActualShopId(assignment) === sid
+      ));
     Object.keys(rosterMap).forEach(sid => { if (!shopOrder.includes(sid)) shopOrder.push(sid); });
 
     for (const shopId of shopOrder) {
-      const roster = rosterMap[shopId];
-      if (!roster || roster.employees.length === 0) continue;
+      const roster = rosterMap[shopId] || { shopName: shopsById[shopId] || 'Shop', employees: [] };
+      const hasAssignedWorkers = (rota.assignments || []).some(assignment =>
+        assignment.status !== 'OFF' && getActualShopId(assignment) === shopId
+      );
+      if (roster.employees.length === 0 && !hasAssignedWorkers) continue;
       const palette = getShopPalette(roster.shopName);
 
       const ROW_H   = 14;
@@ -1228,7 +1254,7 @@ exports.exportPdf = async (req, res) => {
       hLine(y + ROW_H);
       y += ROW_H;
 
-      const totals = new Array(7).fill(0);
+      const shopWorkersByDay = Array.from({ length: 7 }, () => new Set());
       roster.employees.forEach((emp, rowIdx) => {
         if (y + ROW_H > PAGE_H - MARGIN - 40) {
           doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
@@ -1264,8 +1290,7 @@ exports.exportPdf = async (req, res) => {
             } else {
               label = cell.note ? `Avail. ${cell.note}` : 'Available';
               color = COLORS.availText;
-              totals[i]++;
-              grandTotals[i]++;
+              shopWorkersByDay[i].add(id(emp._id));
             }
           } else {
             const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
@@ -1279,8 +1304,7 @@ exports.exportPdf = async (req, res) => {
               // No assignment anywhere — default to Available
               label = 'Available';
               color = COLORS.availText;
-              totals[i]++;
-              grandTotals[i]++;
+              shopWorkersByDay[i].add(id(emp._id));
             }
           }
           cellText(label, x, y, DAY_COL, ROW_H, color, 5.5, cell?.status === 'OFF' || label === 'OFF');
@@ -1294,6 +1318,14 @@ exports.exportPdf = async (req, res) => {
         hLine(y + ROW_H);
         y += ROW_H;
       });
+
+      for (const assignment of rota.assignments || []) {
+        if (assignment.status === 'OFF' || getActualShopId(assignment) !== shopId) continue;
+        const dayIndex = weekDates.findIndex(day => day.iso === String(assignment.dateKey).slice(0, 10));
+        if (dayIndex >= 0) shopWorkersByDay[dayIndex].add(id(assignment.employeeId));
+      }
+      const totals = shopWorkersByDay.map(workers => workers.size);
+      totals.forEach((total, index) => { grandTotals[index] += total; });
 
       fillRect(MARGIN, y, NAME_COL, TOTAL_H, COLORS.totalBg);
       cellText('Total', MARGIN + 2, y, NAME_COL, TOTAL_H, COLORS.totalText, 6, true, 'left');
