@@ -163,7 +163,7 @@ export default function WeeklyRotaPlanner() {
         rota.shopRoster.forEach(sr => {
           const sId = String(sr.shopId?._id || sr.shopId);
           if (rosters[sId]) {
-            rosters[sId] = (sr.employeeIds || []).map(e => String(e._id || e));
+            rosters[sId] = [...new Set((sr.employeeIds || []).map(e => String(e._id || e)))];
           }
         });
       } else if (rota?.assignments && rota.assignments.length > 0) {
@@ -306,7 +306,9 @@ export default function WeeklyRotaPlanner() {
       });
     });
 
-    const availableWorkers = employees.filter(e => !busyEmpIds.has(e._id) && e._id !== employeeId);
+    const availableWorkers = employees.filter(e =>
+      e.employmentStatus === 'Active' && !busyEmpIds.has(e._id) && e._id !== employeeId
+    );
 
     // 2. Transfer / Borrow workers: Active employees currently working in OTHER shops on this day
     const transferrableWorkers = [];
@@ -317,7 +319,7 @@ export default function WeeklyRotaPlanner() {
         const c = cells[`${s._id}:${eId}:${dateKey}`];
         if (c && (c.status === 'AVAILABLE' || c.status === 'CUSTOM')) {
           const workerEmp = employeeMap.get(eId);
-          if (workerEmp) {
+          if (workerEmp?.employmentStatus === 'Active') {
             transferrableWorkers.push({
               employeeId: eId,
               employeeName: workerEmp.name,
@@ -701,6 +703,11 @@ export default function WeeklyRotaPlanner() {
   // Add Worker to Shop Roster
   const addWorkerToShop = (shopId, employeeId) => {
     if (!shopId || !employeeId) return;
+    const employee = employeeMap.get(employeeId);
+    if (employee?.employmentStatus !== 'Active') {
+      setError(`${employee?.name || 'This worker'} cannot be added because their employment status is ${employee?.employmentStatus || 'inactive'}. Reactivate them in Staff / Employees first.`);
+      return;
+    }
     setShopRosters(prev => {
       const list = prev[shopId] || [];
       if (list.includes(employeeId)) return prev;
@@ -809,7 +816,7 @@ export default function WeeklyRotaPlanner() {
     const shopRosterPayload = [];
 
     shops.forEach(shop => {
-      const workerIds = shopRosters[shop._id] || [];
+      const workerIds = [...new Set(shopRosters[shop._id] || [])];
       shopRosterPayload.push({ shopId: shop._id, employeeIds: workerIds });
 
       workerIds.forEach(empId => {
@@ -1634,10 +1641,14 @@ export default function WeeklyRotaPlanner() {
                                 <button
                                   key={emp._id}
                                   className="add-worker-item"
+                                  disabled={emp.employmentStatus !== 'Active'}
                                   onClick={() => addWorkerToShop(shop._id, emp._id)}
                                 >
                                   <strong>{emp.name}</strong>
-                                  <span>{emp.employeeId}</span>
+                                  <span>
+                                    {emp.employeeId}
+                                    {emp.employmentStatus !== 'Active' && ` · ${emp.employmentStatus || 'Inactive'}`}
+                                  </span>
                                 </button>
                               ))
                             )}
@@ -1856,10 +1867,14 @@ export default function WeeklyRotaPlanner() {
                                   <button
                                     key={emp._id}
                                     className="add-worker-item"
+                                    disabled={emp.employmentStatus !== 'Active'}
                                     onClick={() => addWorkerToShop(shop._id, emp._id)}
                                   >
                                     <strong>{emp.name}</strong>
-                                    <span>{emp.employeeId}</span>
+                                    <span>
+                                      {emp.employeeId}
+                                      {emp.employmentStatus !== 'Active' && ` · ${emp.employmentStatus || 'Inactive'}`}
+                                    </span>
                                   </button>
                                 ))
                               )}

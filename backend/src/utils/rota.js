@@ -92,15 +92,7 @@ function findDuplicateEmployeeDates(assignments) {
   const duplicates = [];
   for (const { employeeId, dateKey, entries } of assignmentsByEmployeeDate.values()) {
     const actualShopIds = [...new Set(entries.map(entry => entry.actualShopId))];
-    if (entries.length < 2) continue;
-
-    const isMirroredTransfer = actualShopIds.length === 1 &&
-      entries.length === 2 &&
-      entries.some(entry => entry.assignment.status === 'LOANED' && entry.homeShopId !== entry.actualShopId) &&
-      entries.some(entry => entry.assignment.status !== 'LOANED' && entry.homeShopId === entry.actualShopId);
-    if (!isMirroredTransfer) {
-      duplicates.push({ employeeId, dateKey, shopIds: actualShopIds });
-    }
+    if (actualShopIds.length > 1) duplicates.push({ employeeId, dateKey, shopIds: actualShopIds });
   }
   return duplicates;
 }

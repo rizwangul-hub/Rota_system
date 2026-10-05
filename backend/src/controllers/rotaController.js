@@ -161,7 +161,7 @@ async function getWeekData(weekStart) {
   const week = getWeek(weekStart);
   const [rota, employees, shops, availability, schedules] = await Promise.all([
     WeeklyRota.findOne({ weekStart }).lean(),
-    Employee.find({ employmentStatus: 'Active' }).select('name employeeId employmentStatus assignedShop').sort({ name: 1 }).lean(),
+    Employee.find({}).select('name employeeId employmentStatus assignedShop').sort({ name: 1 }).lean(),
     Shop.find({ status: 'Active', isActive: true }).select('name code').sort({ name: 1 }).lean(),
     RotaAvailability.find({ dateKey: { $gte: week.weekStart, $lte: week.weekEnd } }).sort({ dateKey: 1 }).lean(),
     ShopSchedule.find({ $or: [{ shop: { $in: await Shop.find({ status: 'Active', isActive: true }).distinct('_id') } }, { shop: null }] }).lean()

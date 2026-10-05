@@ -31,7 +31,19 @@ assert.deepStrictEqual(findDuplicateEmployeeDates([
   { employeeId: 'worker', dateKey: '2026-09-28', shopId: 'shop-a' },
   { employeeId: 'worker', dateKey: '2026-09-28', shopId: 'shop-a' },
   { employeeId: 'worker', dateKey: '2026-09-29', shopId: 'shop-b' }
-]), [{ employeeId: 'worker', dateKey: '2026-09-28', shopIds: ['shop-a'] }]);
+]), []);
+assert.deepStrictEqual(findDuplicateEmployeeDates([
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'southwark', homeShopId: 'southwark', status: 'AVAILABLE' },
+  { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'southwark', homeShopId: 'southwark', status: 'CUSTOM' }
+]), [], 'Repeated assignments at the same working shop are not cross-shop conflicts.');
+assert.deepStrictEqual(findDuplicateEmployeeDates([
+  ...['2026-10-04', '2026-10-05', '2026-10-06'].flatMap(dateKey => [
+    { employeeId: 'shahzad', dateKey, shopId: 'southwark', homeShopId: 'southwark', status: 'AVAILABLE' },
+    { employeeId: 'shahzad', dateKey, shopId: 'southwark', homeShopId: 'southwark', status: 'AVAILABLE' }
+  ]),
+  { employeeId: 'zamad', dateKey: '2026-10-10', shopId: 'camden', homeShopId: 'camden', status: 'AVAILABLE' },
+  { employeeId: 'zamad', dateKey: '2026-10-10', shopId: 'camden', homeShopId: 'camden', status: 'AVAILABLE' }
+]), [], 'Duplicate rows at only Southwark or Camden must not block saving as conflicts.');
 assert.deepStrictEqual(findDuplicateEmployeeDates([
   { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'station', homeShopId: 'station', status: 'OFF' },
   { employeeId: 'worker', dateKey: '2026-10-04', shopId: 'camden', homeShopId: 'camden', status: 'AVAILABLE' }
