@@ -210,12 +210,15 @@ exports.generateWeeklySalary = async (req, res) => {
         ? shopsWorked[0]
         : (shopsWorked.length > 1 ? shopsWorked.join(' / ') : (group.shopName || defaultShopDoc?.name || 'Shop'));
 
-      // Build day-by-day attendance breakdown
+      const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+      // Build day-by-day attendance breakdown (all 7 days, Sunday to Saturday)
       const breakdown = records.map(r => {
+        const dayNum = getDayOfWeekUK(r.dateString); // 0=Sun..6=Sat
         return {
           attendanceId: r._id,
           dateString: r.dateString,
-          dayOfWeek: getDayOfWeekUK(r.dateString),
+          dayOfWeek: DAY_NAMES[dayNum] || `Day ${dayNum}`,
           shopName: r.shopName || 'Shop',
           shiftStart: r.shiftStart,
           shiftEnd: r.shiftEnd,
