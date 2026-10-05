@@ -1011,8 +1011,8 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
         recordsByDate.set(record.dateString, record);
       });
       const reportAttendanceBreakdown = [...recordsByDate.values()];
-      const isPayrollLocked = Boolean(salaryData.finalizationSnapshot)
-        || ['FINALIZED', 'PAID', 'PARTIALLY_PAID'].includes(String(salaryData.status || '').toUpperCase().replaceAll(' ', '_'));
+      const isPayrollLocked = ['FINALIZED', 'PAID', 'PARTIALLY_PAID']
+        .includes(String(salaryData.status || '').toUpperCase().replaceAll(' ', '_'));
       if (isPayrollLocked) return { ...salaryData, reportAttendanceBreakdown };
 
       const netAttendancePay = Number(reportAttendanceBreakdown

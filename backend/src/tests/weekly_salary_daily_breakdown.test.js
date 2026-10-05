@@ -123,6 +123,7 @@ async function run() {
   try {
     const response = { json(data) { this.data = data; } };
     await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
+    assert.equal(response.data.salaries[0].dailyAttendance.length, 7);
     assert.equal(response.data.salaries[0].dailyAttendance[6].dateString, '2026-10-03');
     assert.equal(response.data.salaries[0].dailyAttendance[6].attendancePay, 50);
     assert.equal(response.data.salaries[0].dailyAttendance[6].status, 'Present');
@@ -133,8 +134,12 @@ async function run() {
     assert.equal(response.data.totals.totalAttendancePay, 350);
     assert.equal(response.data.totals.totalFinalSalary, 350);
 
-    salaryRecord.status = 'FINALIZED';
     salaryRecord.finalizationSnapshot = { attendanceBreakdown: salaryRecord.attendanceBreakdown };
+    await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
+    assert.equal(response.data.salaries[0].netAttendancePay, 350);
+    assert.equal(response.data.salaries[0].dailyAttendance[6].attendancePay, 50);
+
+    salaryRecord.status = 'FINALIZED';
     await reportController.getWeeklySalaryReport({ query: { date: '2026-10-03' } }, response);
     assert.equal(response.data.salaries[0].netAttendancePay, 300);
     assert.equal(response.data.salaries[0].finalSalary, 300);
