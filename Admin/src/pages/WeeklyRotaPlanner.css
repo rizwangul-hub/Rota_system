@@ -18,7 +18,23 @@
   padding: 16px 24px 80px 24px !important;
   width: 100vw !important;
   height: 100vh !important;
+  max-width: none !important;
   margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.weekly-rota-page:fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 16px 24px 80px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: #f8fafc;
 }
 
 .fullscreen-active-badge {

@@ -65,6 +65,7 @@ export default function WeeklyRotaPlanner() {
 
   // Fullscreen & Pick/Drop Modes
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const rotaPageRef = useRef(null);
   const [viewMode, setViewMode] = useState('SHEET'); // 'SHEET' (Unified Excel Rota), 'GRID' (Cards matrix), or 'BOARD' (Daily board)
   const [selectedDailyDate, setSelectedDailyDate] = useState(() => weekStart);
 
@@ -114,6 +115,28 @@ export default function WeeklyRotaPlanner() {
 
   // Keyboard shortcut: Escape exits pick mode or fullscreen
   useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === rotaPageRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === rotaPageRef.current) {
+        await document.exitFullscreen();
+      } else if (rotaPageRef.current?.requestFullscreen) {
+        await rotaPageRef.current.requestFullscreen();
+      } else {
+        setIsFullscreen(value => !value);
+      }
+    } catch (fullscreenError) {
+      setError(fullscreenError?.message || 'Could not open the rota in fullscreen mode.');
+    }
+  };
+
+  useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (pickedWorker) {
@@ -121,7 +144,13 @@ export default function WeeklyRotaPlanner() {
         } else if (availModal) {
           setAvailModal(null);
         } else if (isFullscreen) {
-          setIsFullscreen(false);
+          if (document.fullscreenElement === rotaPageRef.current) {
+            document.exitFullscreen().catch(fullscreenError => {
+              setError(fullscreenError?.message || 'Could not exit fullscreen mode.');
+            });
+          } else {
+            setIsFullscreen(false);
+          }
         } else if (activeCell) {
           setActiveCell(null);
         }
@@ -1182,7 +1211,7 @@ export default function WeeklyRotaPlanner() {
   };
 
   return (
-    <div className={`page-container weekly-rota-page ${isFullscreen ? 'rota-fullscreen-active' : ''}`}>
+    <div ref={rotaPageRef} className={`page-container weekly-rota-page ${isFullscreen ? 'rota-fullscreen-active' : ''}`}>
       {/* ── HEADER & ACTIONS ────────────────────────────────────────── */}
       <div className="rota-top-header">
         <div>
@@ -1202,7 +1231,7 @@ export default function WeeklyRotaPlanner() {
           {/* Fullscreen Toggle Button */}
           <button
             className={`btn btn-sm rota-btn-fullscreen ${isFullscreen ? 'btn-danger' : 'btn-outline'}`}
-            onClick={() => setIsFullscreen(!isFullscreen)}
+            onClick={toggleFullscreen}
             title={isFullscreen ? 'Exit full screen view' : 'Open rota on full screen for easy Pick & Drop'}
           >
             {isFullscreen ? (
