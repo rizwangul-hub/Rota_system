@@ -1575,7 +1575,11 @@ export default function WeeklyRotaPlanner() {
               const availableToAdd = employees.filter(e => !workerIds.includes(e._id));
 
               return (
-                <div key={shop._id} className="sheet-shop-section">
+                <div
+                  key={shop._id}
+                  className="sheet-shop-section"
+                  style={{ backgroundColor: style.bg }}
+                >
                   {/* Shop Banner Row */}
                   <div
                     className="sheet-shop-header-row"
@@ -1774,10 +1778,13 @@ export default function WeeklyRotaPlanner() {
                   )}
 
                   {/* Shop Total Row */}
-                  <div className="sheet-total-row">
-                    <div className="sheet-col-name sheet-total-label">Total</div>
+                  <div
+                    className="sheet-total-row"
+                    style={{ backgroundColor: style.excelBg, borderTop: `2px solid ${style.border}` }}
+                  >
+                    <div className="sheet-col-name sheet-total-label" style={{ color: style.text }}>TOTAL</div>
                     {weekDays.map(d => (
-                      <div key={d.dateKey} className="sheet-col-day sheet-total-val">
+                      <div key={d.dateKey} className="sheet-col-day sheet-total-val" style={{ fontWeight: 800, color: style.text }}>
                         {getShopDayTotal(shop._id, d.dateKey)}
                       </div>
                     ))}
