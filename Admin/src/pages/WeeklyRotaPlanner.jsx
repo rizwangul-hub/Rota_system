@@ -92,6 +92,7 @@ export default function WeeklyRotaPlanner() {
 
   // Add worker dropdown state per shop
   const [addingWorkerShopId, setAddingWorkerShopId] = useState(null);
+  const [workerSearch, setWorkerSearch] = useState('');
 
   // ── PREVIEW PREVIOUS ROTA STATE ────────────────────────────────────────
   // prevRota: last week's rota data: { assignments[], shopRoster[] }
@@ -717,6 +718,7 @@ export default function WeeklyRotaPlanner() {
       };
     });
     setAddingWorkerShopId(null);
+    setWorkerSearch('');
     setNotice(`Added worker to ${shopMap.get(shopId)?.name || 'shop'}.`);
   };
 
@@ -1602,7 +1604,10 @@ export default function WeeklyRotaPlanner() {
               const style = getShopStyle(shop.name);
               const workerIds = shopRosters[shop._id] || [];
               const isAddingWorker = addingWorkerShopId === shop._id;
-              const availableToAdd = employees.filter(e => !workerIds.includes(e._id));
+              const availableToAdd = employees.filter(e => !workerIds.includes(String(e._id)));
+              const matchingWorkers = availableToAdd.filter(emp =>
+                `${emp.name || ''} ${emp.employeeId || ''}`.toLowerCase().includes(workerSearch.trim().toLowerCase())
+              );
 
               return (
                 <div
@@ -1621,7 +1626,10 @@ export default function WeeklyRotaPlanner() {
                     <div style={{ position: 'relative' }}>
                       <button
                         className="sheet-add-emp-btn"
-                        onClick={() => setAddingWorkerShopId(isAddingWorker ? null : shop._id)}
+                        onClick={() => {
+                          setWorkerSearch('');
+                          setAddingWorkerShopId(isAddingWorker ? null : shop._id);
+                        }}
                       >
                         <Plus size={12} /> Add Worker
                       </button>
@@ -1631,13 +1639,23 @@ export default function WeeklyRotaPlanner() {
                             <span>Add Worker to {shop.name}</span>
                             <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
                           </div>
+                          <input
+                            type="search"
+                            className="form-input"
+                            placeholder="Search workers by name or ID"
+                            value={workerSearch}
+                            onChange={event => setWorkerSearch(event.target.value)}
+                            style={{ margin: '8px 10px', width: 'calc(100% - 20px)' }}
+                          />
                           <div className="add-worker-list">
-                            {availableToAdd.length === 0 ? (
+                            {matchingWorkers.length === 0 ? (
                               <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
-                                All active workers are already in this shop's roster.
+                                {availableToAdd.length === 0
+                                  ? 'All workers are already in this shop roster.'
+                                  : 'No workers match your search.'}
                               </div>
                             ) : (
-                              availableToAdd.map(emp => (
+                              matchingWorkers.map(emp => (
                                 <button
                                   key={emp._id}
                                   className="add-worker-item"
@@ -1821,7 +1839,10 @@ export default function WeeklyRotaPlanner() {
               const style = getShopStyle(shop.name);
               const workerIds = shopRosters[shop._id] || [];
               const isAddingWorker = addingWorkerShopId === shop._id;
-              const availableToAdd = employees.filter(e => !workerIds.includes(e._id));
+              const availableToAdd = employees.filter(e => !workerIds.includes(String(e._id)));
+              const matchingWorkers = availableToAdd.filter(emp =>
+                `${emp.name || ''} ${emp.employeeId || ''}`.toLowerCase().includes(workerSearch.trim().toLowerCase())
+              );
 
               return (
                 <div key={shop._id} className="shop-rota-card card">
@@ -1846,7 +1867,10 @@ export default function WeeklyRotaPlanner() {
                       <div style={{ position: 'relative' }}>
                         <button
                           className="btn btn-outline btn-sm add-worker-btn"
-                          onClick={() => setAddingWorkerShopId(isAddingWorker ? null : shop._id)}
+                          onClick={() => {
+                            setWorkerSearch('');
+                            setAddingWorkerShopId(isAddingWorker ? null : shop._id);
+                          }}
                         >
                           <Plus size={14} /> Add Worker
                         </button>
@@ -1857,13 +1881,23 @@ export default function WeeklyRotaPlanner() {
                               <span>Add Worker to {shop.name}</span>
                               <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
                             </div>
+                            <input
+                              type="search"
+                              className="form-input"
+                              placeholder="Search workers by name or ID"
+                              value={workerSearch}
+                              onChange={event => setWorkerSearch(event.target.value)}
+                              style={{ margin: '8px 10px', width: 'calc(100% - 20px)' }}
+                            />
                             <div className="add-worker-list">
-                              {availableToAdd.length === 0 ? (
+                              {matchingWorkers.length === 0 ? (
                                 <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
-                                  All active workers are already in this shop's roster.
+                                  {availableToAdd.length === 0
+                                    ? 'All workers are already in this shop roster.'
+                                    : 'No workers match your search.'}
                                 </div>
                               ) : (
-                                availableToAdd.map(emp => (
+                                matchingWorkers.map(emp => (
                                   <button
                                     key={emp._id}
                                     className="add-worker-item"
