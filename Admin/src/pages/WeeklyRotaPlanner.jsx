@@ -106,9 +106,6 @@ export default function WeeklyRotaPlanner() {
   // Days in selected week (Sunday - Saturday)
   const weekDays = useMemo(() => getWeekDates(weekStart), [weekStart]);
 
-  // Server-pre-computed cross-shop display: crossShopMap[shopId:empId:dateKey] = { displayText, displayStatus }
-  const crossShopMapRef = useRef({});
-
   // Keep selectedDailyDate in sync with weekStart if week changes
   useEffect(() => {
     setSelectedDailyDate(weekStart);
@@ -184,7 +181,7 @@ export default function WeeklyRotaPlanner() {
 
       setShopRosters(rosters);
 
-      // 2. Build Cells map from assignments (now enriched with displayText by server)
+      // 2. Build cells from saved assignments; displayed shop names are resolved from live cells.
       const newCells = {};
       (rota?.assignments || []).forEach(a => {
         const rawShopId = String(a.shopId?._id || a.shopId);
@@ -197,20 +194,13 @@ export default function WeeklyRotaPlanner() {
           status: a.status || 'AVAILABLE',
           targetShopId: isLoaned ? rawShopId : null,
           targetShopName: a.targetShopName || '',
-          displayText: a.displayText || (a.status === 'OFF' ? 'OFF' : a.status === 'LOANED' ? (a.targetShopName || 'Transferred') : a.status === 'CUSTOM' ? (a.note || 'Available') : 'Available'),
-          displayStatus: a.displayStatus || a.status || 'AVAILABLE',
           note: a.note || '',
           startTime: a.startTime || '09:00',
           endTime: a.endTime || '17:00'
         };
       });
 
-      // Also store the server-side crossShopMap for blank cells
-      const serverCrossShopMap = rota?.crossShopMap || {};
-
       setCells(newCells);
-      // Store crossShopMap in a ref so the render can access it without re-render
-      crossShopMapRef.current = serverCrossShopMap;
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to load rota.');
     } finally {
@@ -449,6 +439,37 @@ export default function WeeklyRotaPlanner() {
     shops.forEach(s => map.set(s._id, s));
     return map;
   }, [shops]);
+
+  const getWorkerDayDisplay = (shopId, employeeId, dateKey) => {
+    const ownCell = cells[`${shopId}:${employeeId}:${dateKey}`];
+    if (ownCell?.status === 'AVAILABLE') return { text: 'Available', status: 'AVAILABLE' };
+    if (ownCell?.status === 'CUSTOM') return { text: ownCell.note || 'Available', status: 'CUSTOM' };
+    if (ownCell?.status === 'LOANED' && ownCell.targetShopId) {
+      return {
+        text: shopMap.get(ownCell.targetShopId)?.name || ownCell.targetShopName || ownCell.note || 'Other Shop',
+        status: 'LOANED'
+      };
+    }
+
+    for (const otherShop of shops) {
+      if (otherShop._id === shopId) continue;
+      const otherCell = cells[`${otherShop._id}:${employeeId}:${dateKey}`];
+      if (!otherCell || otherCell.status === 'OFF') continue;
+      const targetShopName = otherCell.status === 'LOANED' && otherCell.targetShopId
+        ? shopMap.get(otherCell.targetShopId)?.name || otherCell.targetShopName || otherShop.name
+        : otherShop.name;
+      return { text: targetShopName, status: 'LOANED' };
+    }
+
+    if (ownCell?.status === 'OFF') return { text: 'OFF', status: 'OFF' };
+    const isOffElsewhere = shops.some(otherShop =>
+      otherShop._id !== shopId &&
+      cells[`${otherShop._id}:${employeeId}:${dateKey}`]?.status === 'OFF'
+    );
+    return isOffElsewhere
+      ? { text: 'OFF', status: 'OFF' }
+      : { text: 'Available', status: 'AVAILABLE' };
+  };
 
   // -------------------------------------------------------------
   // REAL-TIME CONFLICT DETECTION ENGINE
@@ -903,19 +924,6 @@ export default function WeeklyRotaPlanner() {
       const d = new Date(`${iso}T12:00:00Z`);
       return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     };
-    const findOtherShop = (shopId, empId, dateKey) => {
-      for (const otherShop of shops) {
-        if (otherShop._id === shopId) continue;
-        const otherCell = cells[`${otherShop._id}:${empId}:${dateKey}`];
-        if (!otherCell || otherCell.status === 'OFF') continue;
-        if (otherCell.status === 'LOANED' && otherCell.targetShopId) {
-          return shopMap.get(otherCell.targetShopId)?.name || otherShop.name;
-        }
-        return otherShop.name;
-      }
-      return null;
-    };
-
     let html = `
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
@@ -970,32 +978,16 @@ export default function WeeklyRotaPlanner() {
           <td class="name-col">${emp.name}</td>`;
 
         weekDays.forEach((d, i) => {
-          const key = `${shop._id}:${empId}:${d.dateKey}`;
-          const cell = cells[key];
-          const otherShopName = findOtherShop(shop._id, empId, d.dateKey);
-          if (!cell) {
-            if (otherShopName) {
-              html += `<td class="loaned">${otherShopName}</td>`;
-            } else if (shops.some(otherShop =>
-              otherShop._id !== shop._id &&
-              cells[`${otherShop._id}:${empId}:${d.dateKey}`]?.status === 'OFF'
-            )) {
-              html += `<td class="off">OFF</td>`;
-            } else {
-              totals[i]++;
-              html += `<td class="avail">Available</td>`;
-            }
-          } else if (cell.status === 'OFF') {
-            html += otherShopName
-              ? `<td class="loaned">${otherShopName}</td>`
-              : `<td class="off">OFF</td>`;
-          } else if (cell.status === 'LOANED') {
-            html += `<td class="loaned">${shopMap.get(cell.targetShopId)?.name || cell.note || 'Loaned'}</td>`;
-          } else {
+          const display = getWorkerDayDisplay(shop._id, empId, d.dateKey);
+          if (display.status === 'AVAILABLE' || display.status === 'CUSTOM') {
             totals[i]++;
-            const noteStr = cell.note ? `<br><span style="font-size:6px;color:#047857">${cell.note}</span>` : '';
-            html += `<td class="avail">Available${noteStr}</td>`;
           }
+          const cssClass = display.status === 'LOANED'
+            ? 'loaned'
+            : display.status === 'OFF'
+              ? 'off'
+              : 'avail';
+          html += `<td class="${cssClass}">${display.text}</td>`;
         });
         html += `</tr>`;
       });
@@ -1048,12 +1040,13 @@ export default function WeeklyRotaPlanner() {
   // Calculate active totals per shop per day
   const getShopDayTotal = (shopId, dateKey) => {
     let count = 0;
+    const countedEmployees = new Set();
     const workerIds = shopRosters[shopId] || [];
     workerIds.forEach(empId => {
-      const cellKey = `${shopId}:${empId}:${dateKey}`;
-      const cell = cells[cellKey] || { status: 'AVAILABLE' };
-      if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
+      const display = getWorkerDayDisplay(shopId, empId, dateKey);
+      if (display.status === 'AVAILABLE' || display.status === 'CUSTOM') {
         count++;
+        countedEmployees.add(empId);
       }
     });
 
@@ -1063,8 +1056,9 @@ export default function WeeklyRotaPlanner() {
       otherWorkers.forEach(empId => {
         const cellKey = `${otherShop._id}:${empId}:${dateKey}`;
         const cell = cells[cellKey];
-        if (cell && cell.status === 'LOANED' && cell.targetShopId === shopId) {
+        if (!countedEmployees.has(empId) && cell && cell.status === 'LOANED' && cell.targetShopId === shopId) {
           count++;
+          countedEmployees.add(empId);
         }
       });
     });
@@ -1696,21 +1690,9 @@ export default function WeeklyRotaPlanner() {
                           </div>
 
                           {weekDays.map((d, dIdx) => {
-                            const cellKey = `${shop._id}:${empId}:${d.dateKey}`;
-                            const rawCell = cells[cellKey]; // undefined if no assignment at this shop
-
-                            // Use server-pre-computed display text:
-                            // — If this shop has a direct assignment → use its displayText
-                            // — If blank (worker at another shop) → check server's crossShopMap
-                            let displayText, displayStatus;
-                            if (rawCell) {
-                              displayText   = rawCell.displayText   || 'Available';
-                              displayStatus = rawCell.displayStatus || rawCell.status || 'AVAILABLE';
-                            } else {
-                              const cross = crossShopMapRef.current[cellKey];
-                              displayText   = cross?.displayText   || 'Available';
-                              displayStatus = cross?.displayStatus || 'AVAILABLE';
-                            }
+                            const display = getWorkerDayDisplay(shop._id, empId, d.dateKey);
+                            const displayText = display.text;
+                            const displayStatus = display.status;
 
                             const conflicted = isCellConflicted(shop._id, empId, d.dateKey);
                             const isUnavailable = checkIsWorkerUnavailableInPreview(shop._id, empId, d.dateKey, dIdx);
@@ -1943,58 +1925,32 @@ export default function WeeklyRotaPlanner() {
 
                                 {weekDays.map((day, dayIdx) => {
                                   const cellKey = `${shop._id}:${empId}:${day.dateKey}`;
-                                  const rawCell = cells[cellKey];
-                                  const cell = rawCell || { status: 'AVAILABLE' };
-                                  let otherShopName = null;
-                                  if (cell.status === 'OFF') {
-                                    for (const otherShop of shops) {
-                                      if (otherShop._id === shop._id) continue;
-                                      const otherCell = cells[`${otherShop._id}:${empId}:${day.dateKey}`];
-                                      if (!otherCell || otherCell.status === 'OFF') continue;
-                                      otherShopName = otherCell.status === 'LOANED' && otherCell.targetShopId
-                                        ? shopMap.get(otherCell.targetShopId)?.name || otherShop.name
-                                        : otherShop.name;
-                                      break;
-                                    }
-                                  }
+                                  const cell = cells[cellKey] || { status: 'AVAILABLE' };
+                                  const display = getWorkerDayDisplay(shop._id, empId, day.dateKey);
                                   const conflicted = isCellConflicted(shop._id, empId, day.dateKey);
                                   const isUnavailable = checkIsWorkerUnavailableInPreview(shop._id, empId, day.dateKey, dayIdx);
                                   const isPicked = pickedWorker?.employeeId === empId && pickedWorker?.dateKey === day.dateKey;
 
                                   let cellClass = 'rota-cell-btn';
-                                  let cellLabel = 'Available';
+                                  let cellLabel = display.text;
                                   let cellStyle = {};
 
                                   if (conflicted) {
                                     cellClass += ' cell-conflicted';
-                                  } else if (otherShopName) {
-                                    const targetStyle = getShopStyle(otherShopName);
-                                    cellClass += ' cell-loaned';
-                                    cellLabel = otherShopName;
-                                    cellStyle = {
-                                      backgroundColor: targetStyle.pillBg,
-                                      color: targetStyle.text,
-                                      borderColor: targetStyle.border
-                                    };
-                                  } else if (cell.status === 'OFF') {
+                                  } else if (display.status === 'OFF') {
                                     cellClass += ' cell-off';
-                                    cellLabel = 'OFF';
-                                  } else if (cell.status === 'LOANED' && cell.targetShopId) {
-                                    const targetShop = shopMap.get(cell.targetShopId);
-                                    const targetStyle = getShopStyle(targetShop?.name || '');
+                                  } else if (display.status === 'LOANED') {
+                                    const targetStyle = getShopStyle(display.text);
                                     cellClass += ' cell-loaned';
-                                    cellLabel = targetShop?.name || 'Other Shop';
                                     cellStyle = {
                                       backgroundColor: targetStyle.pillBg,
                                       color: targetStyle.text,
                                       borderColor: targetStyle.border
                                     };
-                                  } else if (cell.status === 'CUSTOM' && cell.note) {
+                                  } else if (display.status === 'CUSTOM') {
                                     cellClass += ' cell-custom';
-                                    cellLabel = cell.note;
                                   } else {
                                     cellClass += ' cell-available';
-                                    cellLabel = 'Available';
                                   }
 
                                   if (showPreview && isUnavailable) {
