@@ -1731,7 +1731,7 @@ export default function WeeklyRotaPlanner() {
                                   <span className="preview-red-tag">NOT AVAIL</span>
                                 )}
                                 {/* Show coloured shop badge for loaned/cross-shop cells */}
-                                {(cell.status === 'LOANED' || crossShopName) && !crossShopIsOff
+                                {displayStatus === 'LOANED'
                                   ? (() => {
                                       const shopStyle = getShopStyle(cellText);
                                       return (

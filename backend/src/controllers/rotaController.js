@@ -170,29 +170,38 @@ async function getWeekData(weekStart) {
     const shopById = {};
     shops.forEach(s => { shopById[String(s._id)] = s.name; });
 
-    // Step 1: empDateMap[empId:dateKey] = name of shop where worker physically is
+    // Step 1: empDateMap[empId:dateKey] = shop ID where worker physically is
     const empDateMap = {};
     rota.assignments.forEach(a => {
       const eId = String(a.employeeId);
       const dk  = String(a.dateKey).slice(0, 10);
-      const hId = String(a.homeShopId || a.shopId);
-      const sId = String(a.shopId);
+      const hId = id(a.homeShopId || a.shopId);
+      const sId = id(a.shopId);
       const key = `${eId}:${dk}`;
       if (a.status === 'OFF') {
         if (!empDateMap[key]) empDateMap[key] = null; // null = absent
       } else {
-        const physicalShop = shopById[sId] || shopById[hId] || '';
-        if (!empDateMap[key]) empDateMap[key] = physicalShop; // first non-OFF wins
+        const physicalShopId = a.status === 'LOANED' || hId !== sId ? sId : hId;
+        if (!empDateMap[key]) empDateMap[key] = physicalShopId; // first non-OFF wins
       }
     });
 
     // Step 2: enrich each assignment with displayText + displayStatus
     rota.assignments = rota.assignments.map(a => {
-      const sId = String(a.shopId);
-      const targetShopName = shopById[sId] || '';
+      const hId = id(a.homeShopId || a.shopId);
+      const sId = id(a.shopId);
+      let targetShopName = shopById[sId] || '';
       let displayText, displayStatus;
       if (a.status === 'OFF') {
-        displayText = 'OFF'; displayStatus = 'OFF';
+        const workingShopId = empDateMap[`${id(a.employeeId)}:${String(a.dateKey).slice(0, 10)}`];
+        if (workingShopId && workingShopId !== hId) {
+          targetShopName = shopById[workingShopId] || '';
+          displayText = targetShopName || 'Other Shop';
+          displayStatus = 'LOANED';
+        } else {
+          displayText = 'OFF';
+          displayStatus = 'OFF';
+        }
       } else if (a.status === 'LOANED') {
         displayText = targetShopName || 'Transferred'; displayStatus = 'LOANED';
       } else if (a.status === 'CUSTOM') {
@@ -225,7 +234,7 @@ async function getWeekData(weekStart) {
           if (where === null || where === undefined) {
             crossShopMap[crossKey] = { displayText: 'OFF', displayStatus: 'OFF' };
           } else {
-            crossShopMap[crossKey] = { displayText: where, displayStatus: 'LOANED' };
+            crossShopMap[crossKey] = { displayText: shopById[where] || 'Other Shop', displayStatus: 'LOANED' };
           }
         }
       });
