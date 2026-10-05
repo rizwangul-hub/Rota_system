@@ -827,9 +827,12 @@ exports.exportExcel = async (req, res) => {
           c.border = thinBorder;
           c.alignment = { horizontal: 'center', vertical: 'middle' };
 
-          if (!cell) {
-            c.value = '—';
-            c.font = { name: 'Arial', size: 8, color: { argb: 'FF94A3B8' } };
+          if (!cell || cell.status === 'AVAILABLE') {
+            // No assignment saved = defaults to Available (matches UI behaviour)
+            shopTotals[i]++;
+            grandTotals[i]++;
+            c.value = 'Available';
+            c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
           } else if (cell.status === 'OFF') {
             c.value = 'OFF';
             c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } }; // BOLD RED
