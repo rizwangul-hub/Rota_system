@@ -1,7 +1,7 @@
 const assert = require('assert');
 const {
   isDateKey, getWeek, dateInWeek, minutes, validateIntervals, validatePayload,
-  findDuplicateEmployeeDates, createAiRosterContext, resolveAiAssignments
+  findDuplicateEmployeeDates, getEmployeeDayAssignments, createAiRosterContext, resolveAiAssignments
 } = require('../utils/rota');
 const WeeklyRota = require('../models/WeeklyRota');
 const RotaAvailability = require('../models/RotaAvailability');
@@ -32,6 +32,59 @@ assert.deepStrictEqual(findDuplicateEmployeeDates([
   { employeeId: 'worker', dateKey: '2026-09-28', shopId: 'shop-a' },
   { employeeId: 'worker', dateKey: '2026-09-29', shopId: 'shop-b' }
 ]), [{ employeeId: 'worker', dateKey: '2026-09-28' }]);
+const transferAssignments = getEmployeeDayAssignments([
+  {
+    employeeId: 'worker',
+    homeShopId: 'station',
+    shopId: 'station',
+    dateKey: '2026-10-04',
+    status: 'OFF',
+    note: 'At Camden'
+  },
+  {
+    employeeId: 'worker',
+    homeShopId: 'camden',
+    shopId: 'camden',
+    dateKey: '2026-10-04',
+    status: 'AVAILABLE'
+  },
+  {
+    employeeId: 'worker',
+    homeShopId: 'station',
+    shopId: 'station',
+    dateKey: '2026-10-05',
+    status: 'OFF'
+  }
+], { station: 'Station', camden: 'Camden' });
+assert.deepStrictEqual(transferAssignments.get('worker:2026-10-04'), {
+  status: 'WORKING',
+  shopId: 'camden',
+  shopName: 'Camden'
+}, 'A destination-shop assignment takes precedence over the source-shop OFF marker.');
+assert.deepStrictEqual(transferAssignments.get('worker:2026-10-05'), {
+  status: 'OFF'
+}, 'An actual day off remains OFF when there is no assignment at another shop.');
+const reversedTransferAssignments = getEmployeeDayAssignments([
+  {
+    employeeId: 'worker',
+    homeShopId: 'camden',
+    shopId: 'camden',
+    dateKey: '2026-10-04',
+    status: 'AVAILABLE'
+  },
+  {
+    employeeId: 'worker',
+    homeShopId: 'station',
+    shopId: 'station',
+    dateKey: '2026-10-04',
+    status: 'OFF'
+  }
+], { station: 'Station', camden: 'Camden' });
+assert.deepStrictEqual(reversedTransferAssignments.get('worker:2026-10-04'), {
+  status: 'WORKING',
+  shopId: 'camden',
+  shopName: 'Camden'
+}, 'OFF markers must not overwrite a working shop regardless of assignment order.');
 assert.match(validatePayload([{ employeeId: 'a', shopId: 'b', dateKey: '2026-09-27', startTime: '09:00', endTime: '09:00' }], [], 'MANUAL'), /valid startTime and endTime/);
 assert(WeeklyRota.schema.path('assignments'), 'Weekly rota stores assignments independently.');
 assert(WeeklyRota.schema.path('publishedVersions'), 'Published rota versions are preserved.');

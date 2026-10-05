@@ -103,7 +103,10 @@ function getEmployeeDayAssignments(assignments, shopsById) {
     const shopName = shopsById instanceof Map ? shopsById.get(actualShopId) : shopsById?.[actualShopId];
 
     // A scheduled shop takes precedence over any OFF marker for the same day.
-    employeeDayAssignments.set(key, { status: 'WORKING', shopId: actualShopId, shopName: shopName || '' });
+    const currentAssignment = employeeDayAssignments.get(key);
+    if (currentAssignment?.status !== 'WORKING') {
+      employeeDayAssignments.set(key, { status: 'WORKING', shopId: actualShopId, shopName: shopName || '' });
+    }
   }
   return employeeDayAssignments;
 }
