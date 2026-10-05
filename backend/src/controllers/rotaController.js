@@ -11,7 +11,7 @@ const RotaAssignmentClaim = require('../models/RotaAssignmentClaim');
 const { logAction } = require('../utils/audit');
 const {
   getWeek, dateInWeek, minutes, validateIntervals, validatePayload, isDateKey,
-  findDuplicateEmployeeDates, createAiRosterContext, resolveAiAssignments
+  findDuplicateEmployeeDates, getEmployeeDayAssignments, createAiRosterContext, resolveAiAssignments
 } = require('../utils/rota');
 
 class RotaError extends Error {
@@ -162,6 +162,77 @@ async function getWeekData(weekStart) {
     RotaAvailability.find({ dateKey: { $gte: week.weekStart, $lte: week.weekEnd } }).sort({ dateKey: 1 }).lean(),
     ShopSchedule.find({ $or: [{ shop: { $in: await Shop.find({ status: 'Active', isActive: true }).distinct('_id') } }, { shop: null }] }).lean()
   ]);
+
+  // ── Server-side cross-shop display pre-computation ──────────────────────
+  // Builds displayText for every assignment so the frontend just reads it —
+  // no complex client-side lookup that can break with browser caching.
+  if (rota && rota.assignments && rota.assignments.length) {
+    const shopById = {};
+    shops.forEach(s => { shopById[String(s._id)] = s.name; });
+
+    // Step 1: empDateMap[empId:dateKey] = name of shop where worker physically is
+    const empDateMap = {};
+    rota.assignments.forEach(a => {
+      const eId = String(a.employeeId);
+      const dk  = String(a.dateKey).slice(0, 10);
+      const hId = String(a.homeShopId || a.shopId);
+      const sId = String(a.shopId);
+      const key = `${eId}:${dk}`;
+      if (a.status === 'OFF') {
+        if (!empDateMap[key]) empDateMap[key] = null; // null = absent
+      } else {
+        const physicalShop = shopById[sId] || shopById[hId] || '';
+        if (!empDateMap[key]) empDateMap[key] = physicalShop; // first non-OFF wins
+      }
+    });
+
+    // Step 2: enrich each assignment with displayText + displayStatus
+    rota.assignments = rota.assignments.map(a => {
+      const sId = String(a.shopId);
+      const targetShopName = shopById[sId] || '';
+      let displayText, displayStatus;
+      if (a.status === 'OFF') {
+        displayText = 'OFF'; displayStatus = 'OFF';
+      } else if (a.status === 'LOANED') {
+        displayText = targetShopName || 'Transferred'; displayStatus = 'LOANED';
+      } else if (a.status === 'CUSTOM') {
+        displayText = a.note || 'Available'; displayStatus = 'CUSTOM';
+      } else {
+        displayText = 'Available'; displayStatus = 'AVAILABLE';
+      }
+      return { ...a, displayText, displayStatus, targetShopName };
+    });
+
+    // Step 3: crossShopMap[shopId:empId:dateKey] — what to show in a shop's cell
+    // for a worker who is listed in that shop's roster but has no direct assignment there.
+    const crossShopMap = {};
+    const assignedKeys = new Set(
+      rota.assignments.map(a =>
+        `${String(a.homeShopId || a.shopId)}:${String(a.employeeId)}:${String(a.dateKey).slice(0,10)}`
+      )
+    );
+    shops.forEach(shop => {
+      const sId = String(shop._id);
+      rota.assignments.forEach(a => {
+        const hId = String(a.homeShopId || a.shopId);
+        if (hId === sId) return; // this IS the home shop, skip
+        const eId = String(a.employeeId);
+        const dk  = String(a.dateKey).slice(0, 10);
+        const crossKey = `${sId}:${eId}:${dk}`;
+        // Only add if this shop has NO direct assignment for this worker on this day
+        if (!assignedKeys.has(crossKey) && !crossShopMap[crossKey]) {
+          const where = empDateMap[`${eId}:${dk}`];
+          if (where === null || where === undefined) {
+            crossShopMap[crossKey] = { displayText: 'OFF', displayStatus: 'OFF' };
+          } else {
+            crossShopMap[crossKey] = { displayText: where, displayStatus: 'LOANED' };
+          }
+        }
+      });
+    });
+    rota.crossShopMap = crossShopMap;
+  }
+
   return { success: true, weekStart: week.weekStart, weekEnd: week.weekEnd, rota, employees, shops, availability, schedules };
 }
 
@@ -654,22 +725,13 @@ exports.exportExcel = async (req, res) => {
 
     // Cell lookup — keyed by homeShopId:empId:dateKey
     const cellMap = {};
-    // Cross-shop lookup — keyed by empId:dateKey → where they actually work
-    const empDateMap = {};
     for (const a of (rota.assignments || [])) {
       const hId = id(a.homeShopId || a.shopId);
-      const sId = id(a.shopId);
       const eId = id(a.employeeId);
       const dKey = String(a.dateKey).slice(0, 10);
       cellMap[`${hId}:${eId}:${dKey}`] = a;
-      // Track where each worker actually works each day (or if they are OFF)
-      if (a.status === 'OFF') {
-        empDateMap[`${eId}:${dKey}`] = '__OFF__';
-      } else {
-        const actualShop = (a.status === 'LOANED' ? shopsById[sId] : shopsById[hId]) || shopsById[sId] || '';
-        empDateMap[`${eId}:${dKey}`] = actualShop;
-      }
     }
+    const employeeDayAssignments = getEmployeeDayAssignments(rota.assignments, shopsById);
 
     // Shop roster lookup
     const rosterMap = {};
@@ -836,15 +898,14 @@ exports.exportExcel = async (req, res) => {
           c.alignment = { horizontal: 'center', vertical: 'middle' };
 
           if (!cell) {
-            // No assignment at this shop — check if worker is at another shop (or OFF) today
-            const crossStatus = empDateMap[`${emp._id}:${weekDates[i].iso}`];
-            if (crossStatus === '__OFF__') {
+            const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
+            if (dayAssignment?.status === 'OFF') {
               // Worker is marked OFF anywhere in the system → show OFF in bold red
               c.value = 'OFF';
               c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } };
-            } else if (crossStatus && crossStatus !== roster.shopName) {
+            } else if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
               // Worker is assigned to a different shop — show that shop name (blue, like LOANED)
-              c.value = crossStatus;
+              c.value = dayAssignment.shopName;
               c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
             } else {
               // No assignment anywhere — show Available and count in totals
@@ -854,8 +915,14 @@ exports.exportExcel = async (req, res) => {
               c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
             }
           } else if (cell.status === 'OFF') {
-            c.value = 'OFF';
-            c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } }; // BOLD RED
+            const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
+            if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
+              c.value = dayAssignment.shopName;
+              c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
+            } else {
+              c.value = 'OFF';
+              c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } };
+            }
           } else if (cell.status === 'LOANED') {
             const targetShop = shopsById[id(cell.targetShopId)] || cell.note || 'Loaned';
             c.value = targetShop;
@@ -958,10 +1025,8 @@ exports.exportPdf = async (req, res) => {
     }
 
     const cellMap = {};
-    const empDateMapPdf = {};
     for (const a of (rota.assignments || [])) {
       const hId = id(a.homeShopId || a.shopId);
-      const sId = id(a.shopId);
       const eId = id(a.employeeId);
       const dKey = String(a.dateKey).slice(0, 10);
       cellMap[`${hId}:${eId}:${dKey}`] = a;
@@ -969,20 +1034,7 @@ exports.exportPdf = async (req, res) => {
 
     const shopsById = {};
     allShops.forEach(s => { shopsById[id(s._id)] = s.name; });
-
-    // Build empDateMapPdf after shopsById is ready
-    for (const a of (rota.assignments || [])) {
-      const hId = id(a.homeShopId || a.shopId);
-      const sId = id(a.shopId);
-      const eId = id(a.employeeId);
-      const dKey = String(a.dateKey).slice(0, 10);
-      if (a.status === 'OFF') {
-        empDateMapPdf[`${eId}:${dKey}`] = '__OFF__';
-      } else {
-        const actualShop = (a.status === 'LOANED' ? shopsById[sId] : shopsById[hId]) || shopsById[sId] || '';
-        empDateMapPdf[`${eId}:${dKey}`] = actualShop;
-      }
-    }
+    const employeeDayAssignments = getEmployeeDayAssignments(rota.assignments, shopsById);
 
     // Week days: Sun -> Sat
     const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
@@ -1132,7 +1184,14 @@ exports.exportPdf = async (req, res) => {
           let color = COLORS.availText;
           if (cell) {
             if (cell.status === 'OFF') {
-              label = 'OFF'; color = COLORS.offText;
+              const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
+              if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
+                label = dayAssignment.shopName;
+                color = COLORS.loanText;
+              } else {
+                label = 'OFF';
+                color = COLORS.offText;
+              }
             } else if (cell.status === 'LOANED') {
               const targetShop = shopsById[id(cell.shopId)] || cell.note || 'Loaned';
               label = targetShop; color = COLORS.loanText;
@@ -1143,13 +1202,12 @@ exports.exportPdf = async (req, res) => {
               grandTotals[i]++;
             }
           } else {
-            // No assignment at this shop — check if worker is at another shop (or OFF) today
-            const crossStatus = empDateMapPdf[`${emp._id}:${weekDates[i].iso}`];
-            if (crossStatus === '__OFF__') {
+            const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
+            if (dayAssignment?.status === 'OFF') {
               label = 'OFF';
               color = COLORS.offText; // bold red
-            } else if (crossStatus && crossStatus !== roster.shopName) {
-              label = crossStatus;
+            } else if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
+              label = dayAssignment.shopName;
               color = COLORS.loanText; // blue — working at another shop
             } else {
               // No assignment anywhere — default to Available

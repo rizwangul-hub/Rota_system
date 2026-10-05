@@ -106,6 +106,9 @@ export default function WeeklyRotaPlanner() {
   // Days in selected week (Sunday - Saturday)
   const weekDays = useMemo(() => getWeekDates(weekStart), [weekStart]);
 
+  // Server-pre-computed cross-shop display: crossShopMap[shopId:empId:dateKey] = { displayText, displayStatus }
+  const crossShopMapRef = useRef({});
+
   // Keep selectedDailyDate in sync with weekStart if week changes
   useEffect(() => {
     setSelectedDailyDate(weekStart);
@@ -181,33 +184,32 @@ export default function WeeklyRotaPlanner() {
 
       setShopRosters(rosters);
 
-      // 2. Build Cells map from existing assignments.
-      // Cell key format: `${homeShopId}:${employeeId}:${dateKey}`
-      // For LOANED workers: assignment.shopId = target shop, assignment.homeShopId = home shop.
-      // We key the cell by homeShopId so it renders under the correct home-shop row.
+      // 2. Build Cells map from assignments (now enriched with displayText by server)
       const newCells = {};
       (rota?.assignments || []).forEach(a => {
         const rawShopId = String(a.shopId?._id || a.shopId);
         const rawHomeId = String(a.homeShopId?._id || a.homeShopId || rawShopId);
         const eId = String(a.employeeId?._id || a.employeeId);
         const dKey = String(a.dateKey).slice(0, 10);
-
         const isLoaned = a.status === 'LOANED' || rawHomeId !== rawShopId;
-        // Key under home shop so cell appears in correct shop row
         const cellKey = `${rawHomeId}:${eId}:${dKey}`;
-
         newCells[cellKey] = {
           status: a.status || 'AVAILABLE',
-          // targetShopId = where they actually work when loaned
           targetShopId: isLoaned ? rawShopId : null,
-          targetShopName: '',
+          targetShopName: a.targetShopName || '',
+          displayText: a.displayText || (a.status === 'OFF' ? 'OFF' : a.status === 'LOANED' ? (a.targetShopName || 'Transferred') : a.status === 'CUSTOM' ? (a.note || 'Available') : 'Available'),
           note: a.note || '',
           startTime: a.startTime || '09:00',
           endTime: a.endTime || '17:00'
         };
       });
 
+      // Also store the server-side crossShopMap for blank cells
+      const serverCrossShopMap = rota?.crossShopMap || {};
+
       setCells(newCells);
+      // Store crossShopMap in a ref so the render can access it without re-render
+      crossShopMapRef.current = serverCrossShopMap;
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to load rota.');
     } finally {
@@ -1669,61 +1671,39 @@ export default function WeeklyRotaPlanner() {
 
                           {weekDays.map((d, dIdx) => {
                             const cellKey = `${shop._id}:${empId}:${d.dateKey}`;
-                            const rawCell = cells[cellKey]; // undefined if no saved assignment
-                            const cell = rawCell || { status: 'AVAILABLE' };
+                            const rawCell = cells[cellKey]; // undefined if no assignment at this shop
 
-                            // Cross-shop lookup: if no assignment saved at this shop,
-                            // check if this worker has an assignment at another shop on this day.
-                            // This fills in blank cells with the target shop name automatically.
-                            let crossShopName = null;
-                            let crossShopIsOff = false;
-                            if (!rawCell) {
-                              for (const otherShop of shops) {
-                                if (otherShop._id === shop._id) continue;
-                                const otherKey = `${otherShop._id}:${empId}:${d.dateKey}`;
-                                const otherCell = cells[otherKey];
-                                if (otherCell) {
-                                  if (otherCell.status === 'OFF') {
-                                    // Worker is off across the system
-                                    crossShopIsOff = true;
-                                  } else {
-                                    // Worker is working at this other shop — show where
-                                    if (otherCell.status === 'LOANED' && otherCell.targetShopId) {
-                                      crossShopName = shopMap.get(otherCell.targetShopId)?.name || otherShop.name;
-                                    } else {
-                                      crossShopName = otherShop.name;
-                                    }
-                                    break;
-                                  }
-                                }
-                              }
+                            // Use server-pre-computed display text:
+                            // — If this shop has a direct assignment → use its displayText
+                            // — If blank (worker at another shop) → check server's crossShopMap
+                            let displayText, displayStatus;
+                            if (rawCell) {
+                              displayText   = rawCell.displayText   || 'Available';
+                              displayStatus = rawCell.displayStatus || rawCell.status || 'AVAILABLE';
+                            } else {
+                              const cross = crossShopMapRef.current[cellKey];
+                              displayText   = cross?.displayText   || 'Available';
+                              displayStatus = cross?.displayStatus || 'AVAILABLE';
                             }
 
                             const conflicted = isCellConflicted(shop._id, empId, d.dateKey);
                             const isUnavailable = checkIsWorkerUnavailableInPreview(shop._id, empId, d.dateKey, dIdx);
                             const isPicked = pickedWorker?.employeeId === empId && pickedWorker?.dateKey === d.dateKey;
 
-                            let cellText = 'Available';
+                            let cellText  = displayText;
                             let cellClass = 'sheet-cell-avail';
 
                             if (conflicted) {
                               cellClass = 'sheet-cell-conflict';
-                              cellText = '⚠️ Conflict';
-                            } else if (crossShopName) {
-                              // Worker is at another shop — show where (blue)
-                              cellClass = 'sheet-cell-loaned';
-                              cellText = crossShopName;
-                            } else if (crossShopIsOff || cell.status === 'OFF') {
-                              // Worker is marked OFF anywhere — show OFF (bold red)
+                              cellText  = '⚠️ Conflict';
+                            } else if (displayStatus === 'OFF') {
                               cellClass = 'sheet-cell-off';
-                              cellText = 'OFF';
-                            } else if (cell.status === 'LOANED' && cell.targetShopId) {
-                              const targetShop = shopMap.get(cell.targetShopId);
+                              cellText  = 'OFF';
+                            } else if (displayStatus === 'LOANED') {
                               cellClass = 'sheet-cell-loaned';
-                              cellText = targetShop?.name || 'Transferred';
-                            } else if (cell.status === 'CUSTOM' && cell.note) {
+                              // cellText is already the shop name from server
+                            } else if (displayStatus === 'CUSTOM') {
                               cellClass = 'sheet-cell-custom';
-                              cellText = cell.note;
                             }
 
                             if (showPreview && isUnavailable) {

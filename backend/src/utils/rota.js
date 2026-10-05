@@ -84,6 +84,30 @@ function findDuplicateEmployeeDates(assignments) {
   return duplicates;
 }
 
+function getEmployeeDayAssignments(assignments, shopsById) {
+  const employeeDayAssignments = new Map();
+  for (const assignment of assignments || []) {
+    const employeeId = String(assignment.employeeId?._id || assignment.employeeId);
+    const dateKey = String(assignment.dateKey).slice(0, 10);
+    const key = `${employeeId}:${dateKey}`;
+    if (assignment.status === 'OFF') {
+      if (!employeeDayAssignments.has(key)) {
+        employeeDayAssignments.set(key, { status: 'OFF' });
+      }
+      continue;
+    }
+
+    const homeShopId = String(assignment.homeShopId?._id || assignment.homeShopId || assignment.shopId?._id || assignment.shopId);
+    const shopId = String(assignment.shopId?._id || assignment.shopId);
+    const actualShopId = assignment.status === 'LOANED' || homeShopId !== shopId ? shopId : homeShopId;
+    const shopName = shopsById instanceof Map ? shopsById.get(actualShopId) : shopsById?.[actualShopId];
+
+    // A scheduled shop takes precedence over any OFF marker for the same day.
+    employeeDayAssignments.set(key, { status: 'WORKING', shopId: actualShopId, shopName: shopName || '' });
+  }
+  return employeeDayAssignments;
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -154,5 +178,5 @@ function resolveAiAssignments(assignments, context) {
 module.exports = {
   DATE_KEY, TIME_KEY, METHODS, isDateKey, getWeek, dateInWeek, minutes,
   validateIntervals, validatePayload, findDuplicateEmployeeDates,
-  createAiRosterContext, resolveAiAssignments
+  getEmployeeDayAssignments, createAiRosterContext, resolveAiAssignments
 };
