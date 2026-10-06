@@ -71,7 +71,15 @@ const seedData = async () => {
     console.log('Seeding System Settings...');
     await SystemSetting.create([
       { key: 'GRACE_PERIOD_MINUTES', value: 15, description: 'Lateness grace period in minutes' },
-      { key: 'SALARY_WEEK_START_DAY', value: 1, description: '1 = Monday' }
+      { key: 'SALARY_WEEK_START_DAY', value: 1, description: '1 = Monday' },
+      {
+        key: 'ATTENDANCE_REMINDER',
+        value: {
+          time: '14:00',
+          message: "Please remember to record today's staff attendance."
+        },
+        description: 'Daily attendance reminder time and message for the Usman attendance app'
+      }
     ]);
 
     // 2. Six Bicycle Shops

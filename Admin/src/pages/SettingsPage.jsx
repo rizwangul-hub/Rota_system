@@ -7,6 +7,10 @@ export default function SettingsPage() {
   const [shops, setShops] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [gracePeriod, setGracePeriod] = useState(15);
+  const [attendanceReminder, setAttendanceReminder] = useState({
+    time: '14:00',
+    message: "Please remember to record today's staff attendance."
+  });
   const [loading, setLoading] = useState(true);
   const [newShopName, setNewShopName] = useState('');
   const [newShopAddress, setNewShopAddress] = useState('');
@@ -20,16 +24,20 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const [shopsRes, schedRes, setRes] = await Promise.all([
+      const [shopsRes, schedRes, setRes, reminderRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/shops?includeInactive=true`),
         axios.get(`${API_BASE_URL}/shops/schedules`),
-        axios.get(`${API_BASE_URL}/settings`)
+        axios.get(`${API_BASE_URL}/settings`),
+        axios.get(`${API_BASE_URL}/settings/attendance-reminder`)
       ]);
 
       if (shopsRes.data.success) setShops(shopsRes.data.shops);
       if (schedRes.data.success) setSchedules(schedRes.data.schedules);
       if (setRes.data.success && setRes.data.settings.GRACE_PERIOD_MINUTES !== undefined) {
         setGracePeriod(setRes.data.settings.GRACE_PERIOD_MINUTES);
+      }
+      if (reminderRes.data.success && reminderRes.data.reminder) {
+        setAttendanceReminder(reminderRes.data.reminder);
       }
     } catch (err) {
       console.error(err);
@@ -109,6 +117,30 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveAttendanceReminder = async () => {
+    if (!attendanceReminder.time || !attendanceReminder.message.trim()) {
+      alert('Choose a reminder time and enter a message.');
+      return;
+    }
+    if (attendanceReminder.message.trim().length > 200) {
+      alert('The reminder message must be 200 characters or fewer.');
+      return;
+    }
+
+    try {
+      const res = await axios.put(`${API_BASE_URL}/settings/attendance-reminder`, {
+        time: attendanceReminder.time,
+        message: attendanceReminder.message.trim()
+      });
+      if (res.data.success) {
+        setAttendanceReminder(res.data.reminder);
+        alert('Daily attendance reminder saved. The Usman app will sync the change when it is active or reopened.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to save attendance reminder.');
+    }
+  };
+
   return (
     <div className="page-container">
       {/* Title */}
@@ -121,7 +153,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         {/* Lateness Threshold Card */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
@@ -146,6 +178,46 @@ export default function SettingsPage() {
 
           <button className="btn btn-primary btn-sm" onClick={handleSaveGracePeriod}>
             <Save size={14} /> Update Rule
+          </button>
+        </div>
+
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <Clock size={18} color="#2563eb" />
+            <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
+              Usman Attendance Reminder
+            </h2>
+          </div>
+          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+            One daily notification at the selected time on the Usman attendance app. The default time is 2:00 PM (device local time).
+          </p>
+          <div className="form-group">
+            <label className="form-label" htmlFor="attendance-reminder-time">Reminder Time</label>
+            <input
+              id="attendance-reminder-time"
+              type="time"
+              lang="en-GB"
+              className="form-input"
+              value={attendanceReminder.time}
+              onChange={e => setAttendanceReminder(current => ({ ...current, time: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="attendance-reminder-message">Notification Message</label>
+            <textarea
+              id="attendance-reminder-message"
+              className="form-input"
+              value={attendanceReminder.message}
+              onChange={e => setAttendanceReminder(current => ({ ...current, message: e.target.value }))}
+              maxLength={200}
+              rows={3}
+              required
+            />
+            <small style={{ color: '#64748b' }}>{attendanceReminder.message.length}/200 characters</small>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={handleSaveAttendanceReminder}>
+            <Save size={14} /> Save Reminder
           </button>
         </div>
 
