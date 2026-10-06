@@ -77,6 +77,12 @@ async function run() {
     const homeShopId = '64d000000000000000000001';
     const targetShopId = '64d000000000000000000002';
     const employeeId = '64d000000000000000000003';
+    const unavailableEmployeeId = '64d000000000000000000005';
+    const weekDates = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date('2026-10-04T12:00:00.000Z');
+      date.setUTCDate(date.getUTCDate() + index);
+      return date.toISOString().slice(0, 10);
+    });
     replaceMethod(WeeklyRota, 'findOne', () => ({
       populate: function () { return this; },
       lean: async () => ({
@@ -96,18 +102,29 @@ async function run() {
           startTime: '',
           endTime: '',
           status: 'OFF'
-        }],
+        }, ...weekDates.map(dateKey => ({
+          employeeId: unavailableEmployeeId,
+          shopId: homeShopId,
+          homeShopId,
+          dateKey,
+          startTime: '',
+          endTime: '',
+          status: 'OFF'
+        }))],
         shopRoster: [{
-          shopId: { _id: homeShopId, name: 'Home Shop' },
-          employeeIds: [{ _id: employeeId, name: 'Saved Rota Worker' }]
+          shopId: { _id: homeShopId, name: 'Camden' },
+          employeeIds: [
+            { _id: employeeId, name: 'Saved Rota Worker' },
+            { _id: unavailableEmployeeId, name: 'Unavailable Worker' }
+          ]
         }]
       })
     }));
     replaceMethod(Shop, 'find', () => ({
       select: () => ({
         lean: async () => [
-          { _id: homeShopId, name: 'Home Shop' },
-          { _id: targetShopId, name: 'Target Shop' }
+          { _id: homeShopId, name: 'Camden' },
+          { _id: targetShopId, name: 'Station' }
         ]
       })
     }));
@@ -129,11 +146,14 @@ async function run() {
     assert.ok(response.buffer.subarray(0, 4).toString('ascii') === '%PDF');
     const extractedText = pdfText(response.buffer);
     const decodedStreams = pdfStreams(response.buffer);
-    assert.ok(decodedStreams.includes(pdfFillColorOperator('#ecfdf5')), 'available cells should have a visible green background');
-    assert.ok(decodedStreams.includes(pdfFillColorOperator('#fef2f2')), 'OFF cells should have a visible red background');
-    assert.ok(decodedStreams.includes(pdfFillColorOperator('#e2e8f0')), 'transferred cells should retain the destination shop background');
-    const targetShopIndex = extractedText.indexOf('targetshop');
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#fcd34d')), 'Camden should have one continuous, visible shop background');
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#93c5fd')), 'Station should have one continuous, visible shop background');
+    assert.ok(!decodedStreams.includes(pdfFillColorOperator('#ecfdf5')), 'available cells should not be drawn as separate background boxes');
+    assert.ok(!decodedStreams.includes(pdfFillColorOperator('#fef2f2')), 'OFF cells should not be drawn as separate background boxes');
+    assert.ok(!extractedText.includes('unavailableworker'), 'workers unavailable at a shop for the entire week should not appear in its list');
+    const targetShopIndex = extractedText.indexOf('station');
     assert.notEqual(targetShopIndex, -1);
+    assert.ok(extractedText.slice(targetShopIndex).includes('savedrotaworker'), 'transferred workers should appear in the destination shop list');
     assert.ok(extractedText.slice(targetShopIndex).includes('total1'));
 
     const excelResponse = new CaptureResponse();
@@ -152,12 +172,18 @@ async function run() {
     const sheet = workbook.getWorksheet('ROTA');
     const targetShopRow = [];
     sheet.eachRow((row, rowNumber) => {
-      if (row.getCell(1).value === 'Target Shop') targetShopRow.push(rowNumber);
+      if (row.getCell(1).value === 'Station') targetShopRow.push(rowNumber);
     });
     assert.equal(targetShopRow.length, 1);
-    const totalRow = sheet.getRow(targetShopRow[0] + 3);
+    const totalRow = sheet.getRow(targetShopRow[0] + 4);
     assert.equal(totalRow.getCell(1).value, 'Total');
     assert.equal(totalRow.getCell(2).value, 1);
+    assert.equal(sheet.getRow(targetShopRow[0] + 3).getCell(1).value, 'Saved Rota Worker');
+    const unavailableWorkerRows = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (row.getCell(1).value === 'Unavailable Worker') unavailableWorkerRows.push(rowNumber);
+    });
+    assert.equal(unavailableWorkerRows.length, 0);
     console.log('PASS weekly rota PDF and Excel totals include transferred workers at destination shops');
   } finally {
     for (const restore of restores.reverse()) restore();

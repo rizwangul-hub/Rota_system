@@ -524,7 +524,10 @@ export default function WeeklyRotaPlanner() {
         }
       });
     });
-    return [...workerIds];
+    return [...workerIds].filter(employeeId => weekDays.some(day => {
+      const status = getWorkerDayDisplay(shopId, employeeId, day.dateKey).status;
+      return status === 'AVAILABLE' || status === 'CUSTOM';
+    }));
   };
 
   // -------------------------------------------------------------
