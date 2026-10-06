@@ -1232,6 +1232,17 @@ exports.exportPdf = async (req, res) => {
       doc.rect(x, yPos, w, h).fillColor(bg).fill();
     };
 
+    const drawCellBorder = (x, yPos, w, h, color = '#334155', width = 0.8) => {
+      doc.rect(x, yPos, w, h).strokeColor(color).lineWidth(width).stroke();
+    };
+
+    const drawRowCellBorders = (yPos, height, color = '#334155', width = 0.8) => {
+      drawCellBorder(MARGIN, yPos, NAME_COL, height, color, width);
+      for (let index = 0; index < 7; index++) {
+        drawCellBorder(MARGIN + NAME_COL + index * DAY_COL, yPos, DAY_COL, height, color, width);
+      }
+    };
+
     const cellText = (text, x, yPos, w, h, color, size, bold = false, align = 'center') => {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica')
          .fontSize(size)
@@ -1247,9 +1258,11 @@ exports.exportPdf = async (req, res) => {
                 MARGIN + 4, y + 6, { width: usableW - 8, align: 'center' });
       y += H;
       fillRect(MARGIN, y, NAME_COL, 18, COLORS.dateBg);
+      drawCellBorder(MARGIN, y, NAME_COL, 18);
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
         fillRect(x, y, DAY_COL, 18, COLORS.dateBg);
+        drawCellBorder(x, y, DAY_COL, 18);
         doc.font('Helvetica-Bold').fontSize(6.5).fillColor(COLORS.dateText)
            .text(weekDates[i].formatted, x + 1, y + 2, { width: DAY_COL - 2, align: 'center', lineBreak: false });
       }
@@ -1287,12 +1300,14 @@ exports.exportPdf = async (req, res) => {
       }
 
       fillRect(MARGIN, y, usableW, HEAD_H, palette.pdfHex);
+      drawCellBorder(MARGIN, y, usableW, HEAD_H, '#1e293b', 1.1);
       doc.font('Helvetica-Bold').fontSize(9).fillColor(palette.text || COLORS.shopText)
          .text(roster.shopName, MARGIN, y + 4, { width: usableW, align: 'center', lineBreak: false });
       hLine(y); hLine(y + HEAD_H);
       y += HEAD_H;
 
       fillRect(MARGIN, y, usableW, ROW_H, palette.pdfHex);
+      drawRowCellBorders(y, ROW_H);
       cellText('Name', MARGIN, y, NAME_COL, ROW_H, COLORS.shopText, 6.5, true, 'left');
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
@@ -1302,6 +1317,7 @@ exports.exportPdf = async (req, res) => {
       y += ROW_H;
 
       fillRect(MARGIN, y, usableW, ROW_H, palette.pdfHex);
+      drawRowCellBorders(y, ROW_H);
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
         cellText(weekDates[i].dayLabel, x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, true);
@@ -1318,6 +1334,7 @@ exports.exportPdf = async (req, res) => {
         }
 
         fillRect(MARGIN, y, usableW, ROW_H, palette.pdfHex);
+        drawRowCellBorders(y, ROW_H);
         cellText(emp.name, MARGIN + 2, y, NAME_COL - 4, ROW_H, COLORS.shopText, 6, true, 'left');
 
         for (let i = 0; i < 7; i++) {
@@ -1364,12 +1381,6 @@ exports.exportPdf = async (req, res) => {
           cellText(label, x, y, DAY_COL, ROW_H, getRotaStatusTextColor(status), 5.5, status === 'OFF');
         }
 
-        doc.strokeColor(COLORS.border).lineWidth(0.3);
-        for (let i = 0; i <= 7; i++) {
-          const lx = i === 0 ? MARGIN + NAME_COL : MARGIN + NAME_COL + i * DAY_COL;
-          doc.moveTo(lx, y).lineTo(lx, y + ROW_H).stroke();
-        }
-        hLine(y + ROW_H);
         y += ROW_H;
       });
 
@@ -1382,14 +1393,14 @@ exports.exportPdf = async (req, res) => {
       totals.forEach((total, index) => { grandTotals[index] += total; });
 
       fillRect(MARGIN, y, usableW, TOTAL_H, palette.pdfHex);
+      drawRowCellBorders(y, TOTAL_H, '#1e293b', 1);
       cellText('Total', MARGIN + 2, y, NAME_COL, TOTAL_H, COLORS.totalText, 6, true, 'left');
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
         cellText(String(totals[i]), x, y, DAY_COL, TOTAL_H, COLORS.totalText, 6.5, true);
       }
-      hLine(y); hLine(y + TOTAL_H);
       doc.rect(MARGIN, y - roster.employees.length * ROW_H - HEAD_H - 2 * ROW_H, usableW, roster.employees.length * ROW_H + HEAD_H + 2 * ROW_H + TOTAL_H)
-         .strokeColor(COLORS.border).lineWidth(0.6).stroke();
+         .strokeColor('#1e293b').lineWidth(1.2).stroke();
       y += TOTAL_H + 6;
     }
 
@@ -1400,13 +1411,14 @@ exports.exportPdf = async (req, res) => {
       drawPageHeader();
     }
     fillRect(MARGIN, y, NAME_COL, GRAND_H, '#94a3b8');
+    drawCellBorder(MARGIN, y, NAME_COL, GRAND_H, '#1e293b', 1);
     cellText('Grand Total', MARGIN + 2, y, NAME_COL, GRAND_H, '#ffffff', 7, true, 'left');
     for (let i = 0; i < 7; i++) {
       const x = MARGIN + NAME_COL + i * DAY_COL;
       fillRect(x, y, DAY_COL, GRAND_H, '#e2e8f0');
+      drawCellBorder(x, y, DAY_COL, GRAND_H, '#1e293b', 1);
       cellText(String(grandTotals[i]), x, y, DAY_COL, GRAND_H, '#0f172a', 8, true);
     }
-    hLine(y); hLine(y + GRAND_H);
     y += GRAND_H + 8;
 
     // Footer
@@ -1565,6 +1577,12 @@ exports.exportPdf = async (req, res) => {
               const rowHeight = 25;
               const drawTableHeader = () => {
                 doc.rect(32, y, 778, headerHeight).fill('#1e293b');
+                const columnWidths = [nameWidth, ...Array(7).fill(dayWidth)];
+                let columnX = 32;
+                columnWidths.forEach(width => {
+                  doc.rect(columnX, y, width, headerHeight).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                  columnX += width;
+                });
                 doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7).text('WORKER', 38, y + 10, { width: nameWidth - 10 });
                 weekDates.forEach((dateKey, index) => {
                   const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' })
@@ -1584,6 +1602,11 @@ exports.exportPdf = async (req, res) => {
                   drawTableHeader();
                 }
                 doc.rect(32, y, 778, rowHeight).fill(shopPalette.pdfHex);
+                let columnX = 32;
+                [nameWidth, ...Array(7).fill(dayWidth)].forEach(width => {
+                  doc.rect(columnX, y, width, rowHeight).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                  columnX += width;
+                });
                 doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
                   .text(employee.name, 38, y + 8, { width: nameWidth - 10, lineBreak: false });
                 weekDates.forEach((dateKey, index) => {
@@ -1623,6 +1646,12 @@ exports.exportPdf = async (req, res) => {
               const left = 60;
               let y = 112;
               doc.rect(left, y, 720, 26).fill('#1e293b');
+              const workerColumnWidths = [100, 140, 240, 240];
+              let columnX = left;
+              workerColumnWidths.forEach(width => {
+                doc.rect(columnX, y, width, 26).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                columnX += width;
+              });
               doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8)
                 .text('DAY', left + 10, y + 9, { width: 90 })
                 .text('DATE', left + 110, y + 9, { width: 120 })
@@ -1647,6 +1676,11 @@ exports.exportPdf = async (req, res) => {
                   status = 'OFF';
                 }
                 doc.rect(left, y, 720, 38).fill(index % 2 ? '#f8fafc' : '#ffffff');
+                columnX = left;
+                workerColumnWidths.forEach(width => {
+                  doc.rect(columnX, y, width, 38).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                  columnX += width;
+                });
                 const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' })
                   .format(new Date(`${dateKey}T12:00:00.000Z`));
                 doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8).text(dayName, left + 10, y + 14, { width: 90 });

@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
 const zlib = require('node:zlib');
 const {
+  buildWeeklyAttendanceExcel,
   buildWeeklySalaryDailyBreakdown,
   buildWeeklySalaryExcel,
   buildWeeklySalaryPDF
@@ -71,19 +72,36 @@ async function run() {
 
   const workbook = await buildWeeklySalaryExcel([salary], salary.weekLabel, {}, '2026-10-04');
   const sheet = workbook.getWorksheet('Weekly Salary');
-  assert.equal(sheet.getRow(3).getCell(10).value, 'Sat 2026-10-10');
-  assert.equal(sheet.getRow(4).getCell(10).value, 5);
-  assert.equal(sheet.getRow(6).getCell(10).value, 5);
+  assert.equal(sheet.getRow(3).getCell(1).value, 'Employee Name');
+  assert.equal(sheet.getRow(3).getCell(9).value, 'Sat 2026-10-10');
+  assert.equal(sheet.getRow(4).getCell(9).value, 5);
+  assert.equal(sheet.getRow(6).getCell(9).value, 5);
+  assert.equal(sheet.getRows(1, sheet.rowCount).some(row => row.values.includes('Station')), false);
 
   const roundTrip = new ExcelJS.Workbook();
   await roundTrip.xlsx.load(await workbook.xlsx.writeBuffer());
-  assert.equal(roundTrip.getWorksheet('Weekly Salary').getRow(3).getCell(10).value, 'Sat 2026-10-10');
+  assert.equal(roundTrip.getWorksheet('Weekly Salary').getRow(3).getCell(9).value, 'Sat 2026-10-10');
+
+  const attendanceWorkbook = await buildWeeklyAttendanceExcel([{
+    employeeName: 'Test Worker',
+    shopName: 'Station',
+    dailySchedule: { Sun: 'Station', Mon: 'Camden' },
+    workingDays: 2,
+    actualHours: 16
+  }], 'Week');
+  const attendanceSheet = attendanceWorkbook.getWorksheet('Weekly Attendance');
+  assert.equal(attendanceSheet.getRow(3).getCell(1).value, 'Employee Name');
+  assert.equal(attendanceSheet.getRow(3).getCell(2).value, 'Sun');
+  assert.equal(attendanceSheet.getRow(4).getCell(1).value, 'Test Worker');
+  assert.equal(attendanceSheet.getRow(4).getCell(2).value, 'Station');
+  assert.equal(attendanceSheet.getRow(4).getCell(3).value, 'Camden');
 
   const pdf = await buildWeeklySalaryPDF(null, [salary], salary.weekLabel, {}, 'Admin', '2026-10-04');
   const pdfText = extractPdfHexText(pdf);
   assert.ok(pdf.subarray(0, 4).toString('ascii') === '%PDF');
   assert.ok(pdfText.includes('Sat 10 Oct'));
   assert.ok(pdfText.includes('£5.00'));
+  assert.equal(pdfText.includes('Station'), false);
 
   const originalSalaryFind = WeeklySalary.find;
   const originalAttendanceFind = Attendance.find;

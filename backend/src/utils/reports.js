@@ -732,7 +732,7 @@ async function buildEmployeeMonthlyExcel(employeeName, monthLabel, weeklyBreakdo
   });
 
   // Total Balance Payable banner
-  const bRow = sheet.addRow(['TOTAL BALANCE PAYABLE', '', '', '', '', '', '', '', '', `£${(balancePayable || 0).toFixed(2)}`]);
+  const bRow = sheet.addRow(['TOTAL BALANCE PAYABLE',   '', '', '', '', '', '', '', `£${(balancePayable || 0).toFixed(2)}`]);
   sheet.mergeCells(`A${bRow.number}:I${bRow.number}`);
   bRow.getCell(1).alignment = { horizontal: 'center' };
   bRow.eachCell(cell => {
@@ -804,7 +804,7 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Weekly Attendance');
 
-  sheet.mergeCells(1, 1, 1, 11);
+  sheet.mergeCells(1, 1, 1, 10);
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Weekly Attendance Roster (${weekLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -813,7 +813,7 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
   sheet.getRow(1).height = 30;
 
   const headers = [
-    'Shop', 'Employee Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Work Days', 'Hours Worked'
+    'Employee Name', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Work Days', 'Hours Worked'
   ];
   sheet.addRow([]);
   const headerRow = sheet.addRow(headers);
@@ -825,7 +825,6 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
 
   records.forEach(r => {
     sheet.addRow([
-      r.shopName || '',
       r.employeeName || '',
       r.dailySchedule?.Sun || 'Off',
       r.dailySchedule?.Mon || 'Off',
@@ -841,8 +840,7 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
 
   sheet.addRow([]);
   const sumRow = sheet.addRow([
-    'TOTALS',
-    `Staff: ${records.length}`,
+    `TOTALS (${records.length} staff)`,
     '', '', '', '', '', '', '',
     summary.totalWorkingDays || 0,
     Number((summary.totalWorkedHours || 0).toFixed(2))
@@ -853,8 +851,7 @@ async function buildWeeklyAttendanceExcel(records, weekLabel, summary = {}) {
   });
 
   sheet.columns.forEach(col => { col.width = 14; });
-  sheet.getColumn(1).width = 18;
-  sheet.getColumn(2).width = 22;
+  sheet.getColumn(1).width = 22;
   return workbook;
 }
 
@@ -1043,7 +1040,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}, weekStar
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Weekly Salary');
 
-  sheet.mergeCells('A1:R1');
+  sheet.mergeCells('A1:Q1');
   const title = sheet.getCell('A1');
   title.value = `PixxTechnologies UK - Weekly Salary Report (${weekLabel})`;
   title.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1052,7 +1049,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}, weekStar
   sheet.getRow(1).height = 30;
 
   const headers = [
-    'Shop', 'Employee Name', 'Week Period',
+    'Employee Name', 'Week Period',
     ...buildWeeklySalaryDailyBreakdown({}, weekStartDateString).map(day => `${day.dayOfWeek} ${day.dateString}`),
     'Attendance Pay (£)', 'Allowances (£)', 'Bonus (£)',
     'Deductions (£)', 'Final Salary (£)', 'Paid (£)', 'Outstanding (£)', 'Status'
@@ -1069,7 +1066,6 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}, weekStar
     const allow = (s.travelAllowance || 0) + (s.otherAllowances || 0);
     const dailyBreakdown = buildWeeklySalaryDailyBreakdown(s, weekStartDateString);
     sheet.addRow([
-      s.shopName || '',
       s.employeeName || '',
       s.weekLabel || weekLabel,
       ...dailyBreakdown.map(day => day.attendancePay),
@@ -1086,7 +1082,7 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}, weekStar
 
   sheet.addRow([]);
   const sumRow = sheet.addRow([
-    'TOTALS', `Staff: ${salaries.length}`, '',
+    'TOTALS', `Staff: ${salaries.length}`,
     ...Array.from({ length: 7 }, (_, dayIndex) => Number(salaries.reduce((sum, salary) => {
       const day = buildWeeklySalaryDailyBreakdown(salary, weekStartDateString)[dayIndex];
       return sum + (day?.attendancePay || 0);
@@ -1106,9 +1102,9 @@ async function buildWeeklySalaryExcel(salaries, weekLabel, totals = {}, weekStar
   });
 
   sheet.columns.forEach(col => { col.width = 16; });
+  sheet.getColumn(1).width = 24;
   sheet.getColumn(2).width = 24;
-  sheet.getColumn(3).width = 24;
-  for (let column = 4; column <= 10; column++) sheet.getColumn(column).width = 14;
+  for (let column = 3; column <= 9; column++) sheet.getColumn(column).width = 14;
   return workbook;
 }
 
@@ -1128,48 +1124,12 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
   drawKpiCard(doc, 695, kpiY, 120, 'OUTSTANDING', `£${(totals.totalOutstanding || 0).toFixed(2)}`, '#dc2626');
 
   let y = 135;
-
-  // Group salaries by shop
-  const shopGroups = {};
-  salaries.forEach(s => {
-    const sName = s.shopName || 'Unknown Shop';
-    if (!shopGroups[sName]) shopGroups[sName] = [];
-    shopGroups[sName].push(s);
-  });
-
-  const sortedShopNames = Object.keys(shopGroups).sort((a, b) => a.localeCompare(b));
-
-  const sectionHeaderH = 18;
   const tableHeaderH = 16;
   const rowH = 16;
-
-  sortedShopNames.forEach(shopName => {
-    const group = shopGroups[shopName];
-    const sc = getShopColor(shopName);
-
-    // Check page overflow
-    if (y + sectionHeaderH + tableHeaderH + rowH > 520) {
-      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-      y = 30;
-    }
-
-    // 1. Shop Header Banner Bar
-    const headerBg = sc.primary || '#1e293b';
-    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fill(headerBg);
-    doc.circle(34, y + 9, 2.5).fill('#ffffff');
-
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
-       .text(`${shopName.toUpperCase()} CYCLES`, 42, y + 4.5, { lineBreak: false });
-
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
-       .text(`${group.length} ${group.length === 1 ? 'Worker' : 'Workers'} Payroll`, 550, y + 5, { width: 255, align: 'right', lineBreak: false });
-
-    y += sectionHeaderH;
-
-    // 2. Table Column Headers
-    doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
-    doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
-
+  const totalH = 16;
+  const drawHeader = () => {
+    doc.rect(25, y, 790, tableHeaderH).fill('#e2e8f0');
+    doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7.5);
     doc.text('EMPLOYEE NAME', 35, y + 4, { width: 170, lineBreak: false });
     doc.text('Attendance Pay', 215, y + 4, { width: 75, align: 'right', lineBreak: false });
     doc.text('Allowances', 295, y + 4, { width: 65, align: 'right', lineBreak: false });
@@ -1179,76 +1139,53 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
     doc.text('Paid (£)', 580, y + 4, { width: 70, align: 'right', lineBreak: false });
     doc.text('Outstanding', 655, y + 4, { width: 75, align: 'right', lineBreak: false });
     doc.text('Status', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
-
     y += tableHeaderH;
+  };
 
-    // 3. Shop Subtotal Aggregators
-    let subAtt = 0, subAllow = 0, subBonus = 0, subDed = 0, subFinal = 0, subPaid = 0, subBal = 0;
+  doc.roundedRect(25, y, 790, 18, 3).fill('#1e293b');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+    .text(`WEEKLY PAYROLL — ${salaries.length} ${salaries.length === 1 ? 'WORKER' : 'WORKERS'}`, 35, y + 4.5, { lineBreak: false });
+  y += 18;
+  drawHeader();
 
-    group.forEach((s, idx) => {
-      if (y + rowH > 520) {
-        doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-        y = 30;
-        doc.rect(25, y, 790, tableHeaderH).fill(sc.lightBg || '#f1f5f9');
-        doc.fillColor(sc.text || '#334155').font('Helvetica-Bold').fontSize(7.5);
-        doc.text('EMPLOYEE NAME', 35, y + 4, { width: 170, lineBreak: false });
-        doc.text('Attendance Pay', 215, y + 4, { width: 75, align: 'right', lineBreak: false });
-        doc.text('Allowances', 295, y + 4, { width: 65, align: 'right', lineBreak: false });
-        doc.text('Bonus', 365, y + 4, { width: 55, align: 'right', lineBreak: false });
-        doc.text('Deductions', 425, y + 4, { width: 65, align: 'right', lineBreak: false });
-        doc.text('Final Salary', 495, y + 4, { width: 80, align: 'right', lineBreak: false });
-        doc.text('Paid (£)', 580, y + 4, { width: 70, align: 'right', lineBreak: false });
-        doc.text('Outstanding', 655, y + 4, { width: 75, align: 'right', lineBreak: false });
-        doc.text('Status', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
-        y += tableHeaderH;
-      }
-
-      const allowances = (s.travelAllowance || 0) + (s.otherAllowances || 0);
-      const deductions = s.manualDeductions || 0;
-      subAtt += (s.netAttendancePay || 0);
-      subAllow += allowances;
-      subBonus += (s.bonus || 0);
-      subDed += deductions;
-      subFinal += (s.finalSalary || 0);
-      subPaid += (s.totalPaid || 0);
-      subBal += (s.balanceRemaining || 0);
-
-      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
-      doc.rect(25, y, 790, rowH).fill(bg);
-      doc.rect(25, y, 3, rowH).fill(sc.primary || '#2563eb');
-
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
-      doc.text((s.employeeName || '').slice(0, 24), 35, y + 3.5, { width: 170, lineBreak: false });
-      doc.font('Helvetica').fontSize(7.5);
-      doc.text(`£${(s.netAttendancePay || 0).toFixed(2)}`, 215, y + 4, { width: 75, align: 'right', lineBreak: false });
-      doc.text(`£${allowances.toFixed(2)}`, 295, y + 4, { width: 65, align: 'right', lineBreak: false });
-      doc.text(`£${(s.bonus || 0).toFixed(2)}`, 365, y + 4, { width: 55, align: 'right', lineBreak: false });
-      doc.text(`£${deductions.toFixed(2)}`, 425, y + 4, { width: 65, align: 'right', lineBreak: false });
-      doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(s.finalSalary || 0).toFixed(2)}`, 495, y + 4, { width: 80, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
-      doc.fillColor('#059669').text(`£${(s.totalPaid || 0).toFixed(2)}`, 580, y + 4, { width: 70, align: 'right', lineBreak: false }).fillColor('#0f172a');
-      doc.font('Helvetica-Bold').fillColor(s.balanceRemaining > 0 ? '#dc2626' : '#64748b').text(`£${(s.balanceRemaining || 0).toFixed(2)}`, 655, y + 4, { width: 75, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
-      doc.text(s.status || 'Generated', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
-      y += rowH;
-    });
-
-    // Shop Subtotal Bar
-    if (y + 15 > 520) {
+  salaries.forEach((salary, index) => {
+    if (y + rowH + totalH > 520) {
       doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
       y = 30;
+      drawHeader();
     }
-    doc.rect(25, y, 790, 15).fill(sc.lightBg || '#f1f5f9');
-    doc.rect(25, y, 3, 15).fill(sc.primary || '#2563eb');
-    doc.fillColor(sc.text || '#0f172a').font('Helvetica-Bold').fontSize(7.5);
-    doc.text(`SUBTOTAL — ${shopName.toUpperCase()}`, 35, y + 3.5, { lineBreak: false });
-    doc.text(`£${subAtt.toFixed(2)}`, 215, y + 3.5, { width: 75, align: 'right', lineBreak: false });
-    doc.text(`£${subAllow.toFixed(2)}`, 295, y + 3.5, { width: 65, align: 'right', lineBreak: false });
-    doc.text(`£${subBonus.toFixed(2)}`, 365, y + 3.5, { width: 55, align: 'right', lineBreak: false });
-    doc.text(`£${subDed.toFixed(2)}`, 425, y + 3.5, { width: 65, align: 'right', lineBreak: false });
-    doc.text(`£${subFinal.toFixed(2)}`, 495, y + 3.5, { width: 80, align: 'right', lineBreak: false });
-    doc.text(`£${subPaid.toFixed(2)}`, 580, y + 3.5, { width: 70, align: 'right', lineBreak: false });
-    doc.text(`£${subBal.toFixed(2)}`, 655, y + 3.5, { width: 75, align: 'right', lineBreak: false });
-    y += 21;
+
+    const allowances = (salary.travelAllowance || 0) + (salary.otherAllowances || 0);
+    const deductions = salary.manualDeductions || 0;
+    doc.rect(25, y, 790, rowH).fill(index % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
+      .text((salary.employeeName || '').slice(0, 24), 35, y + 3.5, { width: 170, lineBreak: false });
+    doc.font('Helvetica').fontSize(7.5);
+    doc.text(`£${(salary.netAttendancePay || 0).toFixed(2)}`, 215, y + 4, { width: 75, align: 'right', lineBreak: false });
+    doc.text(`£${allowances.toFixed(2)}`, 295, y + 4, { width: 65, align: 'right', lineBreak: false });
+    doc.text(`£${(salary.bonus || 0).toFixed(2)}`, 365, y + 4, { width: 55, align: 'right', lineBreak: false });
+    doc.text(`£${deductions.toFixed(2)}`, 425, y + 4, { width: 65, align: 'right', lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${(salary.finalSalary || 0).toFixed(2)}`, 495, y + 4, { width: 80, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
+    doc.fillColor('#059669').text(`£${(salary.totalPaid || 0).toFixed(2)}`, 580, y + 4, { width: 70, align: 'right', lineBreak: false }).fillColor('#0f172a');
+    doc.font('Helvetica-Bold').fillColor(salary.balanceRemaining > 0 ? '#dc2626' : '#64748b').text(`£${(salary.balanceRemaining || 0).toFixed(2)}`, 655, y + 4, { width: 75, align: 'right', lineBreak: false }).font('Helvetica').fillColor('#0f172a');
+    doc.text(salary.status || 'Generated', 740, y + 4, { width: 70, align: 'center', lineBreak: false });
+    y += rowH;
   });
+
+  if (y + totalH > 520) {
+    doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+    y = 30;
+  }
+  doc.rect(25, y, 790, totalH).fill('#e2e8f0');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5)
+    .text('TOTALS', 35, y + 4, { width: 170, lineBreak: false });
+  doc.text(`£${(totals.totalAttendancePay || 0).toFixed(2)}`, 215, y + 4, { width: 75, align: 'right', lineBreak: false });
+  doc.text(`£${(totals.totalAllowances || 0).toFixed(2)}`, 295, y + 4, { width: 65, align: 'right', lineBreak: false });
+  doc.text(`£${(totals.totalBonus || 0).toFixed(2)}`, 365, y + 4, { width: 55, align: 'right', lineBreak: false });
+  doc.text(`£${(totals.totalDeductions || 0).toFixed(2)}`, 425, y + 4, { width: 65, align: 'right', lineBreak: false });
+  doc.text(`£${(totals.totalFinalSalary || 0).toFixed(2)}`, 495, y + 4, { width: 80, align: 'right', lineBreak: false });
+  doc.text(`£${(totals.totalPaid || 0).toFixed(2)}`, 580, y + 4, { width: 70, align: 'right', lineBreak: false });
+  doc.text(`£${(totals.totalOutstanding || 0).toFixed(2)}`, 655, y + 4, { width: 75, align: 'right', lineBreak: false });
 
   const hasDailyBreakdown = salaries.some(s => buildWeeklySalaryDailyBreakdown(s, weekStartDateString).length === 7);
   if (hasDailyBreakdown) {
@@ -1261,7 +1198,7 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
     const drawDailyHeader = () => {
       doc.rect(25, y, 790, 20).fill('#1e293b');
       doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7);
-      doc.text('EMPLOYEE / SHOP', 30, y + 6, { width: nameWidth - 5, lineBreak: false });
+      doc.text('EMPLOYEE NAME', 30, y + 6, { width: nameWidth - 5, lineBreak: false });
       dailyColumns.forEach((day, index) => {
         const date = new Date(`${day.dateString}T00:00:00.000Z`);
         const label = `${day.dayOfWeek} ${new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(date)}`;
@@ -1280,7 +1217,7 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
       const row = buildWeeklySalaryDailyBreakdown(salary, weekStartDateString);
       doc.rect(25, y, 790, 24).fill(rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc');
       doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7);
-      doc.text(`${salary.employeeName || ''} — ${salary.shopName || ''}`.slice(0, 34), 30, y + 4, { width: nameWidth - 5, lineBreak: false });
+      doc.text((salary.employeeName || '').slice(0, 34), 30, y + 4, { width: nameWidth - 5, lineBreak: false });
       doc.font('Helvetica').fontSize(6);
       row.forEach((day, index) => {
         dailyTotals[index] += day.attendancePay;

@@ -664,7 +664,6 @@ export default function ReportsPage() {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>Primary Shop</th>
                     <th>Employee Name</th>
                     <th>Sun</th>
                     <th>Mon</th>
@@ -680,7 +679,6 @@ export default function ReportsPage() {
                 <tbody>
                   {weeklyAttendanceData.records?.map((r, idx) => (
                     <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{r.shopName || '—'}</td>
                       <td style={{ fontWeight: 500 }}>{r.employeeName}</td>
                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => {
                         const val = r.dailySchedule?.[day] || 'Off';
@@ -709,7 +707,7 @@ export default function ReportsPage() {
                   ))}
                   {(!weeklyAttendanceData.records || weeklyAttendanceData.records.length === 0) && (
                     <tr>
-                      <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly attendance records found for this period.
                       </td>
                     </tr>
@@ -770,7 +768,6 @@ export default function ReportsPage() {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>Shop</th>
                     <th>Employee Name</th>
                     <th>Week</th>
                     {weeklySalaryDays.map(day => <th key={day.dateString}>{day.label}<br />Wages (£)</th>)}
@@ -792,7 +789,6 @@ export default function ReportsPage() {
                     );
                     return (
                       <tr key={s._id}>
-                        <td style={{ fontWeight: 600 }}>{s.shopName}</td>
                         <td style={{ fontWeight: 500 }}>{s.employeeName}</td>
                         <td style={{ fontSize: '12px' }}>{s.weekLabel}</td>
                         {weeklySalaryDays.map(day => {
@@ -825,7 +821,7 @@ export default function ReportsPage() {
                   })}
                   {(!weeklySalaryData.salaries || weeklySalaryData.salaries.length === 0) && (
                     <tr>
-                      <td colSpan={18} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={17} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly salary records found for this period.
                       </td>
                     </tr>
@@ -835,7 +831,6 @@ export default function ReportsPage() {
                   <tfoot>
                     <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                       <td>Daily totals</td>
-                      <td />
                       <td>{weeklySalaryData.weekLabel}</td>
                       {weeklySalaryDays.map(day => {
                         const total = weeklySalaryData.totals?.dailyAttendance?.find(item => item.dateString === day.dateString);
