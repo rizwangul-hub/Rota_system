@@ -48,6 +48,23 @@ function pdfText(pdf) {
   return tokens.join('').replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
 
+function pdfStreams(pdf) {
+  const streams = [];
+  for (const stream of pdf.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try {
+      streams.push(zlib.inflateSync(Buffer.from(stream[1], 'latin1')).toString('latin1'));
+    } catch {
+      continue;
+    }
+  }
+  return streams.join('\n');
+}
+
+function pdfFillColorOperator(hex) {
+  const channels = hex.match(/[0-9a-f]{2}/gi).map(channel => String(parseInt(channel, 16) / 255));
+  return `${channels.join(' ')} scn`;
+}
+
 async function run() {
   const restores = [];
   const replaceMethod = (target, key, replacement) => {
@@ -71,6 +88,14 @@ async function run() {
           startTime: '09:00',
           endTime: '17:00',
           status: 'LOANED'
+        }, {
+          employeeId,
+          shopId: homeShopId,
+          homeShopId,
+          dateKey: '2026-10-05',
+          startTime: '',
+          endTime: '',
+          status: 'OFF'
         }],
         shopRoster: [{
           shopId: { _id: homeShopId, name: 'Home Shop' },
@@ -103,6 +128,10 @@ async function run() {
     assert.equal(response.headers['content-type'], 'application/pdf');
     assert.ok(response.buffer.subarray(0, 4).toString('ascii') === '%PDF');
     const extractedText = pdfText(response.buffer);
+    const decodedStreams = pdfStreams(response.buffer);
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#ecfdf5')), 'available cells should have a visible green background');
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#fef2f2')), 'OFF cells should have a visible red background');
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#e2e8f0')), 'transferred cells should retain the destination shop background');
     const targetShopIndex = extractedText.indexOf('targetshop');
     assert.notEqual(targetShopIndex, -1);
     assert.ok(extractedText.slice(targetShopIndex).includes('total1'));

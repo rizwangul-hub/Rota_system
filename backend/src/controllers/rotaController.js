@@ -691,6 +691,17 @@ function getShopPalette(shopName = '') {
   return { name: shopName, excelFill: 'FFE2E8F0', pdfHex: '#e2e8f0', text: '#1e293b' };
 }
 
+function getRotaCellPalette(status, shopName = '') {
+  if (status === 'OFF') return { background: '#fef2f2', border: '#fecaca', text: '#dc2626' };
+  if (status === 'CUSTOM') return { background: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' };
+  if (status === 'LOANED') {
+    const shopPalette = getShopPalette(shopName);
+    return { background: shopPalette.pdfHex, border: shopPalette.pdfHex, text: shopPalette.text };
+  }
+  if (status === 'NOT_ASSIGNED') return { background: '#f1f5f9', border: '#cbd5e1', text: '#64748b' };
+  return { background: '#ecfdf5', border: '#a7f3d0', text: '#047857' };
+}
+
 exports.exportExcel = async (req, res) => {
   try {
     const employeeId = req.params.employeeId;
@@ -1270,44 +1281,46 @@ exports.exportPdf = async (req, res) => {
           const x = MARGIN + NAME_COL + i * DAY_COL;
           const key = `${shopId}:${emp._id}:${weekDates[i].iso}`;
           const cell = cellMap[key];
-          fillRect(x, y, DAY_COL, ROW_H, rowBg);
 
           let label = 'Available';
-          let color = COLORS.availText;
+          let cellPalette = getRotaCellPalette('AVAILABLE');
           if (cell) {
             if (cell.status === 'OFF') {
               const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
               if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
                 label = dayAssignment.shopName;
-                color = COLORS.loanText;
+                cellPalette = getRotaCellPalette('LOANED', dayAssignment.shopName);
               } else {
                 label = 'OFF';
-                color = COLORS.offText;
+                cellPalette = getRotaCellPalette('OFF');
               }
             } else if (cell.status === 'LOANED') {
               const targetShop = shopsById[id(cell.shopId)] || cell.note || 'Loaned';
-              label = targetShop; color = COLORS.loanText;
+              label = targetShop;
+              cellPalette = getRotaCellPalette('LOANED', targetShop);
             } else {
               label = cell.note ? `Avail. ${cell.note}` : 'Available';
-              color = COLORS.availText;
+              cellPalette = cell.note ? getRotaCellPalette('CUSTOM') : getRotaCellPalette('AVAILABLE');
               shopWorkersByDay[i].add(id(emp._id));
             }
           } else {
             const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
             if (dayAssignment?.status === 'OFF') {
               label = 'OFF';
-              color = COLORS.offText; // bold red
+              cellPalette = getRotaCellPalette('OFF');
             } else if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
               label = dayAssignment.shopName;
-              color = COLORS.loanText; // blue — working at another shop
+              cellPalette = getRotaCellPalette('LOANED', dayAssignment.shopName);
             } else {
               // No assignment anywhere — default to Available
               label = 'Available';
-              color = COLORS.availText;
+              cellPalette = getRotaCellPalette('AVAILABLE');
               shopWorkersByDay[i].add(id(emp._id));
             }
           }
-          cellText(label, x, y, DAY_COL, ROW_H, color, 5.5, cell?.status === 'OFF' || label === 'OFF');
+          fillRect(x + 0.5, y + 0.5, DAY_COL - 1, ROW_H - 1, cellPalette.background);
+          doc.rect(x + 0.5, y + 0.5, DAY_COL - 1, ROW_H - 1).strokeColor(cellPalette.border).lineWidth(0.35).stroke();
+          cellText(label, x, y, DAY_COL, ROW_H, cellPalette.text, 5.5, cell?.status === 'OFF' || label === 'OFF');
         }
 
         doc.strokeColor(COLORS.border).lineWidth(0.3);
@@ -1531,20 +1544,24 @@ exports.exportPdf = async (req, res) => {
                   const schedule = schedules.get(`${id(employee._id)}:${dateKey}`);
                   const workingShopIds = [...(schedule?.working.keys() || [])];
                   let label = 'Available';
-                  let color = '#059669';
+                  let cellPalette = getRotaCellPalette('AVAILABLE');
                   if (workingShopIds.includes(shopId)) {
                     const dayAssignment = schedule.working.get(shopId)[0];
                     label = dayAssignment.status === 'CUSTOM' && dayAssignment.note
                       ? dayAssignment.note
                       : `Available ${dayAssignment.startTime}-${dayAssignment.endTime}`;
+                    if (dayAssignment.status === 'CUSTOM') cellPalette = getRotaCellPalette('CUSTOM');
                   } else if (workingShopIds.length) {
                     label = workingShopIds.map(otherShopId => shopsById.get(otherShopId)?.name || 'Other shop').join(', ');
-                    color = '#2563eb';
+                    cellPalette = getRotaCellPalette('LOANED', shopsById.get(workingShopIds[0])?.name);
                   } else if (schedule?.off) {
                     label = 'OFF';
-                    color = '#dc2626';
+                    cellPalette = getRotaCellPalette('OFF');
                   }
-                  doc.fillColor(color).font('Helvetica').fontSize(7)
+                  const cellX = 32 + nameWidth + index * dayWidth;
+                  doc.rect(cellX + 1, y + 1, dayWidth - 2, rowHeight - 2)
+                    .fillAndStroke(cellPalette.background, cellPalette.border);
+                  doc.fillColor(cellPalette.text).font('Helvetica-Bold').fontSize(7)
                     .text(label, 32 + nameWidth + index * dayWidth + 2, y + 8, { width: dayWidth - 4, align: 'center', lineBreak: false });
                 });
                 y += rowHeight;
@@ -1574,24 +1591,32 @@ exports.exportPdf = async (req, res) => {
                 const workingShopIds = [...(schedule?.working.keys() || [])];
                 let location = 'Not assigned';
                 let shift = '—';
-                let color = '#64748b';
+                let status = 'NOT_ASSIGNED';
+                let locationShopName = '';
                 if (workingShopIds.length) {
                   location = workingShopIds.map(shopId => shopsById.get(shopId)?.name || 'Other shop').join(', ');
                   const dayAssignment = schedule.working.get(workingShopIds[0])[0];
                   shift = `${dayAssignment.startTime}–${dayAssignment.endTime}${dayAssignment.status === 'CUSTOM' && dayAssignment.note ? ` · ${dayAssignment.note}` : ''}`;
-                  color = workingShopIds.length > 1 ? '#b91c1c' : '#059669';
+                  status = dayAssignment.status === 'CUSTOM' ? 'CUSTOM' : 'AVAILABLE';
+                  locationShopName = shopsById.get(workingShopIds[0])?.name || '';
+                  if (workingShopIds.length > 1) status = 'CUSTOM';
                 } else if (schedule?.off) {
                   location = 'OFF';
                   shift = 'Day off';
-                  color = '#dc2626';
+                  status = 'OFF';
                 }
                 doc.rect(left, y, 720, 38).fill(index % 2 ? '#f8fafc' : '#ffffff');
+                const cellPalette = getRotaCellPalette(status, locationShopName);
+                doc.rect(left + 246, y + 4, 224, 30)
+                  .fillAndStroke(cellPalette.background, cellPalette.border);
+                doc.rect(left + 486, y + 4, 218, 30)
+                  .fillAndStroke(cellPalette.background, cellPalette.border);
                 const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' })
                   .format(new Date(`${dateKey}T12:00:00.000Z`));
                 doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8).text(dayName, left + 10, y + 14, { width: 90 });
                 doc.font('Helvetica').text(formatRotaDate(dateKey), left + 110, y + 14, { width: 120 });
-                doc.fillColor(color).font('Helvetica-Bold').text(location, left + 250, y + 14, { width: 220, lineBreak: false });
-                doc.fillColor('#334155').font('Helvetica').text(shift, left + 490, y + 14, { width: 210, lineBreak: false });
+                doc.fillColor(cellPalette.text).font('Helvetica-Bold').text(location, left + 250, y + 14, { width: 220, lineBreak: false });
+                doc.fillColor(cellPalette.text).font('Helvetica').text(shift, left + 490, y + 14, { width: 210, lineBreak: false });
                 y += 38;
               });
             });

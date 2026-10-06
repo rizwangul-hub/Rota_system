@@ -4,13 +4,14 @@ const Shop = require('../models/Shop');
 const Attendance = require('../models/Attendance');
 const WeeklySalary = require('../models/WeeklySalary');
 const Bonus = require('../models/Bonus');
-const { getWeekRange, formatUKDate } = require('../utils/calc');
+const { getWeekRange, getUKDateString, formatUKDate } = require('../utils/calc');
 const { attendanceCheckerRecord } = require('../utils/attendanceViews');
 
 exports.getAdminDashboard = async (req, res) => {
   try {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const { startDate, endDate, weekLabel } = getWeekRange(new Date());
+    const todayStr = getUKDateString();
+    const week = getWeekRange(todayStr);
+    const { startDate, endDate, weekLabel } = week;
 
     const totalEmployees = await Employee.countDocuments();
     const activeEmployees = await Employee.countDocuments({ employmentStatus: 'Active' });
@@ -31,32 +32,79 @@ exports.getAdminDashboard = async (req, res) => {
     const pendingAttendanceCount = await Attendance.countDocuments({ approvalStatus: 'Pending Review' });
 
     // Weekly salaries
-    const weekSalaries = await WeeklySalary.find({ weekLabel });
+    const weekSalaries = await WeeklySalary.find({
+      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
+      $or: [
+        { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
+        { weekStartDateString: week.startDateString },
+        { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    });
     const thisWeekSalaryTotal = weekSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
     const thisWeekPaidTotal = weekSalaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
     const thisWeekOutstanding = weekSalaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
+    const allocatedSalaryCentsByShop = new Map();
+    const shops = await Shop.find({ isActive: true });
+    weekSalaries.forEach(salary => {
+      const breakdown = salary.finalizationSnapshot?.attendanceBreakdown || salary.attendanceBreakdown || [];
+      const weightsByShop = new Map();
+      breakdown.forEach(record => {
+        const shop = shops.find(candidate => candidate.name.trim().toLowerCase() === String(record.shopName || '').trim().toLowerCase());
+        if (!shop) return;
+        const shopId = shop._id.toString();
+        weightsByShop.set(shopId, (weightsByShop.get(shopId) || 0) + (Number(record.attendancePay) || 0));
+      });
+
+      const weightedShops = shops
+        .filter(shop => (weightsByShop.get(shop._id.toString()) || 0) > 0)
+        .map(shop => ({
+          shopId: shop._id.toString(),
+          weight: weightsByShop.get(shop._id.toString())
+        }));
+      const totalWeight = weightedShops.reduce((sum, shop) => sum + shop.weight, 0);
+      const primaryShopId = String(salary.shop?._id || salary.shop || '');
+      const shares = totalWeight > 0
+        ? weightedShops.map(shop => ({ shopId: shop.shopId, proportion: shop.weight / totalWeight }))
+        : shops.some(shop => shop._id.toString() === primaryShopId)
+          ? [{ shopId: primaryShopId, proportion: 1 }]
+          : [];
+      let allocatedCents = 0;
+      shares.forEach((share, index) => {
+        const salaryCents = Math.round((Number(salary.finalSalary) || 0) * 100);
+        const cents = index === shares.length - 1
+          ? salaryCents - allocatedCents
+          : Math.round(salaryCents * share.proportion);
+        allocatedCents += cents;
+        allocatedSalaryCentsByShop.set(
+          share.shopId,
+          (allocatedSalaryCentsByShop.get(share.shopId) || 0) + cents
+        );
+      });
+    });
 
     // Monthly bonus total
-    const now = new Date();
-    const currentMonth = now.toLocaleString('en-US', { month: 'short' });
-    const currentYear = now.getFullYear();
+    const [currentYear, currentMonthNumber] = todayStr.split('-').map(Number);
+    const currentMonth = new Date(Date.UTC(currentYear, currentMonthNumber - 1, 1))
+      .toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
     const monthlyBonuses = await Bonus.find({ month: currentMonth, year: currentYear });
     const monthlyBonusTotal = monthlyBonuses.reduce((sum, b) => sum + (b.bonusAmount || 0), 0);
 
     // Shop labour breakdown
-    const shops = await Shop.find({ isActive: true });
     const shopBreakdown = [];
 
     for (const s of shops) {
       const shopAttendance = todayAttendance.filter(a => a.shop && a.shop.toString() === s._id.toString());
-      const shopSalaries = weekSalaries.filter(ws => ws.shop && ws.shop.toString() === s._id.toString());
+      const presentWorkers = new Set(shopAttendance
+        .filter(a => ['Present', 'Late', 'Half'].includes(a.status))
+        .map(a => String(a.employee?._id || a.employee || ''))
+        .filter(Boolean));
       shopBreakdown.push({
         shopId: s._id,
         shopName: s.name,
-        todayWorkers: shopAttendance.length,
+        todayWorkers: presentWorkers.size,
         todayHours: Number(shopAttendance.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2)),
         todayCost: Number(shopAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2)),
-        weekSalaryCost: Number(shopSalaries.reduce((sum, ws) => sum + (ws.finalSalary || 0), 0).toFixed(2))
+        weekSalaryCost: Number(((allocatedSalaryCentsByShop.get(s._id.toString()) || 0) / 100).toFixed(2))
       });
     }
 

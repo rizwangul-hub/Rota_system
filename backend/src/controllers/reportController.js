@@ -2712,12 +2712,57 @@ exports.exportEmployeeLedgerPDF = async (req, res) => {
 // 11. COMPANY-WIDE PAYROLL SUMMARY & ANALYTICS
 // ============================================================
 
+function getWeeklySalaryShopShares(salary, shops) {
+  const shopsByName = new Map(shops.map(shop => [shop.name.trim().toLowerCase(), shop._id.toString()]));
+  const breakdown = salary.finalizationSnapshot?.attendanceBreakdown
+    || salary.attendanceBreakdown
+    || [];
+  const attendancePayByShop = new Map();
+  breakdown.forEach(record => {
+    const shopId = shopsByName.get(String(record.shopName || '').trim().toLowerCase());
+    if (!shopId) return;
+    attendancePayByShop.set(
+      shopId,
+      (attendancePayByShop.get(shopId) || 0) + (Number(record.attendancePay) || 0)
+    );
+  });
+
+  const totalAttendancePay = [...attendancePayByShop.values()].reduce((total, amount) => total + amount, 0);
+  if (totalAttendancePay > 0) {
+    return shops
+      .filter(shop => attendancePayByShop.has(shop._id.toString()))
+      .map(shop => ({
+        shopId: shop._id.toString(),
+        proportion: attendancePayByShop.get(shop._id.toString()) / totalAttendancePay
+      }));
+  }
+
+  const primaryShopId = String(salary.shop?._id || salary.shop || '');
+  return shops.some(shop => shop._id.toString() === primaryShopId)
+    ? [{ shopId: primaryShopId, proportion: 1 }]
+    : [];
+}
+
+function allocateWeeklySalaryValue(salary, shops, field, shopId) {
+  const shares = getWeeklySalaryShopShares(salary, shops);
+  const value = Number(salary[field]) || 0;
+  if (shopId) {
+    const share = shares.find(item => item.shopId === String(shopId));
+    return share ? value * share.proportion : 0;
+  }
+  return value;
+}
+
 exports.getCompanyPayrollSummary = async (req, res) => {
   try {
     const { weekLabel, month, year, shopId } = req.query;
-    const now = new Date();
-    const targetYear = Number(year) || now.getFullYear();
-    const currentWeek = weekLabel || getWeekRange(now).weekLabel;
+    const now = new Date(`${getUKDateString()}T12:00:00Z`);
+    const targetYear = Number(year) || now.getUTCFullYear();
+    const selectedWeekDate = weekLabel
+      ? weekLabel.match(/\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/)?.[0] || getUKDateString()
+      : getUKDateString();
+    const week = getWeekRange(selectedWeekDate);
+    const currentWeek = weekLabel || week.weekLabel;
     const sId = safeObjectId(shopId);
 
     // 1. Active workforce
@@ -2725,60 +2770,95 @@ exports.getCompanyPayrollSummary = async (req, res) => {
 
     // 2. Finalized payroll query
     const salaryQuery = {
-      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] }
+      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
+      $or: [
+        { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel, currentWeek] } },
+        { weekStartDateString: week.startDateString },
+        { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
+      ]
     };
-    if (weekLabel) {
-      const alt = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
-      salaryQuery.weekLabel = { $in: [weekLabel, alt] };
-    }
-    if (sId) salaryQuery.shop = sId;
 
     const finalizedSalaries = await WeeklySalary.find(salaryQuery);
-    const finalizedSalary = Number(finalizedSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2));
-    const totalPaid = Number(finalizedSalaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2));
-    const outstanding = Number(finalizedSalaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0).toFixed(2));
-    const attendancePay = Number(finalizedSalaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2));
-    const allowances = Number(finalizedSalaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2));
-    const deductions = Number(finalizedSalaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2));
-    const labourHours = Number(finalizedSalaries.reduce((sum, s) => sum + (s.actualHours || 0), 0).toFixed(2));
+    const shops = await Shop.find({ isActive: true });
+    const selectedShopId = sId ? sId.toString() : null;
+    const sumAllocated = field => Number(finalizedSalaries.reduce(
+      (total, salary) => total + allocateWeeklySalaryValue(salary, shops, field, selectedShopId),
+      0
+    ).toFixed(2));
+    const finalizedSalary = sumAllocated('finalSalary');
+    const totalPaid = sumAllocated('totalPaid');
+    const outstanding = sumAllocated('balanceRemaining');
+    const attendancePay = sumAllocated('netAttendancePay');
+    const allowances = Number(finalizedSalaries.reduce((total, salary) => (
+      total + allocateWeeklySalaryValue(salary, shops, 'travelAllowance', selectedShopId)
+      + allocateWeeklySalaryValue(salary, shops, 'otherAllowances', selectedShopId)
+    ), 0).toFixed(2));
+    const deductions = sumAllocated('manualDeductions');
 
-    // 3. Bonuses for the month
-    const targetMonthStr = month || now.toLocaleString('en-US', { month: 'short' });
+    // 3. Bonuses for the selected month
+    const targetMonthStr = month || now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
     const bonusQuery = { month: targetMonthStr, year: targetYear };
     if (sId) bonusQuery.shop = sId;
     const bonuses = await Bonus.find(bonusQuery);
     const totalBonuses = Number(bonuses.reduce((sum, b) => sum + (b.bonusAmount || 0), 0).toFixed(2));
 
-    // 4. Visual Analytics: Salary by Shop & Labour Hours by Shop
-    const shops = await Shop.find({ isActive: true });
+    // 4. Weekly payroll cost by shop and attendance hours by actual work location.
     const salaryByShop = [];
     const labourHoursByShop = [];
+    const salaryCostByShop = new Map();
 
     shops.forEach(sh => {
-      const shSalaries = finalizedSalaries.filter(s => s.shop?.toString() === sh._id.toString());
-      const shSched = shSalaries.reduce((sum, s) => sum + (s.scheduledHours || 0), 0);
-      const shActual = shSalaries.reduce((sum, s) => sum + (s.actualHours || 0), 0);
-      const shCost = shSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
+      salaryCostByShop.set(sh._id.toString(), 0);
+    });
 
+    finalizedSalaries.forEach(salary => {
+      const shares = getWeeklySalaryShopShares(salary, shops);
+      let allocatedCents = 0;
+      shares.forEach((share, index) => {
+        const amountCents = index === shares.length - 1
+          ? Math.round((Number(salary.finalSalary) || 0) * 100) - allocatedCents
+          : Math.round((Number(salary.finalSalary) || 0) * share.proportion * 100);
+        allocatedCents += amountCents;
+        salaryCostByShop.set(share.shopId, (salaryCostByShop.get(share.shopId) || 0) + amountCents / 100);
+      });
+    });
+
+    const weekAttendanceQuery = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+    if (sId) weekAttendanceQuery.shop = sId;
+    const weekAttendances = await Attendance.find(weekAttendanceQuery);
+    const weeklyHoursByShop = new Map();
+    weekAttendances.forEach(attendance => {
+      const attendanceShopId = String(attendance.shop?._id || attendance.shop || '');
+      if (!attendanceShopId) return;
+      const totals = weeklyHoursByShop.get(attendanceShopId) || { scheduledHours: 0, actualHours: 0 };
+      totals.scheduledHours += Number(attendance.scheduledHours) || 0;
+      totals.actualHours += Number(attendance.actualHours) || 0;
+      weeklyHoursByShop.set(attendanceShopId, totals);
+    });
+    const labourHours = Number([...weeklyHoursByShop.values()]
+      .reduce((total, hours) => total + hours.actualHours, 0)
+      .toFixed(2));
+    shops.filter(shop => !selectedShopId || shop._id.toString() === selectedShopId).forEach(shop => {
+      const hours = weeklyHoursByShop.get(shop._id.toString()) || { scheduledHours: 0, actualHours: 0 };
       salaryByShop.push({
-        shopId: sh._id,
-        shopName: sh.name,
-        amount: Number(shCost.toFixed(2))
+        shopId: shop._id,
+        shopName: shop.name,
+        amount: Number((salaryCostByShop.get(shop._id.toString()) || 0).toFixed(2))
       });
-
       labourHoursByShop.push({
-        shopId: sh._id,
-        shopName: sh.name,
-        scheduledHours: Number(shSched.toFixed(2)),
-        actualHours: Number(shActual.toFixed(2))
+        shopId: shop._id,
+        shopName: shop.name,
+        scheduledHours: Number(hours.scheduledHours.toFixed(2)),
+        actualHours: Number(hours.actualHours.toFixed(2))
       });
     });
 
-    // 5. Attendance Status distribution (current week or recent)
-    const week = getWeekRange(now);
-    const weekAttendances = await Attendance.find({
-      dateString: { $gte: week.startDateString, $lte: week.endDateString }
-    });
+    // 5. Current-week status counts are attendance records (not distinct workers).
     const attendanceDistribution = {
       present: weekAttendances.filter(a => a.status === 'Present').length,
       late: weekAttendances.filter(a => a.status === 'Late').length,
@@ -2790,21 +2870,30 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const monthlySalaryTrend = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mName = monthNames[d.getMonth()];
-      const mYear = d.getFullYear();
-      const mStart = new Date(Date.UTC(mYear, d.getMonth(), 1));
-      const mEnd = new Date(Date.UTC(mYear, d.getMonth() + 1, 0, 23, 59, 59, 999));
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      const mName = monthNames[d.getUTCMonth()];
+      const mYear = d.getUTCFullYear();
+      const mStart = new Date(Date.UTC(mYear, d.getUTCMonth(), 1));
+      const mEnd = new Date(Date.UTC(mYear, d.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
       const mSalaries = await WeeklySalary.find({
         status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-        weekEndDate: { $gte: mStart, $lte: mEnd }
+        $or: [
+          { weekEndDate: { $gte: mStart, $lte: mEnd } },
+          { weekEndDateString: { $gte: `${mYear}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`, $lte: `${mYear}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(new Date(Date.UTC(mYear, d.getUTCMonth() + 1, 0)).getUTCDate()).padStart(2, '0')}` } }
+        ]
       });
 
       monthlySalaryTrend.push({
         month: `${mName} '${String(mYear).slice(-2)}`,
-        finalizedSalary: Number(mSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2)),
-        totalPaid: Number(mSalaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0).toFixed(2))
+        finalizedSalary: Number(mSalaries.reduce(
+          (sum, salary) => sum + allocateWeeklySalaryValue(salary, shops, 'finalSalary', selectedShopId),
+          0
+        ).toFixed(2)),
+        totalPaid: Number(mSalaries.reduce(
+          (sum, salary) => sum + allocateWeeklySalaryValue(salary, shops, 'totalPaid', selectedShopId),
+          0
+        ).toFixed(2))
       });
     }
 

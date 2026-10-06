@@ -133,6 +133,15 @@ export default function AdminDashboard() {
 
   const cards = summaryData?.cards || {};
   const charts = summaryData?.charts || {};
+  const maxWeeklyHours = Math.max(
+    1,
+    ...(charts.labourHoursByShop || []).flatMap(shop => [shop.scheduledHours || 0, shop.actualHours || 0])
+  );
+  const maxMonthlySalary = Math.max(
+    1,
+    ...(charts.monthlySalaryTrend || []).map(month => month.finalizedSalary || 0),
+    ...(charts.monthlySalaryTrend || []).map(month => month.totalPaid || 0)
+  );
 
   return (
     <div className="page-container">
@@ -164,7 +173,7 @@ export default function AdminDashboard() {
         <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
           <div className="stat-lbl">Finalized Salary</div>
           <div className="stat-val" style={{ color: '#2563eb' }}>
-            £{(cards.finalizedSalary || thisWeekSalaryTotal || 0).toFixed(2)}
+            £{(cards.finalizedSalary ?? thisWeekSalaryTotal ?? 0).toFixed(2)}
           </div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             Week: {weekLabel}
@@ -174,7 +183,7 @@ export default function AdminDashboard() {
         <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
           <div className="stat-lbl">Salary Paid</div>
           <div className="stat-val" style={{ color: '#059669' }}>
-            £{(cards.totalPaid || thisWeekPaidTotal || 0).toFixed(2)}
+            £{(cards.totalPaid ?? thisWeekPaidTotal ?? 0).toFixed(2)}
           </div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             Disbursed wages
@@ -184,7 +193,7 @@ export default function AdminDashboard() {
         <div className="stat-card" style={{ borderLeft: '4px solid #ef4444' }}>
           <div className="stat-lbl">Outstanding Balance</div>
           <div className="stat-val" style={{ color: '#dc2626' }}>
-            £{(cards.outstanding || thisWeekOutstanding || 0).toFixed(2)}
+            £{(cards.outstanding ?? thisWeekOutstanding ?? 0).toFixed(2)}
           </div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             Remaining salary liability
@@ -193,7 +202,7 @@ export default function AdminDashboard() {
 
         <div className="stat-card">
           <div className="stat-lbl">Active Workforce</div>
-          <div className="stat-val">{cards.activeEmployees || activeEmployees}</div>
+          <div className="stat-val">{cards.activeEmployees ?? activeEmployees}</div>
           <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
             {totalEmployees} Total Registered
           </div>
@@ -201,7 +210,7 @@ export default function AdminDashboard() {
 
         <div className="stat-card">
           <div className="stat-lbl">Labour Hours</div>
-          <div className="stat-val">{Number(cards.labourHours || attendanceStats.totalHours || 0).toFixed(1)}h</div>
+          <div className="stat-val">{Number(cards.labourHours ?? attendanceStats.totalHours ?? 0).toFixed(1)}h</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             Actual worked hours
           </div>
@@ -209,7 +218,7 @@ export default function AdminDashboard() {
 
         <div className="stat-card">
           <div className="stat-lbl">Net Attendance Pay</div>
-          <div className="stat-val">£{Number(cards.attendancePay || attendanceStats.totalWages || 0).toFixed(2)}</div>
+          <div className="stat-val">£{Number(cards.attendancePay ?? attendanceStats.totalWages ?? 0).toFixed(2)}</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             Direct shift earnings
           </div>
@@ -217,7 +226,7 @@ export default function AdminDashboard() {
 
         <div className="stat-card">
           <div className="stat-lbl">Monthly Bonuses</div>
-          <div className="stat-val">£{Number(cards.bonuses || monthlyBonusTotal || 0).toFixed(2)}</div>
+          <div className="stat-val">£{Number(cards.bonuses ?? monthlyBonusTotal ?? 0).toFixed(2)}</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             Sales Commissions
           </div>
@@ -239,6 +248,9 @@ export default function AdminDashboard() {
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>
             Salary Cost by Shop Location (£)
           </h2>
+          <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
+            Finalized payroll for {summaryData?.currentWeek || weekLabel}; multi-shop wages are split by attendance pay.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {charts.salaryByShop?.map(s => {
               const maxVal = Math.max(...charts.salaryByShop.map(i => i.amount), 1);
@@ -249,7 +261,7 @@ export default function AdminDashboard() {
                     <span style={{ fontWeight: 600 }}>{s.shopName}</span>
                     <span style={{ fontWeight: 700, color: '#2563eb' }}>£{s.amount.toFixed(2)}</span>
                   </div>
-                  <div style={{ background: '#f1f5f9', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
+                  <div style={{ background: '#f1f5f9', height: '10px', borderRadius: '5px', overflow: 'hidden' }} title="Share of the largest shop's weekly salary cost">
                     <div style={{ background: '#2563eb', height: '100%', width: `${pct}%`, transition: 'width 0.5s' }} />
                   </div>
                 </div>
@@ -268,6 +280,9 @@ export default function AdminDashboard() {
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>
             Labour Hours: Scheduled vs Actual
           </h2>
+          <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
+            Current-week attendance records, grouped by the shop where each shift took place.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {charts.labourHoursByShop?.map(s => (
               <div key={s.shopId} style={{ fontSize: '13px' }}>
@@ -277,9 +292,13 @@ export default function AdminDashboard() {
                     Actual: <strong style={{ color: '#059669' }}>{s.actualHours}h</strong> / Sched: {s.scheduledHours}h
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: '4px', height: '10px' }}>
-                  <div style={{ background: '#cbd5e1', borderRadius: '4px', width: `${Math.min(100, (s.scheduledHours / 100) * 100)}%` }} title="Scheduled" />
-                  <div style={{ background: '#10b981', borderRadius: '4px', width: `${Math.min(100, (s.actualHours / 100) * 100)}%` }} title="Actual" />
+                <div style={{ display: 'grid', gap: '4px' }} title="Scheduled and actual hours are scaled against the highest shop total">
+                  <div style={{ background: '#f1f5f9', height: '5px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ background: '#cbd5e1', height: '100%', width: `${Math.min(100, (s.scheduledHours / maxWeeklyHours) * 100)}%` }} title={`Scheduled: ${s.scheduledHours} hours`} />
+                  </div>
+                  <div style={{ background: '#f1f5f9', height: '5px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ background: '#10b981', height: '100%', width: `${Math.min(100, (s.actualHours / maxWeeklyHours) * 100)}%` }} title={`Actual: ${s.actualHours} hours`} />
+                  </div>
                 </div>
               </div>
             ))}
@@ -296,21 +315,24 @@ export default function AdminDashboard() {
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>
             Attendance Status Distribution
           </h2>
+          <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
+            Current-week attendance records; counts are records, not unique workers.
+          </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
             <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#059669' }}>{charts.attendanceDistribution?.present || attendanceStats.present || 0}</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#059669' }}>{charts.attendanceDistribution?.present ?? attendanceStats.present ?? 0}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#065f46' }}>PRESENT</div>
             </div>
             <div style={{ background: '#fffbeb', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#d97706' }}>{charts.attendanceDistribution?.late || attendanceStats.late || 0}</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#d97706' }}>{charts.attendanceDistribution?.late ?? attendanceStats.late ?? 0}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>LATE (&gt;15m)</div>
             </div>
             <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#2563eb' }}>{charts.attendanceDistribution?.half || attendanceStats.half || 0}</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#2563eb' }}>{charts.attendanceDistribution?.half ?? attendanceStats.half ?? 0}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>HALF DAY</div>
             </div>
             <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#dc2626' }}>{charts.attendanceDistribution?.absent || attendanceStats.absent || 0}</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#dc2626' }}>{charts.attendanceDistribution?.absent ?? attendanceStats.absent ?? 0}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#991b1b' }}>ABSENT</div>
             </div>
           </div>
@@ -321,13 +343,20 @@ export default function AdminDashboard() {
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>
             Monthly Payroll Trend (Last 6 Months)
           </h2>
+          <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
+            Weekly payroll is grouped into the month containing the rota week's end date.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {charts.monthlySalaryTrend?.map((m, idx) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span style={{ width: '80px', fontWeight: 600 }}>{m.month}</span>
-                <div style={{ flex: 1, margin: '0 12px', display: 'flex', gap: '4px', height: '10px' }}>
-                  <div style={{ background: '#2563eb', height: '100%', borderRadius: '4px', width: `${Math.min(100, (m.finalizedSalary / 5000) * 100)}%` }} title={`Finalized: £${m.finalizedSalary}`} />
-                  <div style={{ background: '#10b981', height: '100%', borderRadius: '4px', width: `${Math.min(100, (m.totalPaid / 5000) * 100)}%` }} title={`Paid: £${m.totalPaid}`} />
+                <div style={{ flex: 1, margin: '0 12px', display: 'grid', gap: '3px' }} title="Weekly payroll grouped by the month in which each rota week ends">
+                  <div style={{ background: '#f1f5f9', height: '5px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ background: '#2563eb', height: '100%', width: `${Math.min(100, (m.finalizedSalary / maxMonthlySalary) * 100)}%` }} title={`Finalized: £${m.finalizedSalary}`} />
+                  </div>
+                  <div style={{ background: '#f1f5f9', height: '5px', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ background: '#10b981', height: '100%', width: `${Math.min(100, (m.totalPaid / maxMonthlySalary) * 100)}%` }} title={`Paid: £${m.totalPaid}`} />
+                  </div>
                 </div>
                 <span style={{ fontSize: '12px', fontWeight: 600, width: '130px', textAlign: 'right' }}>
                   £{m.finalizedSalary.toFixed(2)} (Paid: £{m.totalPaid.toFixed(2)})
@@ -352,7 +381,7 @@ export default function AdminDashboard() {
             <thead>
               <tr>
                 <th>Shop Location</th>
-                <th>Today's Staff</th>
+                <th>Today's Present Staff</th>
                 <th>Today's Labour Hours</th>
                 <th>Today's Wage Cost</th>
                 <th>This Week's Final Salary</th>
