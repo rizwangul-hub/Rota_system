@@ -449,13 +449,20 @@ exports.updateAttendanceRecord = async (req, res) => {
     const dailyWage = resolveDailyWage(record.dailyWage, employee?.dailyWage);
 
     const isAbsent = status === 'Absent';
-    const incomingShopId = shopId || shop;
+    const rawShopId = shopId || shop;
+    const incomingShopId = rawShopId && typeof rawShopId === 'object' ? (rawShopId._id || rawShopId.id) : rawShopId;
 
     if (isAbsent) {
       record.shop = null;
       record.shopName = 'Absent';
     } else if (incomingShopId) {
-      const foundShop = await Shop.findById(incomingShopId);
+      let foundShop = null;
+      if (mongoose.Types.ObjectId.isValid(incomingShopId)) {
+        foundShop = await Shop.findById(incomingShopId);
+      }
+      if (!foundShop) {
+        foundShop = await Shop.findOne({ name: { $regex: new RegExp(`^${incomingShopId}$`, 'i') } });
+      }
       if (foundShop) {
         record.shop = foundShop._id;
         record.shopName = foundShop.name;

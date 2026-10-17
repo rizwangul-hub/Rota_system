@@ -206,19 +206,38 @@ export default function SarfrazAttendance() {
 
   // Edit attendance handler
   const openEditModal = (r) => {
-    const initialShopId =
-      (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) ||
-      (r.employee && typeof r.employee === 'object' && r.employee.assignedShop
-        ? (typeof r.employee.assignedShop === 'object' ? r.employee.assignedShop._id : r.employee.assignedShop)
-        : '') ||
-      (shops.length > 0 ? shops[0]._id : '');
+    // 1. Resolve current shop ID to a clean string
+    let currentShopId = '';
+    const rawShop = (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) || r.shopId;
+    if (rawShop && shops.some(s => String(s._id) === String(rawShop))) {
+      currentShopId = String(rawShop);
+    } else if (r.shopName && r.shopName !== 'Absent') {
+      const matchByName = shops.find(s => s.name?.trim().toLowerCase() === r.shopName?.trim().toLowerCase());
+      if (matchByName) currentShopId = String(matchByName._id);
+    }
+
+    // Fallback to employee assigned shop if available
+    if (!currentShopId) {
+      const empShop = r.employee?.assignedShop;
+      const empShopId = empShop?._id || (typeof empShop === 'string' ? empShop : '');
+      if (empShopId && shops.some(s => String(s._id) === String(empShopId))) {
+        currentShopId = String(empShopId);
+      }
+    }
+
+    // Default to first shop if still not found
+    if (!currentShopId && shops.length > 0) {
+      currentShopId = String(shops[0]._id);
+    }
 
     const isAbsent = r.status === 'Absent';
+    const foundShop = shops.find(s => String(s._id) === String(currentShopId));
 
     setEditModalRecord({
       ...r,
-      shop: isAbsent ? initialShopId : (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) || initialShopId,
-      shopId: isAbsent ? initialShopId : (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) || initialShopId,
+      shop: isAbsent ? '' : currentShopId,
+      shopId: isAbsent ? '' : currentShopId,
+      shopName: isAbsent ? 'Absent' : (foundShop ? foundShop.name : (r.shopName || '')),
       shiftStart: r.shiftStart || '09:00',
       shiftEnd: r.shiftEnd || '19:00',
       timeReached: r.timeReached || r.shiftStart || '09:00',
@@ -232,6 +251,9 @@ export default function SarfrazAttendance() {
 
     try {
       const isAbsent = editModalRecord.status === 'Absent';
+      const rawShop = editModalRecord.shop || editModalRecord.shopId;
+      const resolvedShopId = rawShop && typeof rawShop === 'object' ? rawShop._id : rawShop;
+
       const payload = {
         shiftStart: isAbsent ? '' : editModalRecord.shiftStart,
         shiftEnd: isAbsent ? '' : editModalRecord.shiftEnd,
@@ -239,13 +261,13 @@ export default function SarfrazAttendance() {
         workerEndTime: isAbsent ? '' : editModalRecord.workerEndTime,
         status: editModalRecord.status,
         remarks: editModalRecord.remarks,
-        shopId: isAbsent ? null : (editModalRecord.shop || editModalRecord.shopId)
+        shopId: isAbsent ? null : (resolvedShopId ? String(resolvedShopId) : null)
       };
 
       const res = await axios.put(`${API_BASE_URL}/attendance/${editModalRecord._id}`, payload);
       if (res.data.success) {
         setEditModalRecord(null);
-        showNotification('Attendance recalculated and saved successfully.');
+        showNotification('Attendance and shop location updated successfully.');
         fetchAttendanceData();
       }
     } catch (err) {
@@ -867,13 +889,28 @@ export default function SarfrazAttendance() {
                 {/* Shop Location & Status */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600 }}>Shop Location</label>
+                    <label className="form-label" style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Shop Location</span>
+                      {editModalRecord.shopName && editModalRecord.shopName !== 'Absent' && (
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb' }}>
+                          Current: {editModalRecord.shopName}
+                        </span>
+                      )}
+                    </label>
                     <select
                       className="form-select"
-                      value={editModalRecord.status === 'Absent' ? '' : (editModalRecord.shop || editModalRecord.shopId || '')}
+                      value={
+                        editModalRecord.status === 'Absent'
+                          ? ''
+                          : String(
+                              (editModalRecord.shop && typeof editModalRecord.shop === 'object' ? editModalRecord.shop._id : editModalRecord.shop) ||
+                              (editModalRecord.shopId && typeof editModalRecord.shopId === 'object' ? editModalRecord.shopId._id : editModalRecord.shopId) ||
+                              ''
+                            )
+                      }
                       onChange={(e) => {
                         const selectedShopId = e.target.value;
-                        const foundShop = shops.find(s => s._id === selectedShopId);
+                        const foundShop = shops.find(s => String(s._id) === String(selectedShopId));
                         setEditModalRecord(prev => {
                           const isSwitchingFromAbsent = prev.status === 'Absent' && Boolean(selectedShopId);
                           return {
@@ -896,6 +933,9 @@ export default function SarfrazAttendance() {
                         <option key={s._id} value={s._id}>{s.name}</option>
                       ))}
                     </select>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                      Change this if Usman assigned the wrong shop.
+                    </div>
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
