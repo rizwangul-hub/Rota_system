@@ -1,18 +1,72 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User as UserIcon, ArrowRight, Eye, EyeOff, Shield } from 'lucide-react';
+import { Lock, User as UserIcon, ArrowRight, Eye, EyeOff, Shield, Download, Check } from 'lucide-react';
 import logo from '../assets/logo.jpg';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(() =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  );
+  const [showInstallInstructions, setShowInstallInstructions] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const isRunningInstalled = () =>
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+      setShowInstallInstructions(false);
+    };
+    const handleDisplayModeChange = () => setIsInstalled(isRunningInstalled());
+    const displayMode = window.matchMedia('(display-mode: standalone)');
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    displayMode.addEventListener?.('change', handleDisplayModeChange);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      displayMode.removeEventListener?.('change', handleDisplayModeChange);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) {
+      setShowInstallInstructions(true);
+      return;
+    }
+
+    try {
+      await installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsInstalled(true);
+        setShowInstallInstructions(false);
+      }
+      setInstallPrompt(null);
+    } catch (installError) {
+      console.error('The browser could not open the Rota System install prompt:', installError);
+      setShowInstallInstructions(true);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,7 +122,7 @@ export default function Login() {
             <img src={logo} alt="Pixx Rota" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.3px' }}>
-            PIXX ROTA
+            Rota System
           </h1>
           <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
             Attendance • Payroll • Workforce
@@ -153,6 +207,39 @@ export default function Login() {
           <Shield size={14} color="#10b981" />
           <span>Secure workforce management</span>
         </div>
+
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={handleInstall}
+          disabled={isInstalled}
+          style={{ width: '100%', justifyContent: 'center', gap: '8px' }}
+        >
+          {isInstalled ? <Check size={16} /> : <Download size={16} />}
+          {isInstalled ? 'Rota System is already installed' : 'Install Rota System'}
+        </button>
+
+        {showInstallInstructions && !isInstalled && (
+          <div
+            role="status"
+            style={{
+              marginTop: '12px',
+              padding: '12px',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              background: '#eff6ff',
+              color: '#1e3a8a',
+              fontSize: '12px'
+            }}
+          >
+            <strong>Install Rota System in your browser</strong>
+            <p style={{ marginTop: '4px' }}>
+              In Chrome or Edge, open the browser menu and choose <strong>Install Rota System</strong> or
+              {' '}<strong>Apps → Install this site as an app</strong>. If that option is missing, make sure
+              you are using the secure website address and try again.
+            </p>
+          </div>
+        )}
 
       </div>
     </div>
