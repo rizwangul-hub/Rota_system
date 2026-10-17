@@ -349,7 +349,6 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     // ── HEADER BANNER ──────────────────────────────────────────
     doc.rect(MARGIN_LEFT, curY, PAGE_W, 44).fillAndStroke('#f8fafc', '#cbd5e1');
-    doc.rect(MARGIN_LEFT, curY, 6, 44).fill(BLUE);
 
     doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14)
        .text('PIXX ROTA', MARGIN_LEFT + 14, curY + 8, { lineBreak: false });
@@ -377,7 +376,6 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     kpis.forEach((kpi, idx) => {
       const kx = MARGIN_LEFT + idx * (kpiW + kpiGap);
       doc.roundedRect(kx, curY, kpiW, 32, 4).fillAndStroke('#f8fafc', LIGHT_BORDER);
-      doc.rect(kx, curY, kpiW, 2.5).fill(kpi.color);
 
       doc.fillColor(kpi.color).font('Helvetica-Bold').fontSize(12)
          .text(String(kpi.value), kx, curY + 5, { width: kpiW, align: 'center', lineBreak: false });
@@ -389,7 +387,6 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     const drawContinuationBanner = () => {
       doc.rect(MARGIN_LEFT, 18, PAGE_W, 24).fillAndStroke('#f8fafc', '#cbd5e1');
-      doc.rect(MARGIN_LEFT, 18, 5, 24).fill(BLUE);
       doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9)
          .text('PIXX ROTA  •  DAILY ATTENDANCE (CONTINUED)', MARGIN_LEFT + 12, 26, { lineBreak: false });
       doc.fillColor('#64748b').font('Helvetica').fontSize(8)
@@ -413,12 +410,16 @@ exports.exportDailyAttendancePDF = async (req, res) => {
         curY = 48;
       }
 
-      // 1. Shop Header Bar
-      const headerBg = isAbsentGroup ? '#991b1b' : (sc.primary || '#1e293b');
-      doc.roundedRect(MARGIN_LEFT, curY, PAGE_W, sectionHeaderH, 3).fill(headerBg);
-      doc.circle(MARGIN_LEFT + 8, curY + 8, 2.5).fill('#ffffff');
+      // 1. Shop Header Bar - Light print-friendly background with subtle border and crisp dark text
+      const headerBg = isAbsentGroup ? '#fff5f5' : (sc.lightBg || '#f8fafc');
+      const headerBorder = isAbsentGroup ? '#fecaca' : (sc.border || '#cbd5e1');
+      const headerText = isAbsentGroup ? '#991b1b' : (sc.text || '#0f172a');
+      const dotColor = isAbsentGroup ? '#dc2626' : (sc.primary || '#2563eb');
 
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5)
+      doc.roundedRect(MARGIN_LEFT, curY, PAGE_W, sectionHeaderH, 3).fillAndStroke(headerBg, headerBorder);
+      doc.circle(MARGIN_LEFT + 8, curY + 8, 2.5).fill(dotColor);
+
+      doc.fillColor(headerText).font('Helvetica-Bold').fontSize(8.5)
          .text(
            isAbsentGroup ? 'ABSENT / OFF DUTY' : `${shopName.toUpperCase()} CYCLES`,
            MARGIN_LEFT + 15,
@@ -430,7 +431,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
         ? `${group.length} Staff Off / Absent`
         : `${group.length} ${group.length === 1 ? 'Worker' : 'Workers'} on Duty`;
 
-      doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff')
+      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(headerText)
          .text(countText, MARGIN_LEFT + 300, curY + 4.5, { width: PAGE_W - 308, align: 'right', lineBreak: false });
 
       curY += sectionHeaderH;

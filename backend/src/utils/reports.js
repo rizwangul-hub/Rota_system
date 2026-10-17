@@ -887,7 +887,6 @@ function drawPdfBanner(doc, title, subtitle, periodText, isLandscape = true) {
   const contentWidth = width - margin * 2;
 
   doc.rect(margin, 20, contentWidth, 42).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.rect(margin, 60, contentWidth, 3).fill('#2563eb');
 
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14).text('PIXX ROTA', margin + 12, 28);
   doc.fillColor('#64748b').font('Helvetica').fontSize(9).text('PixxTechnologies UK • Bicycle Retail & Payroll System', margin + 12, 45);
@@ -898,7 +897,6 @@ function drawPdfBanner(doc, title, subtitle, periodText, isLandscape = true) {
 
 function drawKpiCard(doc, x, y, width, label, value, color = '#2563eb') {
   doc.rect(x, y, width, 45).fillAndStroke('#f8fafc', '#e2e8f0');
-  doc.rect(x, y, width, 3).fill(color);
   doc.fillColor(color).font('Helvetica-Bold').fontSize(12).text(value, x + 8, y + 10);
   doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(7).text(label, x + 8, y + 28);
 }
@@ -916,14 +914,12 @@ function drawPdfSignatures(doc, yPos, isLandscape = true) {
   }
 
   doc.rect(margin, y, cardWidth, 52).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.rect(margin, y, cardWidth, 3).fill('#2563eb');
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('USMAN AHMAD', margin + 10, y + 8);
   doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Attendance Operator • Roster Entry & Logged Hours', margin + 10, y + 21);
   doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ RECORDED & SUBMITTED', margin + 10, y + 35);
 
   const box2X = margin + cardWidth + gap;
   doc.rect(box2X, y, cardWidth, 52).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.rect(box2X, y, cardWidth, 3).fill('#10b981');
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('SARFRAZ AHMAD', box2X + 10, y + 8);
   doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Attendance Checker / Manager • Verification & Approval Audit', box2X + 10, y + 21);
   doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUDITED & APPROVED', box2X + 10, y + 35);
@@ -1649,14 +1645,18 @@ async function buildShopLabourPDF(res, shopData, periodLabel = '', generatedBy =
     }
 
     // 1. Shop Header Banner Bar
-    const headerBg = sc.primary || '#1e293b';
-    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fill(headerBg);
-    doc.circle(34, y + 9, 2.5).fill('#ffffff');
+    const headerBg = sc.lightBg || '#f8fafc';
+    const headerBorder = sc.border || '#cbd5e1';
+    const headerText = sc.text || '#0f172a';
+    const dotColor = sc.primary || '#2563eb';
 
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+    doc.roundedRect(25, y, 790, sectionHeaderH, 3).fillAndStroke(headerBg, headerBorder);
+    doc.circle(34, y + 9, 2.5).fill(dotColor);
+
+    doc.fillColor(headerText).font('Helvetica-Bold').fontSize(9)
        .text(`${shopName.toUpperCase()} CYCLES`, 42, y + 4.5, { lineBreak: false });
 
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(headerText)
        .text(`${employees.length} Staff Members`, 550, y + 5, { width: 255, align: 'right', lineBreak: false });
 
     y += sectionHeaderH;
