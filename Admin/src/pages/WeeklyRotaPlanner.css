@@ -1272,9 +1272,14 @@
     margin: 8mm 8mm 8mm 8mm;
   }
 
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   body {
     background: #ffffff !important;
-    color: #000000 !important;
+    color: #0f172a !important;
     font-size: 11px !important;
     font-family: Arial, sans-serif !important;
   }
@@ -1307,16 +1312,16 @@
   }
 
   .shop-rota-card {
-    border: 1px solid #000000 !important;
-    border-radius: 0 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 4px !important;
     box-shadow: none !important;
     page-break-inside: avoid !important;
     margin-bottom: 12px !important;
   }
 
   .shop-card-header {
-    background: #f1f5f9 !important;
-    border-bottom: 1.5px solid #000000 !important;
+    background: #f8fafc !important;
+    border-bottom: 1px solid #cbd5e1 !important;
     padding: 6px 12px !important;
     border-left: none !important;
   }
@@ -1324,7 +1329,7 @@
   .shop-pill-badge {
     background: none !important;
     border: none !important;
-    color: #000000 !important;
+    color: #0f172a !important;
     font-size: 14px !important;
     font-weight: 800 !important;
     padding: 0 !important;
@@ -1335,15 +1340,15 @@
   }
 
   .rota-matrix-table th {
-    background: #f1f5f9 !important;
-    color: #000000 !important;
-    border: 1px solid #000000 !important;
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
     padding: 4px 4px !important;
     font-size: 10px !important;
   }
 
   .rota-matrix-table td {
-    border: 1px solid #000000 !important;
+    border: 1px solid #cbd5e1 !important;
     padding: 3px 4px !important;
     font-size: 10px !important;
   }
@@ -1362,16 +1367,16 @@
   }
 
   .cell-available {
-    color: #000000 !important;
+    color: #0f172a !important;
   }
 
   .cell-loaned {
-    color: #000000 !important;
+    color: #0f172a !important;
     font-weight: 700 !important;
   }
 
   .tr-total-row td {
-    border-top: 1.5px solid #000000 !important;
+    border-top: 1.5px solid #cbd5e1 !important;
     font-weight: 800 !important;
     background: #f8fafc !important;
   }

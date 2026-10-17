@@ -1010,70 +1010,83 @@ export default function WeeklyRotaPlanner() {
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:Arial,sans-serif;font-size:9px;padding:12px;color:#0f172a;background:#fff}
-        h1{font-size:13px;text-align:center;margin-bottom:4px;font-weight:800;letter-spacing:.5px}
-        .subtitle{font-size:8px;text-align:center;color:#64748b;margin-bottom:12px}
+        h1{font-size:16px;text-align:center;margin-bottom:2px;font-weight:900;letter-spacing:1px;color:#0f172a}
+        .subtitle{font-size:9px;text-align:center;color:#475569;margin-bottom:12px;font-weight:600}
+        .top-date-row{display:grid;grid-template-columns:85px repeat(7, 1fr);background:#e2e8f0;border:1px solid #cbd5e1;margin-bottom:8px;font-weight:700;font-size:8px;color:#1e293b;text-align:center}
+        .top-corner{background:#cbd5e1;border-right:1px solid #cbd5e1}
+        .top-date-cell{padding:5px 2px;border-right:1px solid #cbd5e1}
         .shop-block{margin-bottom:14px;border:1px solid #cbd5e1;border-radius:4px;overflow:hidden;page-break-inside:avoid}
-        .shop-title{background:#1e293b;color:#fff;text-align:center;font-size:10px;font-weight:800;padding:4px 8px;letter-spacing:.3px}
+        .shop-title{font-size:12px;font-weight:900;padding:6px 12px;letter-spacing:.3px;font-style:italic}
         table{width:100%;border-collapse:collapse}
-        th,td{border:1px solid #e2e8f0;padding:3px 4px;text-align:center;font-size:7.5px}
-        th{background:#f1f5f9;font-weight:700;color:#334155;font-size:7px}
-        td.name-col{text-align:left;font-weight:700;background:#f8fafc;min-width:65px;max-width:65px;font-size:8px}
-        .date-hdr{font-size:6.5px;color:#475569}
-        .day-hdr{font-size:6.5px;color:#334155;font-weight:800}
-        .avail{color:#059669}
-        .off{color:#dc2626;font-weight:700;font-style:italic}
-        .loaned{color:#7c3aed;font-weight:600}
-        .dash{color:#94a3b8}
-        .total-row td{background:#e2e8f0;font-weight:800;font-size:8px;color:#1e293b}
-        .alt-row{background:#f8fafc}
+        th,td{border:1px solid #cbd5e1;padding:3px 4px;text-align:center;font-size:7.5px}
+        th{font-weight:700;color:#1e293b;font-size:7.5px}
+        td.name-col{text-align:left;font-weight:700;background:#ffffff;min-width:85px;max-width:85px;font-size:8px;padding-left:6px;color:#0f172a}
+        td.cell-white{background:#ffffff}
+        .date-hdr{font-size:7px;color:#1e293b}
+        .day-hdr{font-size:7px;color:#1e293b;font-weight:800}
+        .pill-off{background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;font-weight:800;display:inline-block;font-size:7.5px}
+        .pill-loaned{padding:2px 8px;border-radius:10px;font-weight:700;display:inline-block;font-size:7.5px;border:1px solid transparent}
+        .text-avail{color:#0f172a;font-size:7.5px}
+        .total-row td{font-weight:800;font-size:8px}
         footer{text-align:center;font-size:7px;color:#94a3b8;margin-top:10px}
-        @media print{body{padding:6px}@page{size:A4 landscape;margin:12mm 10mm}}
+        @media print{
+          body{padding:6px}
+          @page{size:A4 landscape;margin:10mm 8mm}
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
       </style>
-      <h1>Weekly Staff Rota</h1>
-      <div class="subtitle">${formatDate(weekDays[0].dateKey)} &ndash; ${formatDate(weekDays[6].dateKey)}</div>
+      <h1>ROTA</h1>
+      <div class="subtitle">(${formatDate(weekDays[0].dateKey)} to ${formatDate(weekDays[6].dateKey)})</div>
+      <div class="top-date-row">
+        <div class="top-corner"></div>
+        ${weekDays.map(d => `<div class="top-date-cell">${formatDate(d.dateKey).replace(/ \d{4}$/, '')}</div>`).join('')}
+      </div>
     `;
 
     shops.forEach(shop => {
       const workerIds = getShopDisplayWorkerIds(shop._id);
       if (workerIds.length === 0) return;
+      const style = getShopStyle(shop.name);
 
       html += `<div class="shop-block">
-        <div class="shop-title">${shop.name}</div>
+        <div class="shop-title" style="background:${style.pillBg || style.bg}; color:${style.text}; border-bottom:1px solid ${style.border};">${shop.name}</div>
         <table>
           <thead>
-            <tr>
-              <th class="name-col" style="background:#f1f5f9">Name</th>
-              ${weekDays.map(d => `<th class="date-hdr">${formatDate(d.dateKey).replace(/ \d{4}$/, '')}</th>`).join('')}
+            <tr style="background:${style.bg}">
+              <th class="name-col" style="background:${style.bg};color:${style.text}">Name</th>
+              ${weekDays.map(d => `<th class="date-hdr" style="background:${style.bg}">${formatDate(d.dateKey).replace(/ \d{4}$/, '')}</th>`).join('')}
             </tr>
-            <tr>
-              <th class="name-col" style="background:#f1f5f9"></th>
-              ${weekDays.map(d => `<th class="day-hdr">${DAY_LABELS[d.dayIndex]}</th>`).join('')}
+            <tr style="background:${style.bg}">
+              <th class="name-col" style="background:${style.bg}"></th>
+              ${weekDays.map(d => `<th class="day-hdr" style="background:${style.bg}">${DAY_LABELS[d.dayIndex]}</th>`).join('')}
             </tr>
           </thead>
           <tbody>`;
 
       const totals = weekDays.map(day => getShopDayTotal(shop._id, day.dateKey));
-      workerIds.forEach((empId, rowIdx) => {
+      workerIds.forEach((empId) => {
         const emp = employees.find(e => e._id === empId);
         if (!emp) return;
-        html += `<tr class="${rowIdx % 2 === 1 ? 'alt-row' : ''}">
+        html += `<tr>
           <td class="name-col">${emp.name}</td>`;
 
         weekDays.forEach(d => {
           const display = getWorkerDayDisplay(shop._id, empId, d.dateKey);
-          const cssClass = display.status === 'LOANED'
-            ? 'loaned'
-            : display.status === 'OFF'
-              ? 'off'
-              : 'avail';
-          html += `<td class="${cssClass}">${display.text}</td>`;
+          let content = `<span class="text-avail">${display.text}</span>`;
+          if (display.status === 'OFF') {
+            content = `<span class="pill-off">OFF</span>`;
+          } else if (display.status === 'LOANED') {
+            const targetStyle = getShopStyle(display.text);
+            content = `<span class="pill-loaned" style="background:${targetStyle.pillBg};color:${targetStyle.text};border-color:${targetStyle.border}">${display.text}</span>`;
+          }
+          html += `<td class="cell-white">${content}</td>`;
         });
         html += `</tr>`;
       });
 
-      html += `<tr class="total-row">
-        <td class="name-col">Total</td>
-        ${totals.map(t => `<td>${t}</td>`).join('')}
+      html += `<tr class="total-row" style="background:${style.pillBg || style.bg};color:${style.text}">
+        <td class="name-col" style="background:${style.pillBg || style.bg};color:${style.text}">TOTAL</td>
+        ${totals.map(t => `<td style="color:${style.text}">${t}</td>`).join('')}
       </tr>`;
 
       html += `</tbody></table></div>`;

@@ -674,13 +674,13 @@ async function getExportData(weekStart, employeeId) {
 }
 
 const SHOP_EXPORT_PALETTE = {
-  station:   { name: 'Station Cycles',   excelFill: 'FFCCE5FF', pdfHex: '#93c5fd', text: '#0c4a6e' },
-  camden:    { name: 'Camden Cycles',    excelFill: 'FFFFF3CD', pdfHex: '#fcd34d', text: '#78350f' },
-  chelsea:   { name: 'Chelsea Bikes',    excelFill: 'FFD1ECF1', pdfHex: '#5eead4', text: '#134e4a' },
-  edgware:   { name: 'Edgware Cycles',   excelFill: 'FFA5F3FC', pdfHex: '#67e8f9', text: '#164e63' },
-  southwark: { name: 'Southwark Cycles', excelFill: 'FFFEF08A', pdfHex: '#fde047', text: '#713f12' },
-  leebridge: { name: 'Leebridge Cycles', excelFill: 'FFD4EDDA', pdfHex: '#86efac', text: '#14532d' },
-  leabridge: { name: 'Leebridge Cycles', excelFill: 'FFD4EDDA', pdfHex: '#86efac', text: '#14532d' }
+  station:   { name: 'Station Cycles',   excelFill: 'FFCCE5FF', pdfHex: '#cce5ff', pillBg: '#cce5ff', text: '#002060', border: '#bae6fd', lightTint: '#f0f9ff' },
+  camden:    { name: 'Camden Cycles',    excelFill: 'FFFFF3CD', pdfHex: '#fff3cd', pillBg: '#fff3cd', text: '#664d03', border: '#fde68a', lightTint: '#fffbeb' },
+  chelsea:   { name: 'Chelsea Bikes',    excelFill: 'FFD1ECF1', pdfHex: '#d1ecf1', pillBg: '#d1ecf1', text: '#055160', border: '#99f6e4', lightTint: '#f0fdfa' },
+  edgware:   { name: 'Edgware Cycles',   excelFill: 'FFA5F3FC', pdfHex: '#a5f3fc', pillBg: '#a5f3fc', text: '#004d40', border: '#a5f3fc', lightTint: '#ecfeff' },
+  southwark: { name: 'Southwark Cycles', excelFill: 'FFFEF08A', pdfHex: '#fef08a', pillBg: '#fef08a', text: '#554400', border: '#fef08a', lightTint: '#fefce8' },
+  leebridge: { name: 'Leebridge Cycles', excelFill: 'FFD4EDDA', pdfHex: '#d4edda', pillBg: '#d4edda', text: '#0f5132', border: '#bbf7d0', lightTint: '#f0fdf4' },
+  leabridge: { name: 'Leebridge Cycles', excelFill: 'FFD4EDDA', pdfHex: '#d4edda', pillBg: '#d4edda', text: '#0f5132', border: '#bbf7d0', lightTint: '#f0fdf4' }
 };
 
 function getShopPalette(shopName = '') {
@@ -688,7 +688,7 @@ function getShopPalette(shopName = '') {
   for (const [key, val] of Object.entries(SHOP_EXPORT_PALETTE)) {
     if (lower.includes(key)) return val;
   }
-  return { name: shopName, excelFill: 'FFE2E8F0', pdfHex: '#e2e8f0', text: '#1e293b' };
+  return { name: shopName, excelFill: 'FFE2E8F0', pdfHex: '#e2e8f0', pillBg: '#e2e8f0', text: '#1e293b', border: '#cbd5e1', lightTint: '#f8fafc' };
 }
 
 function getRotaStatusTextColor(status) {
@@ -1206,68 +1206,71 @@ exports.exportPdf = async (req, res) => {
     const DAY_COL = (usableW - NAME_COL) / 7;
 
     const COLORS = {
-      headerBg:    '#1e293b',
-      headerText:  '#ffffff',
-      shopBg:      '#f8fafc',
-      shopText:    '#1e293b',
-      dateBg:      '#f1f5f9',
-      dateText:    '#334155',
-      offText:     '#dc2626',
-      loanText:    '#2563eb',
-      availText:   '#059669',
-      rowAlt:      '#f8fafc',
-      totalBg:     '#e2e8f0',
-      totalText:   '#1e293b',
+      headerBg:    '#f8fafc',
+      headerText:  '#0f172a',
+      headerSub:   '#475569',
+      shopText:    '#0f172a',
+      dateBg:      '#e2e8f0',
+      dateText:    '#1e293b',
       border:      '#cbd5e1',
+      darkBorder:  '#94a3b8',
       white:       '#ffffff',
     };
 
     let y = MARGIN;
 
-    const hLine = (yPos, color = COLORS.border) => {
-      doc.strokeColor(color).lineWidth(0.4).moveTo(MARGIN, yPos).lineTo(MARGIN + usableW, yPos).stroke();
-    };
-
     const fillRect = (x, yPos, w, h, bg) => {
       doc.rect(x, yPos, w, h).fillColor(bg).fill();
     };
 
-    const drawCellBorder = (x, yPos, w, h, color = '#334155', width = 0.8) => {
+    const drawCellBorder = (x, yPos, w, h, color = '#cbd5e1', width = 0.5) => {
       doc.rect(x, yPos, w, h).strokeColor(color).lineWidth(width).stroke();
-    };
-
-    const drawRowCellBorders = (yPos, height, color = '#334155', width = 0.8) => {
-      drawCellBorder(MARGIN, yPos, NAME_COL, height, color, width);
-      for (let index = 0; index < 7; index++) {
-        drawCellBorder(MARGIN + NAME_COL + index * DAY_COL, yPos, DAY_COL, height, color, width);
-      }
     };
 
     const cellText = (text, x, yPos, w, h, color, size, bold = false, align = 'center') => {
       doc.font(bold ? 'Helvetica-Bold' : 'Helvetica')
          .fontSize(size)
          .fillColor(color)
-         .text(text, x + 2, yPos + 2, { width: w - 4, height: h - 2, align, lineBreak: false });
+         .text(text, x + 2, yPos + (h - size) / 2 - 1, { width: w - 4, align, lineBreak: false });
+    };
+
+    const drawPill = (x, yPos, w, h, bg, text, textColor, fontSize = 5.5, bold = true) => {
+      const pillPadX = 3;
+      const pillPadY = 1.8;
+      const pillW = Math.max(12, w - pillPadX * 2);
+      const pillH = Math.max(9, h - pillPadY * 2);
+      const pillX = x + pillPadX;
+      const pillY = yPos + pillPadY;
+
+      doc.roundedRect(pillX, pillY, pillW, pillH, 3).fillColor(bg).fill();
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica')
+         .fontSize(fontSize)
+         .fillColor(textColor)
+         .text(text, pillX + 1, pillY + (pillH - fontSize) / 2 - 0.5, { width: pillW - 2, align: 'center', lineBreak: false });
     };
 
     const drawPageHeader = () => {
-      const H = 22;
-      fillRect(MARGIN, y, usableW, H, COLORS.headerBg);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.headerText)
-         .text(`Weekly Staff Rota  ·  ${weekDates[0].formatted} – ${weekDates[6].formatted}`,
-                MARGIN + 4, y + 6, { width: usableW - 8, align: 'center' });
-      y += H;
-      fillRect(MARGIN, y, NAME_COL, 18, COLORS.dateBg);
-      drawCellBorder(MARGIN, y, NAME_COL, 18);
+      // Clean Title Bar - NO BLACK BACKGROUND
+      const TITLE_H = 26;
+      doc.font('Helvetica-Bold').fontSize(14).fillColor('#0f172a')
+         .text('ROTA', MARGIN, y + 2, { width: usableW, align: 'center' });
+      doc.font('Helvetica').fontSize(8.5).fillColor('#475569')
+         .text(`(${weekDates[0].formatted} to ${weekDates[6].formatted})`, MARGIN, y + 17, { width: usableW, align: 'center' });
+      y += TITLE_H;
+
+      // Top Date Bar
+      const DATE_BAR_H = 16;
+      fillRect(MARGIN, y, NAME_COL, DATE_BAR_H, '#cbd5e1');
+      drawCellBorder(MARGIN, y, NAME_COL, DATE_BAR_H, '#94a3b8', 0.6);
+
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
-        fillRect(x, y, DAY_COL, 18, COLORS.dateBg);
-        drawCellBorder(x, y, DAY_COL, 18);
-        doc.font('Helvetica-Bold').fontSize(6.5).fillColor(COLORS.dateText)
-           .text(weekDates[i].formatted, x + 1, y + 2, { width: DAY_COL - 2, align: 'center', lineBreak: false });
+        fillRect(x, y, DAY_COL, DATE_BAR_H, '#e2e8f0');
+        drawCellBorder(x, y, DAY_COL, DATE_BAR_H, '#94a3b8', 0.6);
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#1e293b')
+           .text(weekDates[i].formatted.replace(/ \d{4}$/, ''), x + 1, y + 4, { width: DAY_COL - 2, align: 'center', lineBreak: false });
       }
-      y += 18;
-      hLine(y);
+      y += DATE_BAR_H + 4;
     };
 
     drawPageHeader();
@@ -1299,30 +1302,33 @@ exports.exportPdf = async (req, res) => {
         drawPageHeader();
       }
 
+      // Shop Title Banner (Only keep background of shop name banner)
       fillRect(MARGIN, y, usableW, HEAD_H, palette.pdfHex);
-      drawCellBorder(MARGIN, y, usableW, HEAD_H, '#1e293b', 1.1);
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(palette.text || COLORS.shopText)
-         .text(roster.shopName, MARGIN, y + 4, { width: usableW, align: 'center', lineBreak: false });
-      hLine(y); hLine(y + HEAD_H);
+      drawCellBorder(MARGIN, y, usableW, HEAD_H, palette.border || '#cbd5e1', 0.7);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(palette.text || '#0f172a')
+         .text(roster.shopName, MARGIN + 8, y + 3.5, { width: usableW - 16, align: 'left', lineBreak: false });
       y += HEAD_H;
 
-      fillRect(MARGIN, y, usableW, ROW_H, palette.pdfHex);
-      drawRowCellBorders(y, ROW_H);
-      cellText('Name', MARGIN, y, NAME_COL, ROW_H, COLORS.shopText, 6.5, true, 'left');
+      // Subheader Row 1: Name & Dates
+      const subheadBg = palette.lightTint || '#f8fafc';
+      fillRect(MARGIN, y, usableW, ROW_H, subheadBg);
+      drawCellBorder(MARGIN, y, NAME_COL, ROW_H, '#cbd5e1', 0.5);
+      cellText('Name', MARGIN + 4, y, NAME_COL - 6, ROW_H, '#1e293b', 6.5, true, 'left');
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
-        cellText(weekDates[i].formatted.replace(/ \d{4}$/, ''), x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, false);
+        drawCellBorder(x, y, DAY_COL, ROW_H, '#cbd5e1', 0.5);
+        cellText(weekDates[i].formatted.replace(/ \d{4}$/, ''), x, y, DAY_COL, ROW_H, '#1e293b', 6, false);
       }
-      hLine(y + ROW_H);
       y += ROW_H;
 
-      fillRect(MARGIN, y, usableW, ROW_H, palette.pdfHex);
-      drawRowCellBorders(y, ROW_H);
+      // Subheader Row 2: Day of Week (SUNDAY, MONDAY...)
+      fillRect(MARGIN, y, usableW, ROW_H, subheadBg);
+      drawCellBorder(MARGIN, y, NAME_COL, ROW_H, '#cbd5e1', 0.5);
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
-        cellText(weekDates[i].dayLabel, x, y, DAY_COL, ROW_H, COLORS.dateText, 5.5, true);
+        drawCellBorder(x, y, DAY_COL, ROW_H, '#cbd5e1', 0.5);
+        cellText(weekDates[i].dayLabel, x, y, DAY_COL, ROW_H, '#1e293b', 6, true);
       }
-      hLine(y + ROW_H);
       y += ROW_H;
 
       const shopWorkersByDay = Array.from({ length: 7 }, () => new Set());
@@ -1333,12 +1339,15 @@ exports.exportPdf = async (req, res) => {
           drawPageHeader();
         }
 
-        fillRect(MARGIN, y, usableW, ROW_H, palette.pdfHex);
-        drawRowCellBorders(y, ROW_H);
-        cellText(emp.name, MARGIN + 2, y, NAME_COL - 4, ROW_H, COLORS.shopText, 6, true, 'left');
+        // PURE WHITE ROW BACKGROUND - OTHER SHOP BACKGROUND REMOVED
+        fillRect(MARGIN, y, usableW, ROW_H, '#ffffff');
+        drawCellBorder(MARGIN, y, NAME_COL, ROW_H, '#cbd5e1', 0.5);
+        cellText(emp.name, MARGIN + 4, y, NAME_COL - 6, ROW_H, '#0f172a', 6.5, true, 'left');
 
         for (let i = 0; i < 7; i++) {
           const x = MARGIN + NAME_COL + i * DAY_COL;
+          drawCellBorder(x, y, DAY_COL, ROW_H, '#cbd5e1', 0.5);
+
           const key = `${shopId}:${emp._id}:${weekDates[i].iso}`;
           const cell = cellMap[key];
 
@@ -1378,7 +1387,18 @@ exports.exportPdf = async (req, res) => {
               shopWorkersByDay[i].add(id(emp._id));
             }
           }
-          cellText(label, x, y, DAY_COL, ROW_H, getRotaStatusTextColor(status), 5.5, status === 'OFF');
+
+          if (status === 'OFF') {
+            // Soft red pill for OFF
+            drawPill(x, y, DAY_COL, ROW_H, '#fee2e2', 'OFF', '#dc2626', 6, true);
+          } else if (status === 'LOANED') {
+            // Pill matching the assigned target shop's color
+            const targetPalette = getShopPalette(label);
+            drawPill(x, y, DAY_COL, ROW_H, targetPalette.pillBg || targetPalette.pdfHex || '#e0e7ff', label, targetPalette.text || '#1e40af', 5.5, true);
+          } else {
+            // Available or custom hours: clean dark text on pure white background
+            cellText(label, x, y, DAY_COL, ROW_H, '#0f172a', 5.5, false, 'center');
+          }
         }
 
         y += ROW_H;
@@ -1392,16 +1412,16 @@ exports.exportPdf = async (req, res) => {
       const totals = shopWorkersByDay.map(workers => workers.size);
       totals.forEach((total, index) => { grandTotals[index] += total; });
 
+      // Shop Total Row
       fillRect(MARGIN, y, usableW, TOTAL_H, palette.pdfHex);
-      drawRowCellBorders(y, TOTAL_H, '#1e293b', 1);
-      cellText('Total', MARGIN + 2, y, NAME_COL, TOTAL_H, COLORS.totalText, 6, true, 'left');
+      drawCellBorder(MARGIN, y, NAME_COL, TOTAL_H, '#cbd5e1', 0.6);
+      cellText('TOTAL', MARGIN + 4, y, NAME_COL - 6, TOTAL_H, palette.text || '#0f172a', 6.5, true, 'left');
       for (let i = 0; i < 7; i++) {
         const x = MARGIN + NAME_COL + i * DAY_COL;
-        cellText(String(totals[i]), x, y, DAY_COL, TOTAL_H, COLORS.totalText, 6.5, true);
+        drawCellBorder(x, y, DAY_COL, TOTAL_H, '#cbd5e1', 0.6);
+        cellText(String(totals[i]), x, y, DAY_COL, TOTAL_H, palette.text || '#0f172a', 7, true, 'center');
       }
-      doc.rect(MARGIN, y - roster.employees.length * ROW_H - HEAD_H - 2 * ROW_H, usableW, roster.employees.length * ROW_H + HEAD_H + 2 * ROW_H + TOTAL_H)
-         .strokeColor('#1e293b').lineWidth(1.2).stroke();
-      y += TOTAL_H + 6;
+      y += TOTAL_H + 8;
     }
 
     const GRAND_H = 15;
@@ -1410,13 +1430,13 @@ exports.exportPdf = async (req, res) => {
       y = MARGIN;
       drawPageHeader();
     }
-    fillRect(MARGIN, y, NAME_COL, GRAND_H, '#94a3b8');
-    drawCellBorder(MARGIN, y, NAME_COL, GRAND_H, '#1e293b', 1);
-    cellText('Grand Total', MARGIN + 2, y, NAME_COL, GRAND_H, '#ffffff', 7, true, 'left');
+    fillRect(MARGIN, y, NAME_COL, GRAND_H, '#f1f5f9');
+    drawCellBorder(MARGIN, y, NAME_COL, GRAND_H, '#94a3b8', 0.6);
+    cellText('Grand Total', MARGIN + 4, y, NAME_COL - 6, GRAND_H, '#0f172a', 7, true, 'left');
     for (let i = 0; i < 7; i++) {
       const x = MARGIN + NAME_COL + i * DAY_COL;
-      fillRect(x, y, DAY_COL, GRAND_H, '#e2e8f0');
-      drawCellBorder(x, y, DAY_COL, GRAND_H, '#1e293b', 1);
+      fillRect(x, y, DAY_COL, GRAND_H, '#f8fafc');
+      drawCellBorder(x, y, DAY_COL, GRAND_H, '#94a3b8', 0.6);
       cellText(String(grandTotals[i]), x, y, DAY_COL, GRAND_H, '#0f172a', 8, true);
     }
     y += GRAND_H + 8;
@@ -1463,11 +1483,11 @@ exports.exportPdf = async (req, res) => {
       function drawDetailPdfHeader(doc, title, subtitle, week) {
         const left = 32;
         const right = 810;
-        doc.rect(left, 24, right - left, 44).fill('#0f172a');
-        doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(15).text(title, left + 12, 33, { width: right - left - 24 });
-        doc.fillColor('#cbd5e1').font('Helvetica').fontSize(8).text(subtitle, left + 12, 53, { width: right - left - 24 });
+        doc.roundedRect(left, 20, right - left, 46, 4).fillAndStroke('#f8fafc', '#cbd5e1');
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14).text(title, left + 12, 28, { width: right - left - 24 });
+        doc.fillColor('#475569').font('Helvetica').fontSize(8.5).text(subtitle, left + 12, 46, { width: right - left - 24 });
         doc.fillColor('#334155').font('Helvetica-Bold').fontSize(9)
-          .text(`Week: ${week.weekStart} to ${week.weekEnd}`, left, 78, { width: right - left });
+          .text(`Week: ${week.weekStart} to ${week.weekEnd}`, left, 74, { width: right - left });
       }
 
       function formatRotaDate(isoDate) {
