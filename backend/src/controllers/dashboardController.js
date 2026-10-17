@@ -167,113 +167,148 @@ exports.getCheckerDashboard = async (req, res) => {
   }
 };
 
+const { buildDistributorSalaryPDF } = require('../utils/reports');
+
+async function getDistributorDataInternal({ weekLabel, shopId, status }) {
+  const currentWeek = weekLabel || getWeekRange(new Date()).weekLabel;
+
+  const query = {
+    weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') }
+  };
+  if (status && status !== 'All') {
+    if (/^finalized$/i.test(status)) {
+      query.status = { $in: ['FINALIZED', 'Finalized'] };
+    } else if (/^partially[_\s]?paid$/i.test(status)) {
+      query.status = { $in: ['PARTIALLY_PAID', 'Partially Paid'] };
+    } else if (/^paid$/i.test(status)) {
+      query.status = { $in: ['PAID', 'Paid'] };
+    } else {
+      query.status = status;
+    }
+  } else {
+    query.status = { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] };
+  }
+
+  if (weekLabel && weekLabel !== 'All') {
+    const altLabel = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
+    query.weekLabel = { $in: [weekLabel, altLabel] };
+  }
+  if (shopId) query.shop = shopId;
+
+  const rawSalaries = await WeeklySalary.find(query)
+    .populate('employee')
+    .populate('shop')
+    .sort({ status: 1, shopName: 1, employeeName: 1 });
+
+  // Exclude unpaid workers whose daily wage is 0 from distributor dashboard
+  const eligibleSalaries = rawSalaries.filter(s => {
+    if (s.employee && s.employee.dailyWage === 0) return false;
+    return true;
+  });
+
+  const allBonuses = await Bonus.find({ status: { $ne: 'DRAFT' } }).lean();
+  const bonusMap = {};
+  allBonuses.forEach(b => {
+    const empKey = b.employee?.toString();
+    if (!empKey) return;
+    if (!bonusMap[empKey]) bonusMap[empKey] = [];
+    bonusMap[empKey].push(b);
+  });
+
+  const salaries = eligibleSalaries.map(s => {
+    const sObj = s.toObject ? s.toObject() : { ...s };
+    const empKey = (s.employee?._id || s.employee || '').toString();
+    const empBonuses = bonusMap[empKey] || [];
+    const standaloneBonus = empBonuses
+      .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === s._id.toString())
+      .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
+    const commissionBonus = Number(((s.bonus || 0) > 0 ? s.bonus : standaloneBonus).toFixed(2));
+
+    const openingBal = Number(s.employee?.openingBalance || 0);
+    const weeklySalary = Number(s.finalSalary || 0);
+    const totalPayableForEmp = Number((weeklySalary + openingBal + commissionBonus).toFixed(2));
+    const totalPaidForEmp = Number((s.totalPaid || 0).toFixed(2));
+    const balanceRemainingForEmp = Number(Math.max(0, totalPayableForEmp - totalPaidForEmp).toFixed(2));
+
+    sObj.openingBalance = openingBal;
+    sObj.weeklySalary = weeklySalary;
+    sObj.bonus = commissionBonus;
+    sObj.bonusDetails = empBonuses;
+    sObj.totalPayable = totalPayableForEmp;
+    sObj.balanceRemaining = balanceRemainingForEmp;
+    if (balanceRemainingForEmp === 0 && totalPaidForEmp > 0) {
+      sObj.status = 'PAID';
+    } else if (totalPaidForEmp > 0) {
+      sObj.status = 'PARTIALLY_PAID';
+    }
+    return sObj;
+  });
+
+  const totalWeeklyWages = salaries.reduce((sum, s) => sum + (s.weeklySalary || 0), 0);
+  const totalOpeningBalance = salaries.reduce((sum, s) => sum + (s.openingBalance || 0), 0);
+  const totalCommissionBonus = salaries.reduce((sum, s) => sum + (s.bonus || 0), 0);
+  const totalPayable = salaries.reduce((sum, s) => sum + (s.totalPayable || 0), 0);
+  const totalPaid = salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
+  const totalOutstanding = salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
+  const pendingCount = salaries.filter(s => s.balanceRemaining > 0).length;
+
+  let shopName = '';
+  if (shopId) {
+    const shopDoc = await Shop.findById(shopId).select('name');
+    shopName = shopDoc ? shopDoc.name : '';
+  }
+
+  const availableWeeks = await WeeklySalary.distinct('weekLabel', {
+    weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') },
+    status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] }
+  });
+
+  return {
+    currentWeek,
+    availableWeeks,
+    shopName,
+    metrics: {
+      totalWeeklyWages: Number(totalWeeklyWages.toFixed(2)),
+      totalOpeningBalance: Number(totalOpeningBalance.toFixed(2)),
+      totalCommissionBonus: Number(totalCommissionBonus.toFixed(2)),
+      totalPayable: Number(totalPayable.toFixed(2)),
+      totalPaid: Number(totalPaid.toFixed(2)),
+      totalOutstanding: Number(totalOutstanding.toFixed(2)),
+      pendingCount
+    },
+    salaries
+  };
+}
+
 exports.getDistributorDashboard = async (req, res) => {
   try {
     const { weekLabel, shopId, status } = req.query;
-    const currentWeek = weekLabel || getWeekRange(new Date()).weekLabel;
-
-    const query = {
-      weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') }
-    };
-    if (status && status !== 'All') {
-      if (/^finalized$/i.test(status)) {
-        query.status = { $in: ['FINALIZED', 'Finalized'] };
-      } else if (/^partially[_\s]?paid$/i.test(status)) {
-        query.status = { $in: ['PARTIALLY_PAID', 'Partially Paid'] };
-      } else if (/^paid$/i.test(status)) {
-        query.status = { $in: ['PAID', 'Paid'] };
-      } else {
-        query.status = status;
-      }
-    } else {
-      query.status = { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] };
-    }
-
-    if (weekLabel) {
-      const altLabel = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
-      query.weekLabel = { $in: [weekLabel, altLabel] };
-    }
-    if (shopId) query.shop = shopId;
-
-    const rawSalaries = await WeeklySalary.find(query)
-      .populate('employee')
-      .populate('shop')
-      .sort({ status: 1, shopName: 1, employeeName: 1 });
-
-    // Exclude unpaid workers whose daily wage is 0 from distributor dashboard
-    const eligibleSalaries = rawSalaries.filter(s => {
-      if (s.employee && s.employee.dailyWage === 0) return false;
-      return true;
-    });
-
-    const Bonus = require('../models/Bonus');
-    const allBonuses = await Bonus.find({ status: { $ne: 'DRAFT' } }).lean();
-    const bonusMap = {};
-    allBonuses.forEach(b => {
-      const empKey = b.employee?.toString();
-      if (!empKey) return;
-      if (!bonusMap[empKey]) bonusMap[empKey] = [];
-      bonusMap[empKey].push(b);
-    });
-
-    const salaries = eligibleSalaries.map(s => {
-      const sObj = s.toObject ? s.toObject() : { ...s };
-      const empKey = (s.employee?._id || s.employee || '').toString();
-      const empBonuses = bonusMap[empKey] || [];
-      const standaloneBonus = empBonuses
-        .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === s._id.toString())
-        .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
-      const commissionBonus = Number(((s.bonus || 0) > 0 ? s.bonus : standaloneBonus).toFixed(2));
-
-      const openingBal = Number(s.employee?.openingBalance || 0);
-      const weeklySalary = Number(s.finalSalary || 0);
-      const totalPayableForEmp = Number((weeklySalary + openingBal + commissionBonus).toFixed(2));
-      const totalPaidForEmp = Number((s.totalPaid || 0).toFixed(2));
-      const balanceRemainingForEmp = Number(Math.max(0, totalPayableForEmp - totalPaidForEmp).toFixed(2));
-
-      sObj.openingBalance = openingBal;
-      sObj.weeklySalary = weeklySalary;
-      sObj.bonus = commissionBonus;
-      sObj.bonusDetails = empBonuses;
-      sObj.totalPayable = totalPayableForEmp;
-      sObj.balanceRemaining = balanceRemainingForEmp;
-      if (balanceRemainingForEmp === 0 && totalPaidForEmp > 0) {
-        sObj.status = 'PAID';
-      } else if (totalPaidForEmp > 0) {
-        sObj.status = 'PARTIALLY_PAID';
-      }
-      return sObj;
-    });
-
-    const totalWeeklyWages = salaries.reduce((sum, s) => sum + (s.weeklySalary || 0), 0);
-    const totalOpeningBalance = salaries.reduce((sum, s) => sum + (s.openingBalance || 0), 0);
-    const totalCommissionBonus = salaries.reduce((sum, s) => sum + (s.bonus || 0), 0);
-    const totalPayable = salaries.reduce((sum, s) => sum + (s.totalPayable || 0), 0);
-    const totalPaid = salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
-    const totalOutstanding = salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
-    const pendingCount = salaries.filter(s => s.balanceRemaining > 0).length;
-
-    const availableWeeks = await WeeklySalary.distinct('weekLabel', {
-      weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') },
-      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] }
-    });
-
+    const data = await getDistributorDataInternal({ weekLabel, shopId, status });
     res.json({
       success: true,
-      currentWeek,
-      availableWeeks,
-      metrics: {
-        totalWeeklyWages: Number(totalWeeklyWages.toFixed(2)),
-        totalOpeningBalance: Number(totalOpeningBalance.toFixed(2)),
-        totalCommissionBonus: Number(totalCommissionBonus.toFixed(2)),
-        totalPayable: Number(totalPayable.toFixed(2)),
-        totalPaid: Number(totalPaid.toFixed(2)),
-        totalOutstanding: Number(totalOutstanding.toFixed(2)),
-        pendingCount
-      },
-      salaries
+      ...data
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to retrieve distributor dashboard.');
+  }
+};
+
+exports.exportDistributorPDF = async (req, res) => {
+  try {
+    const { weekLabel, shopId, status } = req.query;
+    const data = await getDistributorDataInternal({ weekLabel, shopId, status });
+    return await buildDistributorSalaryPDF(
+      res,
+      {
+        salaries: data.salaries,
+        metrics: data.metrics,
+        weekLabel: weekLabel || data.currentWeek,
+        shopName: data.shopName,
+        statusFilter: status || 'All'
+      },
+      req.user?.name || 'Arsalan'
+    );
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to export distributor PDF report.');
   }
 };

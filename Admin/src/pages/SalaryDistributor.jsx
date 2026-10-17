@@ -27,12 +27,15 @@ import {
   AlertTriangle,
   Info,
   LayoutGrid,
-  Table
+  Table,
+  Download
 } from 'lucide-react';
+import { downloadReportFile } from '../utils/downloadReportFile';
 
 export default function SalaryDistributor() {
   const [salaries, setSalaries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [availableWeeks, setAvailableWeeks] = useState([]);
   const [selectedWeek, setSelectedWeek] = useState('');
   const [selectedShop, setSelectedShop] = useState('');
@@ -117,6 +120,24 @@ export default function SalaryDistributor() {
 
   const getTotalDeductions = (s) => {
     return Number(((s.manualDeductions || 0) + (s.lateDeductions || 0)).toFixed(2));
+  };
+
+  const handleExportPDF = async () => {
+    setExportingPdf(true);
+    try {
+      const params = {};
+      if (selectedWeek && selectedWeek !== 'All') params.weekLabel = selectedWeek;
+      if (selectedShop) params.shopId = selectedShop;
+      if (statusFilter && statusFilter !== 'All') params.status = statusFilter;
+
+      const cleanWeek = (selectedWeek || 'All_Periods').replace(/[\/–—\s]/g, '_');
+      await downloadReportFile('/dashboard/distributor/pdf', params, `Salary_Disbursement_${cleanWeek}.pdf`);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      alert(err.message || 'Failed to generate PDF');
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const openPayModal = (salary) => {
@@ -419,9 +440,39 @@ export default function SalaryDistributor() {
             Pay weekly salaries in full or partial installments • Track remaining balances in real-time
           </p>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={fetchDistributorData} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'spin' : ''} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handleExportPDF}
+            disabled={exportingPdf || loading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 700,
+              fontSize: '13px',
+              padding: '7px 14px',
+              borderRadius: '8px',
+              background: '#2563eb',
+              color: '#ffffff',
+              border: 'none',
+              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
+              cursor: exportingPdf || loading ? 'not-allowed' : 'pointer'
+            }}
+            title="Download executive PDF showing all employee names, weekly salaries, opening balances, bonuses, total payable, paid, remaining balance, and status"
+          >
+            {exportingPdf ? (
+              <RefreshCw size={14} className="spin" />
+            ) : (
+              <Download size={14} />
+            )}
+            <span>{exportingPdf ? 'Generating PDF...' : 'Download Payout PDF'}</span>
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={fetchDistributorData} disabled={loading}>
+            <RefreshCw size={14} className={loading ? 'spin' : ''} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}
