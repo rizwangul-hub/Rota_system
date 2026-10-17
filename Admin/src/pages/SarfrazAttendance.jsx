@@ -205,12 +205,44 @@ export default function SarfrazAttendance() {
   };
 
   // Edit attendance handler
+  const openEditModal = (r) => {
+    const initialShopId =
+      (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) ||
+      (r.employee && typeof r.employee === 'object' && r.employee.assignedShop
+        ? (typeof r.employee.assignedShop === 'object' ? r.employee.assignedShop._id : r.employee.assignedShop)
+        : '') ||
+      (shops.length > 0 ? shops[0]._id : '');
+
+    const isAbsent = r.status === 'Absent';
+
+    setEditModalRecord({
+      ...r,
+      shop: isAbsent ? initialShopId : (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) || initialShopId,
+      shopId: isAbsent ? initialShopId : (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) || initialShopId,
+      shiftStart: r.shiftStart || '09:00',
+      shiftEnd: r.shiftEnd || '19:00',
+      timeReached: r.timeReached || r.shiftStart || '09:00',
+      workerEndTime: r.workerEndTime || r.shiftEnd || '19:00'
+    });
+  };
+
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editModalRecord) return;
 
     try {
-      const res = await axios.put(`${API_BASE_URL}/attendance/${editModalRecord._id}`, editModalRecord);
+      const isAbsent = editModalRecord.status === 'Absent';
+      const payload = {
+        shiftStart: isAbsent ? '' : editModalRecord.shiftStart,
+        shiftEnd: isAbsent ? '' : editModalRecord.shiftEnd,
+        timeReached: isAbsent ? '' : editModalRecord.timeReached,
+        workerEndTime: isAbsent ? '' : editModalRecord.workerEndTime,
+        status: editModalRecord.status,
+        remarks: editModalRecord.remarks,
+        shopId: isAbsent ? null : (editModalRecord.shop || editModalRecord.shopId)
+      };
+
+      const res = await axios.put(`${API_BASE_URL}/attendance/${editModalRecord._id}`, payload);
       if (res.data.success) {
         setEditModalRecord(null);
         showNotification('Attendance recalculated and saved successfully.');
@@ -692,7 +724,7 @@ export default function SarfrazAttendance() {
                         <button
                           className="btn btn-outline btn-sm"
                           style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                          onClick={() => setEditModalRecord({ ...r })}
+                          onClick={() => openEditModal(r)}
                           title="Edit attendance times and status"
                         >
                           <Edit size={13} /> Edit
@@ -790,7 +822,7 @@ export default function SarfrazAttendance() {
                   onClick={() => {
                     const rec = records.find(r => r._id === confirmModal.recordId);
                     setConfirmModal({ open: false, type: 'single', recordId: null, count: 0 });
-                    if (rec) setEditModalRecord({ ...rec });
+                    if (rec) openEditModal(rec);
                   }}
                 >
                   <Edit size={14} /> Edit Time / Details
@@ -832,6 +864,76 @@ export default function SarfrazAttendance() {
             </div>
             <form onSubmit={handleSaveEdit}>
               <div className="modal-body">
+                {/* Shop Location & Status */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600 }}>Shop Location</label>
+                    <select
+                      className="form-select"
+                      value={editModalRecord.status === 'Absent' ? '' : (editModalRecord.shop || editModalRecord.shopId || '')}
+                      onChange={(e) => {
+                        const selectedShopId = e.target.value;
+                        const foundShop = shops.find(s => s._id === selectedShopId);
+                        setEditModalRecord(prev => {
+                          const isSwitchingFromAbsent = prev.status === 'Absent' && Boolean(selectedShopId);
+                          return {
+                            ...prev,
+                            shop: selectedShopId,
+                            shopId: selectedShopId,
+                            shopName: foundShop ? foundShop.name : prev.shopName,
+                            status: isSwitchingFromAbsent ? 'Present' : prev.status,
+                            shiftStart: isSwitchingFromAbsent ? (prev.shiftStart && prev.shiftStart !== 'Absent' ? prev.shiftStart : '09:00') : prev.shiftStart,
+                            shiftEnd: isSwitchingFromAbsent ? (prev.shiftEnd && prev.shiftEnd !== 'Absent' ? prev.shiftEnd : '19:00') : prev.shiftEnd,
+                            timeReached: isSwitchingFromAbsent ? (prev.timeReached || '09:00') : prev.timeReached,
+                            workerEndTime: isSwitchingFromAbsent ? (prev.workerEndTime || '19:00') : prev.workerEndTime
+                          };
+                        });
+                      }}
+                      required={editModalRecord.status !== 'Absent'}
+                    >
+                      <option value="">{editModalRecord.status === 'Absent' ? '— Select Shop to mark Present —' : 'Select Shop'}</option>
+                      {shops.map(s => (
+                        <option key={s._id} value={s._id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600 }}>Status</label>
+                    <select
+                      className="form-select"
+                      value={editModalRecord.status}
+                      onChange={(e) => {
+                        const newStatus = e.target.value;
+                        const isNowAbsent = newStatus === 'Absent';
+                        const fallbackShopId =
+                          (editModalRecord.shop && typeof editModalRecord.shop === 'object' ? editModalRecord.shop._id : editModalRecord.shop) ||
+                          (editModalRecord.employee && typeof editModalRecord.employee === 'object' && editModalRecord.employee.assignedShop
+                            ? (typeof editModalRecord.employee.assignedShop === 'object' ? editModalRecord.employee.assignedShop._id : editModalRecord.employee.assignedShop)
+                            : '') ||
+                          (shops[0]?._id || '');
+
+                        setEditModalRecord(prev => ({
+                          ...prev,
+                          status: newStatus,
+                          shop: isNowAbsent ? '' : (prev.shop || prev.shopId || fallbackShopId),
+                          shopId: isNowAbsent ? '' : (prev.shop || prev.shopId || fallbackShopId),
+                          shiftStart: isNowAbsent ? '' : (prev.shiftStart && prev.shiftStart !== 'Absent' ? prev.shiftStart : '09:00'),
+                          shiftEnd: isNowAbsent ? '' : (prev.shiftEnd && prev.shiftEnd !== 'Absent' ? prev.shiftEnd : '19:00'),
+                          timeReached: isNowAbsent ? '' : (prev.timeReached || prev.shiftStart || '09:00'),
+                          workerEndTime: isNowAbsent ? '' : (prev.workerEndTime || prev.shiftEnd || '19:00')
+                        }));
+                      }}
+                    >
+                      <option value="Present">Present</option>
+                      <option value="Late">Late</option>
+                      <option value="Half">Half Day</option>
+                      <option value="Absent">Absent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Shift Schedule */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
                     <label className="form-label">Shift Start</label>
@@ -842,6 +944,7 @@ export default function SarfrazAttendance() {
                       value={editModalRecord.shiftStart || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, shiftStart: e.target.value })}
                       required={editModalRecord.status !== 'Absent'}
+                      disabled={editModalRecord.status === 'Absent'}
                     />
                   </div>
                   <div className="form-group">
@@ -853,10 +956,12 @@ export default function SarfrazAttendance() {
                       value={editModalRecord.shiftEnd || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, shiftEnd: e.target.value })}
                       required={editModalRecord.status !== 'Absent'}
+                      disabled={editModalRecord.status === 'Absent'}
                     />
                   </div>
                 </div>
 
+                {/* Actual Arrival & Departure */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
                     <label className="form-label">Actual Arrival (Time Reached)</label>
@@ -867,6 +972,7 @@ export default function SarfrazAttendance() {
                       value={editModalRecord.timeReached || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, timeReached: e.target.value })}
                       required={editModalRecord.status !== 'Absent'}
+                      disabled={editModalRecord.status === 'Absent'}
                     />
                   </div>
                   <div className="form-group">
@@ -878,22 +984,9 @@ export default function SarfrazAttendance() {
                       value={editModalRecord.workerEndTime || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, workerEndTime: e.target.value })}
                       required={editModalRecord.status !== 'Absent'}
+                      disabled={editModalRecord.status === 'Absent'}
                     />
                   </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Status</label>
-                  <select
-                    className="form-select"
-                    value={editModalRecord.status}
-                    onChange={(e) => setEditModalRecord({ ...editModalRecord, status: e.target.value })}
-                  >
-                    <option value="Present">Present</option>
-                    <option value="Late">Late</option>
-                    <option value="Half">Half Day</option>
-                    <option value="Absent">Absent</option>
-                  </select>
                 </div>
 
                 <div className="form-group">
@@ -903,7 +996,7 @@ export default function SarfrazAttendance() {
                     rows="3"
                     value={editModalRecord.remarks || ''}
                     onChange={(e) => setEditModalRecord({ ...editModalRecord, remarks: e.target.value })}
-                    placeholder="e.g. Approved 15 min train delay adjustment"
+                    placeholder="e.g. Corrected absent status; worker was at Leebridge shop on regular shift"
                   ></textarea>
                 </div>
               </div>
