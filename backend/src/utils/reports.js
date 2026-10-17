@@ -886,14 +886,14 @@ function drawPdfBanner(doc, title, subtitle, periodText, isLandscape = true) {
   const margin = 25;
   const contentWidth = width - margin * 2;
 
-  doc.rect(margin, 20, contentWidth, 42).fill('#0f172a');
+  doc.rect(margin, 20, contentWidth, 42).fillAndStroke('#f8fafc', '#cbd5e1');
   doc.rect(margin, 60, contentWidth, 3).fill('#2563eb');
 
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(14).text('PIXX ROTA', margin + 12, 28);
-  doc.fillColor('#94a3b8').font('Helvetica').fontSize(9).text('PixxTechnologies UK • Bicycle Retail & Payroll System', margin + 12, 45);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14).text('PIXX ROTA', margin + 12, 28);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(9).text('PixxTechnologies UK • Bicycle Retail & Payroll System', margin + 12, 45);
 
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text(title, margin + contentWidth - 270, 26, { width: 260, align: 'right' });
-  doc.fillColor('#cbd5e1').font('Helvetica').fontSize(8.5).text(periodText || subtitle, margin + contentWidth - 270, 44, { width: 260, align: 'right' });
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(11).text(title, margin + contentWidth - 270, 26, { width: 260, align: 'right' });
+  doc.fillColor('#475569').font('Helvetica').fontSize(8.5).text(periodText || subtitle, margin + contentWidth - 270, 44, { width: 260, align: 'right' });
 }
 
 function drawKpiCard(doc, x, y, width, label, value, color = '#2563eb') {
@@ -1144,8 +1144,8 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
     y += tableHeaderH;
   };
 
-  doc.roundedRect(25, y, 790, 18, 3).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+  doc.roundedRect(25, y, 790, 18, 3).fillAndStroke('#f1f5f9', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9)
     .text(`WEEKLY PAYROLL — ${salaries.length} ${salaries.length === 1 ? 'WORKER' : 'WORKERS'}`, 35, y + 4.5, { lineBreak: false });
   y += 18;
   drawHeader();
@@ -1198,8 +1198,8 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
     const nameWidth = 155;
     const dayWidth = 90;
     const drawDailyHeader = () => {
-      doc.rect(25, y, 790, 20).fill('#1e293b');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7);
+      doc.rect(25, y, 790, 20).fillAndStroke('#f1f5f9', '#cbd5e1');
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7);
       doc.text('EMPLOYEE NAME', 30, y + 6, { width: nameWidth - 5, lineBreak: false });
       dailyColumns.forEach((day, index) => {
         const date = new Date(`${day.dateString}T00:00:00.000Z`);
@@ -1257,8 +1257,8 @@ async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, 
   drawKpiCard(doc, 700, kpiY, 115, 'OUTSTANDING', `£${(balancePayable || 0).toFixed(2)}`, '#dc2626');
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.rect(25, y, 790, 20).fillAndStroke('#f1f5f9', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
   doc.text('Week Dates', 32, y + 6);
   doc.text('Days', 190, y + 6);
   doc.text('Gross Wages (£)', 240, y + 6);
@@ -1300,8 +1300,8 @@ async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, 
       y += 18;
     }
 
-    doc.roundedRect(25, y, 790, 18, 3).fill('#1e293b');
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5)
+    doc.roundedRect(25, y, 790, 18, 3).fillAndStroke('#f1f5f9', '#cbd5e1');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8.5)
        .text(`DAILY WORKPLACE & SHOP LOCATION LOG — ${employeeName.toUpperCase()}`, 35, y + 4.5);
     y += 18;
 
@@ -1451,8 +1451,8 @@ async function buildEmployeeYearlyPDF(res, employeeName, employeeId, shopName, y
   drawKpiCard(doc, 700, kpiY, 115, 'OUTSTANDING', `£${(yearlyTotals.totalOutstanding || 0).toFixed(2)}`, '#dc2626');
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.rect(25, y, 790, 20).fillAndStroke('#f1f5f9', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
   doc.text('Month', 32, y + 6);
   doc.text('Work Days', 115, y + 6);
   doc.text('Hours (h)', 180, y + 6);
@@ -1812,8 +1812,8 @@ async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, ca
   drawKpiCard(doc, 625, kpiY, 190, 'BANK TRANSFERS', `£${(cashBankSummary.bankTotal || 0).toFixed(2)}`, '#7c3aed');
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.rect(25, y, 790, 20).fillAndStroke('#f1f5f9', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
   doc.text('Employee Name', 32, y + 6);
   doc.text('Shop', 200, y + 6);
   doc.text('Salary Week', 300, y + 6);
@@ -1916,8 +1916,8 @@ async function buildLedgerPDF(res, employee, transactions, summary = {}, generat
   drawKpiCard(doc, 400, kpiY, 170, 'CURRENT BALANCE', `£${(summary.outstanding || 0).toFixed(2)}`, summary.outstanding > 0 ? '#dc2626' : '#10b981');
 
   let y = 135;
-  doc.rect(25, y, 545, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.rect(25, y, 545, 20).fillAndStroke('#f1f5f9', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
   doc.text('Date', 32, y + 6);
   doc.text('Type', 105, y + 6);
   doc.text('Description', 200, y + 6);

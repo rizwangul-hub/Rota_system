@@ -348,17 +348,17 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     let curY = 18;
 
     // ── HEADER BANNER ──────────────────────────────────────────
-    doc.rect(MARGIN_LEFT, curY, PAGE_W, 44).fill(DARK);
+    doc.rect(MARGIN_LEFT, curY, PAGE_W, 44).fillAndStroke('#f8fafc', '#cbd5e1');
     doc.rect(MARGIN_LEFT, curY, 6, 44).fill(BLUE);
 
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(14)
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14)
        .text('PIXX ROTA', MARGIN_LEFT + 14, curY + 8, { lineBreak: false });
-    doc.font('Helvetica').fontSize(7.5).fillColor('#94a3b8')
+    doc.font('Helvetica').fontSize(7.5).fillColor('#64748b')
        .text('PixxTechnologies UK  •  Daily Workforce Attendance', MARGIN_LEFT + 14, curY + 26, { lineBreak: false });
 
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10)
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
        .text(formattedDate, MARGIN_LEFT + 200, curY + 8, { width: PAGE_W - 210, align: 'right', lineBreak: false });
-    doc.font('Helvetica').fontSize(7.5).fillColor('#38bdf8')
+    doc.font('Helvetica').fontSize(7.5).fillColor('#2563eb')
        .text(shopDoc ? `Shop: ${shopDoc.name}` : 'Times in 12-Hour UK Format  •  All Active Shops', MARGIN_LEFT + 200, curY + 25, { width: PAGE_W - 210, align: 'right', lineBreak: false });
 
     curY += 48;
@@ -388,11 +388,11 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     curY += 37;
 
     const drawContinuationBanner = () => {
-      doc.rect(MARGIN_LEFT, 18, PAGE_W, 24).fill(DARK);
+      doc.rect(MARGIN_LEFT, 18, PAGE_W, 24).fillAndStroke('#f8fafc', '#cbd5e1');
       doc.rect(MARGIN_LEFT, 18, 5, 24).fill(BLUE);
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9)
          .text('PIXX ROTA  •  DAILY ATTENDANCE (CONTINUED)', MARGIN_LEFT + 12, 26, { lineBreak: false });
-      doc.fillColor('#94a3b8').font('Helvetica').fontSize(8)
+      doc.fillColor('#64748b').font('Helvetica').fontSize(8)
          .text(formattedDate, MARGIN_LEFT + 250, 26, { width: PAGE_W - 258, align: 'right', lineBreak: false });
     };
 
