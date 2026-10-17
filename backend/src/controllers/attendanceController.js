@@ -439,30 +439,58 @@ exports.updateAttendanceRecord = async (req, res) => {
       timeReached = record.timeReached,
       workerEndTime = record.workerEndTime,
       status = record.status,
-      remarks = record.remarks
+      remarks = record.remarks,
+      shop,
+      shopId
     } = req.body;
 
     const gracePeriod = await getGracePeriod();
     const employee = record.employee ? await Employee.findById(record.employee) : null;
     const dailyWage = resolveDailyWage(record.dailyWage, employee?.dailyWage);
 
+    const isAbsent = status === 'Absent';
+    const incomingShopId = shopId || shop;
+
+    if (isAbsent) {
+      record.shop = null;
+      record.shopName = 'Absent';
+    } else if (incomingShopId) {
+      const foundShop = await Shop.findById(incomingShopId);
+      if (foundShop) {
+        record.shop = foundShop._id;
+        record.shopName = foundShop.name;
+      }
+    } else if (!record.shop || record.shopName === 'Absent') {
+      if (employee?.assignedShop) {
+        const foundShop = await Shop.findById(employee.assignedShop);
+        if (foundShop) {
+          record.shop = foundShop._id;
+          record.shopName = foundShop.name;
+        }
+      }
+    }
+
+    const finalShiftStart = isAbsent ? '' : (shiftStart || '09:00');
+    const finalShiftEnd = isAbsent ? '' : (shiftEnd || '19:00');
+    const finalTimeReached = isAbsent ? '' : (timeReached || finalShiftStart);
+    const finalWorkerEndTime = isAbsent ? '' : (workerEndTime || finalShiftEnd);
+
     const calcResult = calculateAttendanceRecord({
       dailyWage,
-      shiftStart,
-      shiftEnd,
-      timeReached,
-      workerEndTime,
+      shiftStart: finalShiftStart,
+      shiftEnd: finalShiftEnd,
+      timeReached: finalTimeReached,
+      workerEndTime: finalWorkerEndTime,
       status,
       gracePeriodMinutes: gracePeriod
     });
 
     record.dailyWage = dailyWage;
-
-    record.shiftStart = shiftStart;
-    record.shiftEnd = shiftEnd;
-    record.timeReached = timeReached;
-    record.workerEndTime = workerEndTime;
-    record.scheduledHours = calcResult.scheduledHours;
+    record.shiftStart = finalShiftStart;
+    record.shiftEnd = finalShiftEnd;
+    record.timeReached = finalTimeReached;
+    record.workerEndTime = finalWorkerEndTime;
+    record.scheduledHours = isAbsent ? 0 : calcResult.scheduledHours;
     record.actualHours = calcResult.actualHours;
     record.lateMinutes = calcResult.lateMinutes;
     record.status = calcResult.status;
@@ -470,6 +498,14 @@ exports.updateAttendanceRecord = async (req, res) => {
     record.lateDeduction = calcResult.lateDeduction;
     record.attendancePay = calcResult.attendancePay;
     record.remarks = remarks;
+
+    if (['ADMIN', 'ATTENDANCE_CHECKER'].includes(req.user.role)) {
+      if (record.approvalStatus === 'Checked' || record.approvalStatus === 'Finalized') {
+        record.checkedBy = req.user._id;
+        record.checkedByName = req.user.name;
+        record.checkedAt = new Date();
+      }
+    }
 
     await record.save();
 
@@ -480,9 +516,12 @@ exports.updateAttendanceRecord = async (req, res) => {
       action: 'ATTENDANCE_EDITED',
       recordType: 'Attendance',
       recordId: record._id,
-      details: `Edited attendance for ${record.employeeName} on ${record.dateString}: late ${record.lateMinutes}m, deduction £${record.lateDeduction}`,
+      details: `Edited attendance for ${record.employeeName} (${record.shopName}) on ${record.dateString}: status ${record.status}, late ${record.lateMinutes}m, deduction £${record.lateDeduction}, pay £${record.attendancePay}`,
       req
     });
+
+    await record.populate('employee');
+    await record.populate('shop');
 
     res.json({ success: true, message: 'Attendance updated successfully.', record: attendanceResponse(req, record) });
   } catch (error) {
