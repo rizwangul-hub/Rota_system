@@ -575,19 +575,19 @@ async function buildCommissionExcel(bonuses, monthStr, yearStr) {
   const sheet = workbook.addWorksheet('Commission Details');
 
   // Title
-  sheet.mergeCells('A1:F1');
+  sheet.mergeCells('A1:G1');
   const title = sheet.getCell('A1');
   title.value = 'Commission Details';
   title.font = { name: 'Arial', size: 16, bold: true };
   title.alignment = { horizontal: 'center' };
 
-  sheet.mergeCells('A2:F2');
+  sheet.mergeCells('A2:G2');
   const subTitle = sheet.getCell('A2');
   subTitle.value = `${monthStr} ${yearStr}`;
   subTitle.font = { name: 'Arial', size: 13, bold: true };
   subTitle.alignment = { horizontal: 'center' };
 
-  const headerRow = sheet.addRow(['No', 'Name', 'Commitment', 'Monthly Sale', 'Rate', 'Commision']);
+  const headerRow = sheet.addRow(['No', 'Name', 'Commitment', 'Monthly Sale', 'Rate', 'Commision', 'Notes']);
   headerRow.eachCell(cell => {
     cell.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF000000' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Yellow matching image
@@ -609,7 +609,8 @@ async function buildCommissionExcel(bonuses, monthStr, yearStr) {
       b.commitmentText || `${b.bonusPercentage}% - ${b.shopName}`,
       b.salesAmount ? `£${b.salesAmount.toLocaleString()}` : '£0',
       `${b.bonusPercentage}%`,
-      b.bonusAmount ? `£${b.bonusAmount.toFixed(2)}` : '£0'
+      b.bonusAmount ? `£${b.bonusAmount.toFixed(2)}` : '£0',
+      b.notes || ''
     ]);
     row.eachCell(cell => {
       cell.border = {
@@ -622,7 +623,7 @@ async function buildCommissionExcel(bonuses, monthStr, yearStr) {
   });
 
   // Total Row matching yellow footer in image
-  const totalRow = sheet.addRow(['Total', '', '', '', '', `£${totalComm.toFixed(2)}`]);
+  const totalRow = sheet.addRow(['Total', '', '', '', '', `£${totalComm.toFixed(2)}`, '']);
   sheet.mergeCells(`A${totalRow.number}:E${totalRow.number}`);
   totalRow.getCell(1).alignment = { horizontal: 'center' };
   totalRow.eachCell(cell => {
@@ -638,6 +639,7 @@ async function buildCommissionExcel(bonuses, monthStr, yearStr) {
 
   sheet.columns.forEach(col => { col.width = 18; });
   sheet.getColumn(1).width = 6;
+  sheet.getColumn(7).width = 28;
   return workbook;
 }
 
@@ -1501,14 +1503,16 @@ async function buildBonusPDF(res, bonuses, month, year, totals = {}, generatedBy
   drawKpiCard(doc, 565, kpiY, 250, 'TOTAL COMMISSION PAYABLE', `£${(totals.totalBonus || 0).toFixed(2)}`, '#059669');
 
   let y = 135;
-  doc.rect(25, y, 790, 20).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.rect(25, y, 790, 20).fill('#f1f5f9');
+  doc.rect(25, y, 790, 20).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8);
   doc.text('Employee Name', 32, y + 6);
-  doc.text('Shop Location', 200, y + 6);
-  doc.text('Commitment / Tier', 330, y + 6);
-  doc.text('Sales Amount (£)', 500, y + 6);
-  doc.text('Rate (%)', 630, y + 6);
-  doc.text('Commission (£)', 710, y + 6);
+  doc.text('Shop Location', 160, y + 6);
+  doc.text('Commitment / Tier', 255, y + 6);
+  doc.text('Sales Amount (£)', 360, y + 6);
+  doc.text('Rate (%)', 450, y + 6);
+  doc.text('Commission (£)', 500, y + 6);
+  doc.text('Notes / Remarks', 585, y + 6);
   y += 20;
 
   bonuses.forEach((b, idx) => {
@@ -1518,12 +1522,14 @@ async function buildBonusPDF(res, bonuses, month, year, totals = {}, generatedBy
     }
     const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
     doc.rect(25, y, 790, 16).fill(bg);
-    doc.fillColor('#0f172a').font('Helvetica-Bold').text((b.employeeName || '').slice(0, 22), 32, y + 4).font('Helvetica');
-    doc.text((b.shopName || '').slice(0, 16), 200, y + 4);
-    doc.text((b.commitmentText || `${b.bonusPercentage}% commission`).slice(0, 24), 330, y + 4);
-    doc.text(`£${(b.salesAmount || 0).toLocaleString('en-GB')}`, 500, y + 4);
-    doc.text(`${b.bonusPercentage}%`, 630, y + 4);
-    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(b.bonusAmount || 0).toFixed(2)}`, 710, y + 4).font('Helvetica').fillColor('#0f172a');
+    doc.rect(25, y, 790, 16).strokeColor('#e2e8f0').lineWidth(0.4).stroke();
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text((b.employeeName || '').slice(0, 20), 32, y + 4).font('Helvetica');
+    doc.text((b.shopName || '').slice(0, 15), 160, y + 4);
+    doc.text((b.commitmentText || `${b.bonusPercentage}% commission`).slice(0, 20), 255, y + 4);
+    doc.text(`£${(b.salesAmount || 0).toLocaleString('en-GB')}`, 360, y + 4);
+    doc.text(`${b.bonusPercentage}%`, 450, y + 4);
+    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${(b.bonusAmount || 0).toFixed(2)}`, 500, y + 4).font('Helvetica').fillColor('#0f172a');
+    doc.fillColor('#475569').text((b.notes || '—').slice(0, 38), 585, y + 4, { width: 220, lineBreak: false });
     y += 16;
   });
 

@@ -1199,6 +1199,7 @@ export default function ReportsPage() {
                     <th>Monthly Sale</th>
                     <th>Rate</th>
                     <th>Calculated Bonus</th>
+                    <th>Notes</th>
                     <th>Date Logged</th>
                   </tr>
                 </thead>
@@ -1211,12 +1212,13 @@ export default function ReportsPage() {
                       <td style={{ fontWeight: 600 }}>£{(b.salesAmount || 0).toLocaleString()}</td>
                       <td>{b.bonusPercentage}%</td>
                       <td style={{ fontWeight: 700, color: '#059669' }}>£{(b.bonusAmount || 0).toFixed(2)}</td>
+                      <td style={{ fontSize: '12px', color: '#64748b' }}>{b.notes || '—'}</td>
                       <td style={{ fontSize: '12px', color: '#64748b' }}>{new Date(b.createdAt).toLocaleDateString('en-GB')}</td>
                     </tr>
                   ))}
                   {(!bonusData.bonuses || bonusData.bonuses.length === 0) && (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No bonus or commission records found for this period.
                       </td>
                     </tr>
@@ -1477,7 +1479,8 @@ export default function ReportsPage() {
                       BONUS_CREDIT: { background: '#ccfbf1', color: '#0f766e' },
                       SALARY_EARNED: { background: '#dbeafe', color: '#1d4ed8' },
                       SALARY_PAYMENT: { background: '#dcfce7', color: '#15803d' },
-                      DEDUCTION: { background: '#fee2e2', color: '#b91c1c' }
+                      DEDUCTION: { background: '#fee2e2', color: '#b91c1c' },
+                      WAGE_INCREASE: { background: '#fef3c7', color: '#92400e' }
                     }[t.transactionType] || { background: '#f1f5f9', color: '#475569' };
 
                     return (

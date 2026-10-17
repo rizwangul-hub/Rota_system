@@ -156,6 +156,12 @@ router.get(
   reportController.exportCommissionExcel
 );
 router.get(
+  '/commission/pdf',
+  authenticate,
+  authorize('ADMIN'),
+  reportController.exportBonusPDF
+);
+router.get(
   '/bonus/excel',
   authenticate,
   authorize('ADMIN'),

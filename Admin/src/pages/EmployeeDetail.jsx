@@ -201,6 +201,8 @@ export default function EmployeeDetail() {
         return { background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
       case 'DEDUCTION':
         return { background: '#fee2e2', color: '#b91c1c', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+      case 'WAGE_INCREASE':
+        return { background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
       default:
         return { background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
     }
@@ -652,13 +654,21 @@ export default function EmployeeDetail() {
                         <td style={{ fontSize: '12px', color: '#64748b' }}>
                           {isOpening ? (
                             employee.openingBalanceNote || 'Initial Balance Brought Forward'
+                          ) : t.transactionType === 'WAGE_INCREASE' ? (
+                            [
+                              t.breakdown?.previousWage !== undefined ? `Previous: £${Number(t.breakdown.previousWage).toFixed(2)}` : null,
+                              t.breakdown?.newWage !== undefined ? `New Wage: £${Number(t.breakdown.newWage).toFixed(2)}` : null,
+                              t.breakdown?.effectiveDate ? `Effective: ${new Date(t.breakdown.effectiveDate).toLocaleDateString('en-GB')}` : null,
+                              t.breakdown?.reason ? `Reason: ${t.breakdown.reason}` : null
+                            ].filter(Boolean).join(' • ') || 'Wage Rate Adjusted'
                           ) : t.breakdown ? (
                             [
                               t.breakdown.workingDays ? `${t.breakdown.workingDays}d worked` : null,
                               t.breakdown.grossSalary ? `Gross: £${t.breakdown.grossSalary.toFixed(2)}` : null,
                               t.breakdown.bonus > 0 ? `Bonus: +£${t.breakdown.bonus.toFixed(2)}` : null,
                               t.breakdown.deductions > 0 ? `Ded: -£${t.breakdown.deductions.toFixed(2)}` : null,
-                              t.breakdown.paymentMethod ? `${t.breakdown.paymentMethod}${t.breakdown.paymentReference ? ` (${t.breakdown.paymentReference})` : ''}` : null
+                              t.breakdown.paymentMethod ? `${t.breakdown.paymentMethod}${t.breakdown.paymentReference ? ` (${t.breakdown.paymentReference})` : ''}` : null,
+                              t.breakdown.notes ? `Note: ${t.breakdown.notes}` : null
                             ].filter(Boolean).join(' • ') || '—'
                           ) : '—'}
                         </td>

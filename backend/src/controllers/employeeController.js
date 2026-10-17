@@ -12,7 +12,7 @@ const RotaAssignmentClaim = require('../models/RotaAssignmentClaim');
 const RotaAvailability = require('../models/RotaAvailability');
 const { logAction } = require('../utils/audit');
 const { employeeAttendanceRosterEntry } = require('../utils/attendanceViews');
-const { syncEmployeeOpeningBalance } = require('../utils/ledgerHelper');
+const { syncEmployeeOpeningBalance, syncWageHistoryToLedger } = require('../utils/ledgerHelper');
 
 async function findHighestEmployeeSequence() {
   const employees = await Employee.find({ employeeId: /^PIXX\d+$/i }).select('employeeId').lean();
@@ -222,6 +222,7 @@ exports.updateEmployee = async (req, res) => {
     if (updates.notes !== undefined) oldEmp.notes = updates.notes;
     if (updates.startDate) oldEmp.startDate = new Date(updates.startDate);
 
+    let wageChanged = false;
     // Wage update with history tracking
     if (updates.dailyWage !== undefined && Number(updates.dailyWage) !== oldEmp.dailyWage) {
       const newWage = Number(updates.dailyWage);
@@ -230,12 +231,14 @@ exports.updateEmployee = async (req, res) => {
       }
       auditDetails.push(`Changed daily wage from £${oldEmp.dailyWage} to £${newWage}`);
       oldEmp.dailyWage = newWage;
+      const effectiveDate = updates.wageEffectiveDate ? new Date(updates.wageEffectiveDate) : new Date();
       oldEmp.wageHistory.push({
         wage: newWage,
-        effectiveDate: new Date(),
+        effectiveDate,
         changedBy: req.user._id,
         reason: updates.wageChangeReason || 'Administrative adjustment'
       });
+      wageChanged = true;
 
       // Update any attendance records for this employee where dailyWage was 0 or missing
       const Attendance = require('../models/Attendance');
@@ -296,6 +299,9 @@ exports.updateEmployee = async (req, res) => {
 
     if (openingBalanceChanged) {
       await syncEmployeeOpeningBalance(oldEmp, oldEmp.openingBalance, oldEmp.openingBalanceDate, oldEmp.openingBalanceNote, req.user._id);
+    }
+    if (wageChanged) {
+      await syncWageHistoryToLedger(oldEmp, req.user._id);
     }
     const updated = await Employee.findById(id);
 

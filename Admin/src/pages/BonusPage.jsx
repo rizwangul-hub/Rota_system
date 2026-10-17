@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
-import { Plus, Download, RefreshCw, X, Trash2, Edit } from 'lucide-react';
+import { Plus, Download, RefreshCw, X, Trash2, Edit, FileText } from 'lucide-react';
 
 export default function BonusPage() {
   const [bonuses, setBonuses] = useState([]);
@@ -19,6 +19,7 @@ export default function BonusPage() {
   const [salesAmount, setSalesAmount] = useState('');
   const [rate, setRate] = useState(1);
   const [commitment, setCommitment] = useState('');
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
     fetchEmployeesAndShops();
@@ -63,11 +64,13 @@ export default function BonusPage() {
         year: Number(year),
         salesAmount: Number(salesAmount),
         bonusPercentage: Number(rate),
-        commitmentText: commitment
+        commitmentText: commitment,
+        notes: notes.trim()
       });
       if (res.data.success) {
         setIsAddModalOpen(false);
         setSalesAmount('');
+        setNotes('');
         fetchBonuses();
       }
     } catch (err) {
@@ -83,6 +86,10 @@ export default function BonusPage() {
     } catch (err) {
       alert('Failed to delete');
     }
+  };
+
+  const downloadPDF = () => {
+    window.open(`${API_BASE_URL}/reports/commission/pdf?month=${month}&year=${year}`, '_blank');
   };
 
   const downloadExcel = () => {
@@ -105,10 +112,13 @@ export default function BonusPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-outline btn-sm" onClick={downloadExcel}>
+          <button className="btn btn-outline btn-sm" onClick={downloadPDF} title="Download PDF Report">
+            <FileText size={14} color="#dc2626" /> Download PDF
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={downloadExcel} title="Download Excel Spreadsheet">
             <Download size={14} /> Download Excel
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => setIsAddModalOpen(true)}>
+          <button className="btn btn-primary btn-sm" onClick={() => { setNotes(''); setIsAddModalOpen(true); }}>
             <Plus size={14} /> Add Commission
           </button>
         </div>
@@ -164,6 +174,7 @@ export default function BonusPage() {
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'right' }}>Monthly Sale</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'center', width: '80px' }}>Rate</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'right' }}>Commision</th>
+                <th style={{ padding: '10px 14px', border: '1px solid #000' }}>Notes</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'center', width: '70px' }}>Action</th>
               </tr>
             </thead>
@@ -184,6 +195,9 @@ export default function BonusPage() {
                   <td style={{ padding: '10px 14px', border: '1px solid #cbd5e1', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
                     £{b.bonusAmount?.toFixed(2)}
                   </td>
+                  <td style={{ padding: '10px 14px', border: '1px solid #cbd5e1', color: '#64748b', fontSize: '12px' }}>
+                    {b.notes || '—'}
+                  </td>
                   <td style={{ padding: '10px 14px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
                     <button
                       onClick={() => handleDelete(b._id)}
@@ -198,7 +212,7 @@ export default function BonusPage() {
 
               {bonuses.length === 0 && !loading && (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                     No commission records for {month} {year}. Click "Add Commission" above.
                   </td>
                 </tr>
@@ -213,6 +227,7 @@ export default function BonusPage() {
                 <td style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'right', fontSize: '15px' }}>
                   £{totals.totalBonus?.toFixed(2) || '0.00'}
                 </td>
+                <td style={{ border: '1px solid #000' }}></td>
                 <td style={{ border: '1px solid #000' }}></td>
               </tr>
             </tfoot>
@@ -308,6 +323,17 @@ export default function BonusPage() {
                     placeholder="e.g. 1% - Leebridge"
                     value={commitment}
                     onChange={(e) => setCommitment(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Notes / Remarks</label>
+                  <textarea
+                    className="form-input"
+                    rows="2"
+                    placeholder="e.g. Target reached, Special incentive, Easter weekend sales..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
 

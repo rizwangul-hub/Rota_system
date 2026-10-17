@@ -145,6 +145,7 @@ export default function Employees() {
         email: editModalEmployee.email,
         dailyWage: Number(editModalEmployee.dailyWage),
         employmentStatus: editModalEmployee.employmentStatus,
+        wageEffectiveDate: editModalEmployee.wageEffectiveDate || undefined,
         wageChangeReason: editModalEmployee.wageChangeReason || '',
         openingBalance: editModalEmployee.openingBalance !== '' && editModalEmployee.openingBalance !== undefined ? Number(editModalEmployee.openingBalance) : 0,
         openingBalanceNote: editModalEmployee.openingBalanceNote || '',
@@ -276,7 +277,7 @@ export default function Employees() {
                       <Link to={`/employees/${emp._id}`} className="btn btn-outline btn-sm" title="View Full Profile & History">
                         <Eye size={13} /> Profile
                       </Link>
-                      <button className="btn btn-outline btn-sm" onClick={() => setEditModalEmployee({ ...emp })} title="Edit Employee">
+                      <button className="btn btn-outline btn-sm" onClick={() => setEditModalEmployee({ ...emp, wageEffectiveDate: new Date().toISOString().split('T')[0], wageChangeReason: '' })} title="Edit Employee">
                         <Edit size={13} />
                       </button>
                       <button
@@ -532,15 +533,30 @@ export default function Employees() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Wage Adjustment Reason (Optional)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Reason for changing daily wage"
-                    value={editModalEmployee.wageChangeReason || ''}
-                    onChange={(e) => setEditModalEmployee({ ...editModalEmployee, wageChangeReason: e.target.value })}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Wage Increase / Change Effective Date</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={editModalEmployee.wageEffectiveDate || ''}
+                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, wageEffectiveDate: e.target.value })}
+                    />
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                      Date when new daily wage takes effect (appears in employee ledger)
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Wage Adjustment Reason (Optional)</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Salary increment, Promotion"
+                      value={editModalEmployee.wageChangeReason || ''}
+                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, wageChangeReason: e.target.value })}
+                    />
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

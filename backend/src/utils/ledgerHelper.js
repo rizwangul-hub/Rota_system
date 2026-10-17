@@ -1,11 +1,108 @@
 const LedgerTransaction = require('../models/LedgerTransaction');
 
 /**
+ * Synchronize wage increases / adjustments with the ledger so wage change dates
+ * appear as chronological audit milestones with increase date and details.
+ */
+async function syncWageHistoryToLedger(employee, userId = null) {
+  if (!employee || !employee._id) return;
+  const EmployeeModel = require('../models/Employee');
+  const emp = await EmployeeModel.findById(employee._id).select('wageHistory').lean();
+  if (!emp || !emp.wageHistory || emp.wageHistory.length <= 1) return;
+
+  const sorted = [...emp.wageHistory].sort((a, b) => new Date(a.effectiveDate || a.createdAt || 0) - new Date(b.effectiveDate || b.createdAt || 0));
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    if (Number(curr.wage) !== Number(prev.wage)) {
+      const isIncrease = Number(curr.wage) > Number(prev.wage);
+      const reasonStr = curr.reason && curr.reason.trim() ? ` (${curr.reason.trim()})` : '';
+      const description = `Daily wage ${isIncrease ? 'increased' : 'adjusted'} from £${Number(prev.wage).toFixed(2)} to £${Number(curr.wage).toFixed(2)}${reasonStr}`;
+      const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
+
+      await LedgerTransaction.findOneAndUpdate(
+        {
+          employee: emp._id,
+          referenceId: curr._id,
+          referenceType: 'WageHistory'
+        },
+        {
+          employee: emp._id,
+          date: txDate,
+          transactionType: 'WAGE_INCREASE',
+          description,
+          referenceType: 'WageHistory',
+          referenceId: curr._id,
+          amountEarned: 0,
+          amountPaid: 0,
+          breakdown: {
+            previousWage: Number(prev.wage),
+            newWage: Number(curr.wage),
+            effectiveDate: txDate,
+            reason: curr.reason || ''
+          },
+          ...(userId ? { createdBy: userId } : {})
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
+  }
+
+  return await recalculateEmployeeLedger(emp._id);
+}
+
+/**
  * Recalculate running balance across all transactions for an employee in chronological order.
  * This guarantees the ledger always stays mathematically consistent.
  */
 async function recalculateEmployeeLedger(employeeId) {
   if (!employeeId) return { transactions: [], totalEarned: 0, totalPaid: 0, currentBalance: 0 };
+
+  try {
+    const EmployeeModel = require('../models/Employee');
+    const emp = await EmployeeModel.findById(employeeId).select('wageHistory').lean();
+    if (emp && emp.wageHistory && emp.wageHistory.length > 1) {
+      const sorted = [...emp.wageHistory].sort((a, b) => new Date(a.effectiveDate || a.createdAt || 0) - new Date(b.effectiveDate || b.createdAt || 0));
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = sorted[i - 1];
+        const curr = sorted[i];
+        if (Number(curr.wage) !== Number(prev.wage)) {
+          const isIncrease = Number(curr.wage) > Number(prev.wage);
+          const reasonStr = curr.reason && curr.reason.trim() ? ` (${curr.reason.trim()})` : '';
+          const description = `Daily wage ${isIncrease ? 'increased' : 'adjusted'} from £${Number(prev.wage).toFixed(2)} to £${Number(curr.wage).toFixed(2)}${reasonStr}`;
+          const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
+
+          await LedgerTransaction.findOneAndUpdate(
+            {
+              employee: employeeId,
+              referenceId: curr._id,
+              referenceType: 'WageHistory'
+            },
+            {
+              employee: employeeId,
+              date: txDate,
+              transactionType: 'WAGE_INCREASE',
+              description,
+              referenceType: 'WageHistory',
+              referenceId: curr._id,
+              amountEarned: 0,
+              amountPaid: 0,
+              breakdown: {
+                previousWage: Number(prev.wage),
+                newWage: Number(curr.wage),
+                effectiveDate: txDate,
+                reason: curr.reason || ''
+              }
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error auto-syncing wage history into ledger:', err.message);
+  }
 
   const transactions = await LedgerTransaction.find({ employee: employeeId })
     .sort({ date: 1, createdAt: 1 });
@@ -43,7 +140,6 @@ async function syncEmployeeOpeningBalance(employee, openingBalance, openingBalan
 
   if (balance !== 0) {
     const txDate = openingBalanceDate ? new Date(openingBalanceDate) : (employee.startDate ? new Date(employee.startDate) : new Date());
-    // Ensure date is set to early morning so it precedes any same-day attendance transactions
     txDate.setHours(0, 0, 0, 0);
 
     const amountEarned = balance >= 0 ? balance : 0;
@@ -71,7 +167,6 @@ async function syncEmployeeOpeningBalance(employee, openingBalance, openingBalan
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
   } else {
-    // If balance is 0, remove opening balance entry
     await LedgerTransaction.deleteMany({
       employee: employee._id,
       transactionType: 'OPENING_BALANCE'
@@ -90,13 +185,12 @@ async function syncBonusToLedger(bonus, userId = null) {
   if (!bonus || !bonus.employee) return;
 
   if (bonus.assignedWeeklySalary) {
-    // Assigned to weekly salary: remove standalone transaction to avoid double counting
     await LedgerTransaction.deleteMany({
       referenceId: bonus._id,
       referenceType: 'Bonus'
     });
   } else if ((bonus.bonusAmount || 0) > 0) {
-    // Standalone bonus: create/update BONUS_CREDIT transaction
+    const noteStr = bonus.notes && bonus.notes.trim() ? ` - Note: ${bonus.notes.trim()}` : '';
     await LedgerTransaction.findOneAndUpdate(
       {
         employee: bonus.employee,
@@ -107,12 +201,19 @@ async function syncBonusToLedger(bonus, userId = null) {
         employee: bonus.employee,
         date: bonus.createdAt ? new Date(bonus.createdAt) : new Date(),
         transactionType: 'BONUS_CREDIT',
-        description: `Commission / Bonus for ${bonus.month} ${bonus.year}${bonus.shopName ? ` (${bonus.shopName})` : ''}`,
+        description: `Commission / Bonus for ${bonus.month} ${bonus.year}${bonus.shopName ? ` (${bonus.shopName})` : ''}${noteStr}`,
         referenceType: 'Bonus',
         referenceId: bonus._id,
         bonus: Number(bonus.bonusAmount) || 0,
         amountEarned: Number(bonus.bonusAmount) || 0,
         amountPaid: 0,
+        breakdown: {
+          bonus: Number(bonus.bonusAmount) || 0,
+          salesAmount: Number(bonus.salesAmount) || 0,
+          rate: Number(bonus.bonusPercentage) || 0,
+          shopName: bonus.shopName || '',
+          notes: bonus.notes || ''
+        },
         ...(userId ? { createdBy: userId } : {})
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -144,5 +245,6 @@ module.exports = {
   recalculateEmployeeLedger,
   syncEmployeeOpeningBalance,
   syncBonusToLedger,
+  syncWageHistoryToLedger,
   removeBonusFromLedger
 };
