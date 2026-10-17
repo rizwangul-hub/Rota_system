@@ -1734,53 +1734,33 @@ exports.exportPdf = async (req, res) => {
           const workersToExport = [...employeesById.values()].sort((a, b) => a.name.localeCompare(b.name));
           for (const employee of workersToExport) {
             const pdf = await makePdfBuffer(doc => {
-              drawDetailPdfHeader(doc, `${employee.name} — Weekly Rota`, 'Your work location and rota status for each day', week);
+              drawDetailPdfHeader(doc, `${employee.name} — Weekly Rota`, 'Your work location for each day', week);
               const left = 60;
               let y = 112;
               doc.rect(left, y, 720, 26).fill('#f1f5f9');
-              const workerColumnWidths = [100, 140, 240, 240];
+              const workerColumnWidths = [160, 200, 360];
               let columnX = left;
               workerColumnWidths.forEach(width => {
                 doc.rect(columnX, y, width, 26).strokeColor('#cbd5e1').lineWidth(0.8).stroke();
                 columnX += width;
               });
-              doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
-                .text('DAY', left + 10, y + 9, { width: 90 })
-                .text('DATE', left + 110, y + 9, { width: 120 })
-                .text('SHOP / LOCATION', left + 250, y + 9, { width: 220 })
-                .text('SHIFT / STATUS', left + 490, y + 9, { width: 210 });
+              doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8.5)
+                .text('DAY', left + 14, y + 9, { width: 140 })
+                .text('DATE', left + 160 + 14, y + 9, { width: 180 })
+                .text('SHOP / LOCATION', left + 360 + 14, y + 9, { width: 330 });
               y += 26;
               weekDates.forEach((dateKey, index) => {
                 const schedule = schedules.get(`${id(employee._id)}:${dateKey}`);
                 const workingShopIds = [...(schedule?.working.keys() || [])];
                 let location = 'Not assigned';
-                let shift = '—';
                 let status = 'NOT_ASSIGNED';
                 if (workingShopIds.length) {
                   location = workingShopIds.map(shopId => shopsById.get(shopId)?.name || 'Other shop').join(', ');
                   const dayAssignment = schedule.working.get(workingShopIds[0])[0];
-                  const workingShopId = workingShopIds[0];
-                  const definedTimes = getShopShiftTimes(workingShopId, dateKey, allShopSchedules);
-
-                  let sStart = dayAssignment.startTime;
-                  let sEnd = dayAssignment.endTime;
-
-                  // If assignment is not custom, or was saved with the generic 09:00-17:00 placeholder,
-                  // apply the shop's defined schedule for this day
-                  if (dayAssignment.status !== 'CUSTOM' || (sStart === '09:00' && sEnd === '17:00') || !sStart || !sEnd) {
-                    sStart = definedTimes.startTime;
-                    sEnd = definedTimes.endTime;
-                  }
-
-                  const start12 = formatTime12Hour(sStart);
-                  const end12 = formatTime12Hour(sEnd);
-
-                  shift = `${start12} – ${end12}${dayAssignment.status === 'CUSTOM' && dayAssignment.note ? ` · ${dayAssignment.note}` : ''}`;
                   status = dayAssignment.status === 'CUSTOM' ? 'CUSTOM' : 'AVAILABLE';
                   if (workingShopIds.length > 1) status = 'CUSTOM';
                 } else if (schedule?.off) {
                   location = 'OFF';
-                  shift = 'Day off';
                   status = 'OFF';
                 }
                 doc.rect(left, y, 720, 38).fill(index % 2 ? '#f8fafc' : '#ffffff');
@@ -1791,10 +1771,9 @@ exports.exportPdf = async (req, res) => {
                 });
                 const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' })
                   .format(new Date(`${dateKey}T12:00:00.000Z`));
-                doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8).text(dayName, left + 10, y + 14, { width: 90 });
-                doc.font('Helvetica').text(formatRotaDate(dateKey), left + 110, y + 14, { width: 120 });
-                doc.fillColor(getRotaStatusTextColor(status)).font('Helvetica-Bold').text(location, left + 250, y + 14, { width: 220, lineBreak: false });
-                doc.fillColor(getRotaStatusTextColor(status)).font('Helvetica').text(shift, left + 490, y + 14, { width: 210, lineBreak: false });
+                doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8.5).text(dayName, left + 14, y + 14, { width: 140 });
+                doc.font('Helvetica').fontSize(8.5).text(formatRotaDate(dateKey), left + 160 + 14, y + 14, { width: 180 });
+                doc.fillColor(getRotaStatusTextColor(status)).font('Helvetica-Bold').fontSize(8.5).text(location, left + 360 + 14, y + 14, { width: 330, lineBreak: false });
                 y += 38;
               });
             });
