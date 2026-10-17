@@ -14,7 +14,13 @@ import {
   HandCoins,
   Receipt,
   UserCheck,
-  Clock
+  Clock,
+  BookOpen,
+  Award,
+  ArrowUpRight,
+  ArrowDownLeft,
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 
 export default function SalaryDistributor() {
@@ -39,6 +45,9 @@ export default function SalaryDistributor() {
   // Detail Modal state
   const [detailModalSalary, setDetailModalSalary] = useState(null);
   const [salaryDetails, setSalaryDetails] = useState(null);
+  const [employeeLedger, setEmployeeLedger] = useState(null);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState('ledger'); // 'ledger' or 'breakdown'
 
   // Receipt Modal state
   const [paymentReceipt, setPaymentReceipt] = useState(null);
@@ -98,7 +107,8 @@ export default function SalaryDistributor() {
     setPayModalSalary(salary);
     const openingBal = Number(salary.openingBalance || salary.employee?.openingBalance || 0);
     const weeklySalary = Number(salary.weeklySalary || salary.finalSalary || 0);
-    const totalPayable = Number(salary.totalPayable || (weeklySalary + openingBal));
+    const bonus = Number(salary.bonus || 0);
+    const totalPayable = Number(salary.totalPayable || (weeklySalary + openingBal + bonus));
     const totalPaid = Number(salary.totalPaid || 0);
     const outstanding = Number(salary.balanceRemaining > 0 ? salary.balanceRemaining : Math.max(0, totalPayable - totalPaid));
     setPayAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
@@ -127,12 +137,14 @@ export default function SalaryDistributor() {
       if (res.data.success) {
         const openingBal = Number(payModalSalary.openingBalance || payModalSalary.employee?.openingBalance || 0);
         const weeklySalary = Number(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0);
-        const totalPayable = Number(payModalSalary.totalPayable || (weeklySalary + openingBal));
+        const bonus = Number(payModalSalary.bonus || 0);
+        const totalPayable = Number(payModalSalary.totalPayable || (weeklySalary + openingBal + bonus));
         setPaymentReceipt(res.data.receipt || {
           employeeName: payModalSalary.employeeName,
           weekLabel: payModalSalary.weekLabel,
           weeklySalary,
           openingBalance: openingBal,
+          bonus,
           totalPayable,
           paymentAmount: amount,
           paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
@@ -155,13 +167,26 @@ export default function SalaryDistributor() {
 
   const openDetailsModal = async (salary) => {
     setDetailModalSalary(salary);
+    setSalaryDetails(null);
+    setEmployeeLedger(null);
+    setActiveDetailTab('ledger');
+    setLoadingLedger(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/salaries/${salary._id}`);
-      if (res.data.success) {
-        setSalaryDetails(res.data);
+      const empId = salary.employee?._id || salary.employee;
+      const [resDetails, resLedger] = await Promise.allSettled([
+        axios.get(`${API_BASE_URL}/salaries/${salary._id}`),
+        axios.get(`${API_BASE_URL}/salaries/ledger/employee/${empId}`)
+      ]);
+      if (resDetails.status === 'fulfilled' && resDetails.value.data?.success) {
+        setSalaryDetails(resDetails.value.data);
+      }
+      if (resLedger.status === 'fulfilled' && resLedger.value.data?.success) {
+        setEmployeeLedger(resLedger.value.data);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load salary details / ledger:', err);
+    } finally {
+      setLoadingLedger(false);
     }
   };
 
@@ -228,7 +253,7 @@ export default function SalaryDistributor() {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="stat-grid" style={{ marginBottom: '20px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+      <div className="stat-grid" style={{ marginBottom: '20px', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
         <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
           <div className="stat-lbl">Weekly Wages</div>
           <div className="stat-val" style={{ color: '#2563eb' }}>£{metrics.totalWeeklyWages?.toFixed(2) || '0.00'}</div>
@@ -243,11 +268,18 @@ export default function SalaryDistributor() {
             Previous unpaid balance
           </div>
         </div>
+        <div className="stat-card" style={{ borderLeft: '4px solid #ec4899' }}>
+          <div className="stat-lbl">Commission / Bonus</div>
+          <div className="stat-val" style={{ color: '#db2777' }}>£{metrics.totalCommissionBonus?.toFixed(2) || '0.00'}</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            Approved bonuses
+          </div>
+        </div>
         <div className="stat-card" style={{ borderLeft: '4px solid #0284c7' }}>
           <div className="stat-lbl">Total Payable</div>
           <div className="stat-val" style={{ color: '#0284c7' }}>£{metrics.totalPayable?.toFixed(2) || '0.00'}</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-            Weekly Wages + Opening
+            Weekly Wages + Opening + Bonus
           </div>
         </div>
         <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
@@ -383,6 +415,7 @@ export default function SalaryDistributor() {
                 <th style={{ textAlign: 'right' }}>Deductions</th>
                 <th style={{ textAlign: 'right' }}>Weekly Salary</th>
                 <th style={{ textAlign: 'right' }}>Opening Balance</th>
+                <th style={{ textAlign: 'right' }}>Commission / Bonus</th>
                 <th style={{ textAlign: 'right' }}>Total Payable</th>
                 <th style={{ textAlign: 'right' }}>Paid</th>
                 <th style={{ textAlign: 'right' }}>Remaining Balance</th>
@@ -451,8 +484,17 @@ export default function SalaryDistributor() {
                         <span style={{ color: '#94a3b8' }}>£0.00</span>
                       )}
                     </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {(s.bonus || 0) > 0 ? (
+                        <span style={{ color: '#db2777', fontWeight: 600, fontSize: '13px' }}>
+                          +£{(s.bonus || 0).toFixed(2)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>£0.00</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '14px', color: '#2563eb' }}>
-                      £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0))).toFixed(2)}
+                      £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0) + (s.bonus || 0))).toFixed(2)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {(s.totalPaid || 0) > 0 ? (
@@ -583,7 +625,7 @@ export default function SalaryDistributor() {
 
               {filteredSalaries.length === 0 && !loading && (
                 <tr>
-                  <td colSpan="13" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <td colSpan="14" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                     No finalized salary records found matching current criteria.
                   </td>
                 </tr>
@@ -649,9 +691,15 @@ export default function SalaryDistributor() {
                     <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
                     <strong style={{ color: '#7c3aed' }}>+£{(payModalSalary.openingBalance || 0).toFixed(2)}</strong>
                   </div>
+                  {(payModalSalary.bonus || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
+                      <span style={{ color: '#64748b' }}>Commission / Bonus:</span>
+                      <strong style={{ color: '#db2777' }}>+£{(payModalSalary.bonus || 0).toFixed(2)}</strong>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '4px', borderTop: '1px dashed #e2e8f0', paddingTop: '4px' }}>
                     <span style={{ fontWeight: 600, color: '#0f172a' }}>Total Payable Amount:</span>
-                    <strong style={{ color: '#2563eb', fontWeight: 700 }}>£{(payModalSalary.totalPayable || ((payModalSalary.finalSalary || 0) + (payModalSalary.openingBalance || 0))).toFixed(2)}</strong>
+                    <strong style={{ color: '#2563eb', fontWeight: 700 }}>£{(payModalSalary.totalPayable || ((payModalSalary.finalSalary || 0) + (payModalSalary.openingBalance || 0) + (payModalSalary.bonus || 0))).toFixed(2)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
                     <span style={{ color: '#64748b' }}>Already Paid:</span>
@@ -789,91 +837,412 @@ export default function SalaryDistributor() {
         </div>
       )}
 
-      {/* View Details Modal */}
-      {detailModalSalary && salaryDetails && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '650px' }}>
-            <div className="modal-header">
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
-                Salary Breakdown: {detailModalSalary.employeeName}
-              </h2>
+      {/* View Details Modal ("Salary Breakdown & Full Worker Ledger") */}
+      {detailModalSalary && (
+        <div className="modal-overlay" style={{ zIndex: 10001 }}>
+          <div className="modal-card" style={{ maxWidth: '880px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '16px 20px', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700
+                }}>
+                  <BookOpen size={18} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '17px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                    {detailModalSalary.employeeName}
+                  </h2>
+                  <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                    <span>ID: <strong>{detailModalSalary.employeeId}</strong></span>
+                    <span>•</span>
+                    <span>Shop: <strong>{detailModalSalary.shopName}</strong></span>
+                    <span>•</span>
+                    <span>Week: <strong>{detailModalSalary.weekLabel}</strong></span>
+                  </div>
+                </div>
+              </div>
               <button
                 onClick={() => setDetailModalSalary(null)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
-            <div className="modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>WORK DAYS</div>
-                  <div style={{ fontSize: '16px', fontWeight: 700 }}>{detailModalSalary.workingDays || 0} days</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>DAILY WAGE</div>
-                  <div style={{ fontSize: '16px', fontWeight: 700 }}>£{getDailyWage(detailModalSalary).toFixed(2)}</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>HOURS WORKED</div>
-                  <div style={{ fontSize: '16px', fontWeight: 700 }}>{detailModalSalary.actualHours || 0} hrs</div>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>NET ATTENDANCE</div>
-                  <div style={{ fontSize: '16px', fontWeight: 700 }}>£{detailModalSalary.netAttendancePay?.toFixed(2)}</div>
-                </div>
-              </div>
 
-              {/* Adjustments */}
-              <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#0f172a' }}>Allowances, Bonus & Deductions</div>
-                <div style={{ fontSize: '12px', color: '#475569', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-                  <div>• Travel Allowance: £{detailModalSalary.travelAllowance?.toFixed(2) || '0.00'}</div>
-                  <div>• Other Allowances: £{detailModalSalary.otherAllowances?.toFixed(2) || '0.00'}</div>
-                  <div style={{ color: '#dc2626' }}>• Manual Deductions: -£{detailModalSalary.manualDeductions?.toFixed(2) || '0.00'}</div>
-                  <div style={{ color: '#dc2626' }}>• Late Deductions: -£{detailModalSalary.lateDeductions?.toFixed(2) || '0.00'}</div>
-                  <div style={{ color: '#16a34a' }}>• Commission / Bonus: +£{detailModalSalary.bonus?.toFixed(2) || '0.00'}</div>
-                  <div style={{ fontWeight: 700, color: '#2563eb' }}>• Final Salary: £{detailModalSalary.finalSalary?.toFixed(2)}</div>
-                </div>
-              </div>
-
-              {/* Payments History */}
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Disbursement Payment History</div>
-                {salaryDetails.payments?.length > 0 ? (
-                  <table className="custom-table" style={{ fontSize: '12px' }}>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Method</th>
-                        <th>Amount</th>
-                        <th>Paid By</th>
-                        <th>Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {salaryDetails.payments.map(p => (
-                        <tr key={p._id}>
-                          <td>{new Date(p.paymentDate).toLocaleDateString('en-GB')}</td>
-                          <td>
-                            <span className="badge" style={{ background: '#f1f5f9', color: '#334155' }}>
-                              {p.paymentMethod}
-                            </span>
-                          </td>
-                          <td style={{ fontWeight: 700, color: '#059669' }}>£{p.amount.toFixed(2)}</td>
-                          <td>{p.paidByName}</td>
-                          <td style={{ color: '#64748b' }}>{p.notes || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div style={{ fontSize: '12px', color: '#94a3b8' }}>No payments disbursed yet.</div>
+            {/* Modal Navigation Tabs */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              padding: '10px 20px',
+              background: '#ffffff',
+              borderBottom: '1px solid #e2e8f0'
+            }}>
+              <button
+                type="button"
+                onClick={() => setActiveDetailTab('ledger')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: activeDetailTab === 'ledger' ? '#eff6ff' : 'transparent',
+                  color: activeDetailTab === 'ledger' ? '#2563eb' : '#64748b',
+                  fontWeight: activeDetailTab === 'ledger' ? 700 : 500,
+                  fontSize: '13.5px',
+                  cursor: 'pointer',
+                  borderBottom: activeDetailTab === 'ledger' ? '2px solid #2563eb' : '2px solid transparent'
+                }}
+              >
+                <BookOpen size={15} />
+                <span>Full Worker Ledger Statement</span>
+                {employeeLedger?.transactions?.length > 0 && (
+                  <span style={{
+                    background: activeDetailTab === 'ledger' ? '#2563eb' : '#e2e8f0',
+                    color: activeDetailTab === 'ledger' ? '#ffffff' : '#475569',
+                    fontSize: '11px',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    fontWeight: 700
+                  }}>
+                    {employeeLedger.transactions.length}
+                  </span>
                 )}
-              </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDetailTab('breakdown')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: activeDetailTab === 'breakdown' ? '#eff6ff' : 'transparent',
+                  color: activeDetailTab === 'breakdown' ? '#2563eb' : '#64748b',
+                  fontWeight: activeDetailTab === 'breakdown' ? 700 : 500,
+                  fontSize: '13.5px',
+                  cursor: 'pointer',
+                  borderBottom: activeDetailTab === 'breakdown' ? '2px solid #2563eb' : '2px solid transparent'
+                }}
+              >
+                <FileText size={15} />
+                <span>Week Salary Breakdown</span>
+              </button>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setDetailModalSalary(null)}>
+
+            <div className="modal-body" style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+              {loadingLedger && !employeeLedger && !salaryDetails ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+                  <RefreshCw size={24} className="spin" style={{ marginBottom: '10px' }} />
+                  <div>Loading worker details and complete ledger statement...</div>
+                </div>
+              ) : activeDetailTab === 'ledger' ? (
+                /* TAB 1: FULL WORKER LEDGER */
+                <div>
+                  {/* Ledger Metrics Summary */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                    gap: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', padding: '12px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>Opening Balance (Owed)</div>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#6d28d9', marginTop: '2px' }}>
+                        £{(employeeLedger?.summary?.openingBalance || detailModalSalary.openingBalance || 0).toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '3px' }}>Carried forward</div>
+                    </div>
+
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '12px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Total Earned</div>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#1e40af', marginTop: '2px' }}>
+                        £{(employeeLedger?.summary?.totalEarned || 0).toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#3b82f6', marginTop: '3px' }}>Wages + Commissions</div>
+                    </div>
+
+                    <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '12px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#059669', textTransform: 'uppercase' }}>Total Disbursed / Paid</div>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: '#047857', marginTop: '2px' }}>
+                        £{(employeeLedger?.summary?.totalPaid || 0).toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#10b981', marginTop: '3px' }}>Cash & bank handovers</div>
+                    </div>
+
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Current Balance Owed</div>
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: 800,
+                        color: (employeeLedger?.summary?.outstanding || 0) > 0 ? '#b45309' : '#059669',
+                        marginTop: '2px'
+                      }}>
+                        £{(employeeLedger?.summary?.outstanding || 0).toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#d97706', marginTop: '3px' }}>Remaining payable</div>
+                    </div>
+                  </div>
+
+                  {/* Ledger Information Banner */}
+                  <div style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    fontSize: '12px',
+                    color: '#475569',
+                    marginBottom: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Info size={16} color="#2563eb" style={{ flexShrink: 0 }} />
+                    <span>
+                      System ledger active from <strong>11 October 2026</strong>. Includes weekly salaries, approved monthly bonuses, and payouts.
+                    </span>
+                  </div>
+
+                  {/* Transactions Table */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <BookOpen size={15} color="#2563eb" /> Full Ledger Transaction Statement
+                    </div>
+                    {employeeLedger?.transactions?.length > 0 ? (
+                      <div className="table-responsive" style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <table className="custom-table" style={{ fontSize: '12px', margin: 0 }}>
+                          <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                              <th>Date</th>
+                              <th>Type</th>
+                              <th>Description</th>
+                              <th style={{ textAlign: 'right' }}>Earned / Credit</th>
+                              <th style={{ textAlign: 'right' }}>Paid / Debit</th>
+                              <th style={{ textAlign: 'right' }}>Remaining Balance</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {employeeLedger.transactions.map((tx, idx) => {
+                              const isOpening = tx.transactionType === 'OPENING_BALANCE';
+                              const isBonus = tx.transactionType === 'BONUS_CREDIT';
+                              const isSalary = tx.transactionType === 'WEEKLY_SALARY' || tx.transactionType === 'SALARY_EARNED';
+                              const isPayment = tx.transactionType === 'SALARY_PAYMENT';
+                              const isWageAdjustment = tx.transactionType === 'WAGE_INCREASE' || tx.transactionType === 'WAGE_ADJUSTMENT' || tx.transactionType === 'WAGE_CHANGE';
+
+                              return (
+                                <tr key={tx._id || idx}>
+                                  <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>
+                                    {new Date(tx.date).toLocaleDateString('en-GB')}
+                                  </td>
+                                  <td>
+                                    {isOpening && (
+                                      <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>
+                                        Opening Bal
+                                      </span>
+                                    )}
+                                    {isBonus && (
+                                      <span style={{ background: '#fdf2f8', color: '#db2777', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>
+                                        Bonus / Comm
+                                      </span>
+                                    )}
+                                    {isSalary && (
+                                      <span style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>
+                                        Weekly Salary
+                                      </span>
+                                    )}
+                                    {isPayment && (
+                                      <span style={{ background: '#ecfdf5', color: '#059669', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>
+                                        Salary Payout
+                                      </span>
+                                    )}
+                                    {isWageAdjustment && (
+                                      <span style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>
+                                        Wage Increase
+                                      </span>
+                                    )}
+                                    {!isOpening && !isBonus && !isSalary && !isPayment && !isWageAdjustment && (
+                                      <span className="badge badge-pending">
+                                        {tx.transactionType}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ color: '#334155' }}>
+                                    {tx.description}
+                                  </td>
+                                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                    {tx.amountEarned > 0 ? (
+                                      <span style={{ color: isBonus ? '#db2777' : '#1d4ed8' }}>
+                                        +£{tx.amountEarned.toFixed(2)}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#94a3b8' }}>—</span>
+                                    )}
+                                  </td>
+                                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                    {tx.amountPaid > 0 ? (
+                                      <span style={{ color: '#dc2626' }}>
+                                        -£{tx.amountPaid.toFixed(2)}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#94a3b8' }}>—</span>
+                                    )}
+                                  </td>
+                                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a', fontSize: '13px' }}>
+                                    £{Number(tx.runningBalance || 0).toFixed(2)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '24px', background: '#f8fafc', borderRadius: '8px', color: '#94a3b8', fontSize: '13px' }}>
+                        No ledger transactions found starting from 11 October 2026.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Payment Disbursements List */}
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <HandCoins size={15} color="#059669" /> Recorded Payout Receipts
+                    </div>
+                    {salaryDetails?.payments?.length > 0 ? (
+                      <div className="table-responsive" style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <table className="custom-table" style={{ fontSize: '12px', margin: 0 }}>
+                          <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                              <th>Date</th>
+                              <th>Method</th>
+                              <th style={{ textAlign: 'right' }}>Amount Paid</th>
+                              <th>Paid By</th>
+                              <th>Notes / Handover Details</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salaryDetails.payments.map(p => (
+                              <tr key={p._id}>
+                                <td>{new Date(p.paymentDate).toLocaleDateString('en-GB')}</td>
+                                <td>
+                                  <span style={{
+                                    background: p.paymentMethod === 'Cash' ? '#ecfdf5' : '#eff6ff',
+                                    color: p.paymentMethod === 'Cash' ? '#059669' : '#2563eb',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontWeight: 600,
+                                    fontSize: '11px'
+                                  }}>
+                                    {p.paymentMethod} Handover
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13px' }}>
+                                  £{p.amount.toFixed(2)}
+                                </td>
+                                <td style={{ fontWeight: 500 }}>{p.paidByName}</td>
+                                <td style={{ color: '#64748b' }}>{p.notes || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: '#94a3b8', padding: '12px', background: '#f8fafc', borderRadius: '8px' }}>
+                        No payments recorded for this salary period yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* TAB 2: CURRENT WEEK BREAKDOWN */
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+                    <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>WORK DAYS</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700 }}>{detailModalSalary.workingDays || 0} days</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>DAILY WAGE</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700 }}>£{getDailyWage(detailModalSalary).toFixed(2)}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>HOURS WORKED</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700 }}>{detailModalSalary.actualHours || 0} hrs</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>NET ATTENDANCE</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#2563eb' }}>£{detailModalSalary.netAttendancePay?.toFixed(2) || (detailModalSalary.finalSalary || 0).toFixed(2)}</div>
+                    </div>
+                  </div>
+
+                  {/* Adjustments & Formulas */}
+                  <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '14px 18px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px', color: '#0f172a' }}>Allowances, Deductions & Formula Breakdown</div>
+                    <div style={{ fontSize: '12.5px', color: '#334155', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <div>• Travel Allowance: £{detailModalSalary.travelAllowance?.toFixed(2) || '0.00'}</div>
+                      <div>• Other Allowances: £{detailModalSalary.otherAllowances?.toFixed(2) || '0.00'}</div>
+                      <div style={{ color: '#dc2626' }}>• Manual Deductions: -£{detailModalSalary.manualDeductions?.toFixed(2) || '0.00'}</div>
+                      <div style={{ color: '#dc2626' }}>• Late Deductions: -£{detailModalSalary.lateDeductions?.toFixed(2) || '0.00'}</div>
+                      <div style={{ color: '#db2777', fontWeight: 600 }}>• Commission / Bonus: +£{Number(detailModalSalary.bonus || 0).toFixed(2)}</div>
+                      <div style={{ color: '#7c3aed', fontWeight: 600 }}>• Opening Balance (Owed): +£{Number(detailModalSalary.openingBalance || 0).toFixed(2)}</div>
+                    </div>
+                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1', display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 700 }}>
+                      <span style={{ color: '#0f172a' }}>Total Payable for Handover:</span>
+                      <span style={{ color: '#2563eb' }}>
+                        £{(detailModalSalary.totalPayable || ((detailModalSalary.finalSalary || 0) + (detailModalSalary.openingBalance || 0) + (detailModalSalary.bonus || 0))).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Attendance Log Table */}
+                  {salaryDetails?.attendances?.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+                        Daily Attendance Shifts
+                      </div>
+                      <div className="table-responsive" style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <table className="custom-table" style={{ fontSize: '12px', margin: 0 }}>
+                          <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                              <th>Date</th>
+                              <th>Day</th>
+                              <th>Shift Scheduled</th>
+                              <th>Actual Hours</th>
+                              <th style={{ textAlign: 'right' }}>Daily Pay</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salaryDetails.attendances.map(att => (
+                              <tr key={att._id}>
+                                <td>{new Date(att.date).toLocaleDateString('en-GB')}</td>
+                                <td>{att.dayOfWeek || new Date(att.date).toLocaleDateString('en-GB', { weekday: 'short' })}</td>
+                                <td>{att.scheduledShift || 'Standard Shift'}</td>
+                                <td>{att.actualHours || att.hoursWorked || 0} hrs</td>
+                                <td style={{ textAlign: 'right', fontWeight: 600 }}>£{Number(att.dailyPay || getDailyWage(detailModalSalary)).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ borderTop: '1px solid #e2e8f0', padding: '12px 20px', background: '#f8fafc' }}>
+              <button className="btn btn-primary" onClick={() => setDetailModalSalary(null)}>
                 Close
               </button>
             </div>
@@ -923,6 +1292,12 @@ export default function SalaryDistributor() {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
                     <span style={{ color: '#7c3aed' }}>+£{paymentReceipt.openingBalance?.toFixed(2)}</span>
+                  </div>
+                )}
+                {Boolean(paymentReceipt.bonus) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Commission / Bonus:</span>
+                    <span style={{ color: '#db2777' }}>+£{paymentReceipt.bonus?.toFixed(2)}</span>
                   </div>
                 )}
                 {paymentReceipt.totalPayable !== undefined && (

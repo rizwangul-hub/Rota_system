@@ -147,8 +147,46 @@ async function recalculateEmployeeLedger(employeeId) {
         }
       }
     }
+    // Auto-sync approved bonuses / commissions into ledger
+    const BonusModel = require('../models/Bonus');
+    const bonuses = await BonusModel.find({ employee: employeeId, status: { $ne: 'DRAFT' } }).lean();
+    for (const b of bonuses) {
+      if ((b.bonusAmount || 0) > 0) {
+        let txDate = b.createdAt ? new Date(b.createdAt) : new Date();
+        if (isNaN(txDate.getTime()) || txDate < SYSTEM_START_DATE) {
+          txDate = new Date(SYSTEM_START_DATE);
+        }
+        const noteStr = b.notes && b.notes.trim() ? ` - Note: ${b.notes.trim()}` : '';
+        await LedgerTransaction.findOneAndUpdate(
+          {
+            employee: employeeId,
+            referenceId: b._id,
+            referenceType: 'Bonus'
+          },
+          {
+            employee: employeeId,
+            date: txDate,
+            transactionType: 'BONUS_CREDIT',
+            description: `Commission / Bonus for ${b.month} ${b.year}${b.shopName ? ` (${b.shopName})` : ''}${noteStr}`,
+            referenceType: 'Bonus',
+            referenceId: b._id,
+            bonus: Number(b.bonusAmount) || 0,
+            amountEarned: Number(b.bonusAmount) || 0,
+            amountPaid: 0,
+            breakdown: {
+              bonus: Number(b.bonusAmount) || 0,
+              salesAmount: Number(b.salesAmount) || 0,
+              rate: Number(b.bonusPercentage) || 0,
+              shopName: b.shopName || '',
+              notes: b.notes || ''
+            }
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      }
+    }
   } catch (err) {
-    console.error('Error auto-syncing wage history into ledger:', err.message);
+    console.error('Error auto-syncing wage history or bonuses into ledger:', err.message);
   }
 
   const transactions = await LedgerTransaction.find({
@@ -243,6 +281,10 @@ async function syncBonusToLedger(bonus, userId = null) {
     });
   } else if ((bonus.bonusAmount || 0) > 0) {
     const noteStr = bonus.notes && bonus.notes.trim() ? ` - Note: ${bonus.notes.trim()}` : '';
+    let txDate = bonus.createdAt ? new Date(bonus.createdAt) : new Date();
+    if (isNaN(txDate.getTime()) || txDate < SYSTEM_START_DATE) {
+      txDate = new Date(SYSTEM_START_DATE);
+    }
     await LedgerTransaction.findOneAndUpdate(
       {
         employee: bonus.employee,
@@ -251,7 +293,7 @@ async function syncBonusToLedger(bonus, userId = null) {
       },
       {
         employee: bonus.employee,
-        date: bonus.createdAt ? new Date(bonus.createdAt) : new Date(),
+        date: txDate,
         transactionType: 'BONUS_CREDIT',
         description: `Commission / Bonus for ${bonus.month} ${bonus.year}${bonus.shopName ? ` (${bonus.shopName})` : ''}${noteStr}`,
         referenceType: 'Bonus',

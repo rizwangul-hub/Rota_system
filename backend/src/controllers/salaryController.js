@@ -887,8 +887,10 @@ exports.recordSalaryPayment = async (req, res) => {
     let salary;
     let payment;
     let openingBal = 0;
+    let commissionBonus = 0;
     let totalPayable = 0;
     let previousPaid = 0;
+    let payAmount = 0;
     let totalPaid = 0;
     let balanceRemaining = 0;
     let outcome;
@@ -921,9 +923,17 @@ exports.recordSalaryPayment = async (req, res) => {
       }
 
       const Employee = require('../models/Employee');
+      const Bonus = require('../models/Bonus');
       const emp = await Employee.findById(salary.employee).session(session);
       openingBal = Number(emp?.openingBalance || 0);
-      totalPayable = Number(((salary.finalSalary || 0) + openingBal).toFixed(2));
+
+      const empBonuses = await Bonus.find({ employee: salary.employee, status: { $ne: 'DRAFT' } }).session(session);
+      const standaloneBonus = empBonuses
+        .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === salary._id.toString())
+        .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
+      commissionBonus = Number(((salary.bonus || 0) > 0 ? salary.bonus : standaloneBonus).toFixed(2));
+
+      totalPayable = Number(((salary.finalSalary || 0) + openingBal + commissionBonus).toFixed(2));
 
       const priorPayments = await SalaryPayment.find({ weeklySalary: salary._id }).session(session);
       previousPaid = Number(priorPayments.reduce((sum, record) => sum + record.amount, 0).toFixed(2));
@@ -938,7 +948,7 @@ exports.recordSalaryPayment = async (req, res) => {
         outcome = { status: 400, message: paymentValidation.message };
         return;
       }
-      const payAmount = paymentValidation.amount;
+      payAmount = paymentValidation.amount;
 
       const recentDuplicate = await SalaryPayment.findOne({
         weeklySalary: salary._id,
@@ -1042,6 +1052,7 @@ exports.recordSalaryPayment = async (req, res) => {
         weekLabel: salary.weekLabel,
         weeklySalary: salary.finalSalary,
         openingBalance: openingBal,
+        bonus: commissionBonus,
         totalPayable: totalPayable,
         paymentAmount: payAmount,
         paymentDate: payment.paymentDate,
