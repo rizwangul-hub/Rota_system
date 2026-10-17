@@ -113,6 +113,39 @@ export default function EmployeeDetail() {
     }
   };
 
+  const [downloadingLedgerPdf, setDownloadingLedgerPdf] = useState(false);
+  const [downloadingLedgerExcel, setDownloadingLedgerExcel] = useState(false);
+
+  const downloadLedgerPdf = async () => {
+    setDownloadingLedgerPdf(true);
+    try {
+      await downloadReportFile(
+        `/reports/ledger/${id}/pdf`,
+        {},
+        `Ledger_${profile?.employee?.name ? profile.employee.name.replace(/\s+/g, '_') : id}.pdf`
+      );
+    } catch (err) {
+      window.alert(err.message || 'Unable to download ledger PDF report.');
+    } finally {
+      setDownloadingLedgerPdf(false);
+    }
+  };
+
+  const downloadLedgerExcel = async () => {
+    setDownloadingLedgerExcel(true);
+    try {
+      await downloadReportFile(
+        `/reports/ledger/${id}/excel`,
+        {},
+        `Ledger_${profile?.employee?.name ? profile.employee.name.replace(/\s+/g, '_') : id}.xlsx`
+      );
+    } catch (err) {
+      window.alert(err.message || 'Unable to download ledger Excel report.');
+    } finally {
+      setDownloadingLedgerExcel(false);
+    }
+  };
+
   if (loading && !profile) {
     return (
       <div className="page-container" aria-busy="true">
@@ -150,6 +183,29 @@ export default function EmployeeDetail() {
 
   const { employee, summary = {}, attendances = [], salaries = [], ledger = [] } = profile;
 
+  const ledgerTotalEarned = ledger.reduce((sum, t) => sum + (t.amountEarned || 0), 0);
+  const ledgerTotalPaid = ledger.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+  const ledgerOutstanding = ledger.length > 0
+    ? (ledger[ledger.length - 1].runningBalance ?? (ledgerTotalEarned - ledgerTotalPaid))
+    : (employee?.openingBalance || 0);
+
+  const getLedgerBadgeStyle = (type) => {
+    switch (type) {
+      case 'OPENING_BALANCE':
+        return { background: '#ede9fe', color: '#7c3aed', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+      case 'BONUS_CREDIT':
+        return { background: '#ccfbf1', color: '#0f766e', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+      case 'SALARY_EARNED':
+        return { background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+      case 'SALARY_PAYMENT':
+        return { background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+      case 'DEDUCTION':
+        return { background: '#fee2e2', color: '#b91c1c', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+      default:
+        return { background: '#f1f5f9', color: '#475569', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' };
+    }
+  };
+
   return (
     <div className="page-container">
       {/* Back button & Title */}
@@ -173,6 +229,9 @@ export default function EmployeeDetail() {
             </div>
             <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
               ID: <strong>{employee.employeeId}</strong> • Daily Wage: <strong>£{Number(employee.dailyWage || 0).toFixed(2)}</strong>
+              {employee.openingBalance !== undefined && employee.openingBalance !== 0 && (
+                <> • Opening Balance: <strong style={{ color: '#7c3aed' }}>£{Number(employee.openingBalance).toFixed(2)}</strong></>
+              )}
               {employee.email ? <> • Email: <strong>{employee.email}</strong></> : null}
             </p>
           </div>
@@ -490,59 +549,142 @@ export default function EmployeeDetail() {
 
       {/* TAB 2: Complete Accounting Ledger (Sections 16 & 49) */}
       {activeTab === 'ledger' && (
-        <div className="card">
-          <div style={{ marginBottom: '16px' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
-              Audit-Proof Financial Ledger
-            </h2>
-            <p style={{ fontSize: '12px', color: '#64748b' }}>
-              Tracks every earned wage, payment disbursement installment, and running balance without duplication
-            </p>
+        <div>
+          {/* Header & Export Actions */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0, color: '#0f172a' }}>
+                Audit-Proof Financial Ledger
+              </h2>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>
+                Complete chronological accounting trail of opening balance, weekly wages, bonuses, disbursements, and running balance.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={downloadLedgerPdf}
+                disabled={downloadingLedgerPdf}
+                title="Export Ledger PDF"
+              >
+                <FileText size={14} color="#dc2626" /> {downloadingLedgerPdf ? 'Preparing PDF...' : 'Export Ledger PDF'}
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={downloadLedgerExcel}
+                disabled={downloadingLedgerExcel}
+                title="Export Ledger Excel"
+              >
+                <Download size={14} /> {downloadingLedgerExcel ? 'Preparing Excel...' : 'Export Ledger Excel'}
+              </button>
+            </div>
           </div>
 
-          <div className="table-responsive">
-            <table className="custom-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Transaction Description</th>
-                  <th>Type</th>
-                  <th>Wage / Earned</th>
-                  <th>Payment Disbursed</th>
-                  <th>Running Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledger.map(t => (
-                  <tr key={t._id}>
-                    <td>{new Date(t.date).toLocaleDateString('en-GB')}</td>
-                    <td style={{ fontWeight: 500 }}>{t.description}</td>
-                    <td>
-                      <span className={`badge ${t.transactionType === 'SALARY_EARNED' ? 'badge-finalized' : 'badge-paid'}`}>
-                        {t.transactionType.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 600, color: t.amountEarned > 0 ? '#2563eb' : '#94a3b8' }}>
-                      {t.amountEarned > 0 ? `+£${t.amountEarned.toFixed(2)}` : '—'}
-                    </td>
-                    <td style={{ fontWeight: 600, color: t.amountPaid > 0 ? '#10b981' : '#94a3b8' }}>
-                      {t.amountPaid > 0 ? `-£${t.amountPaid.toFixed(2)}` : '—'}
-                    </td>
-                    <td style={{ fontWeight: 700, color: t.runningBalance > 0 ? '#d97706' : '#16a34a', fontSize: '14px' }}>
-                      £{t.runningBalance?.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
+          {/* Ledger KPI Cards */}
+          <div className="stat-grid" style={{ marginBottom: '20px' }}>
+            <div className="stat-card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+              <div className="stat-lbl">Opening Balance</div>
+              <div className="stat-val" style={{ color: '#8b5cf6' }}>
+                £{(employee.openingBalance || 0).toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                {employee.openingBalanceNote || 'Balance Brought Forward'}
+              </div>
+            </div>
 
-                {ledger.length === 0 && (
+            <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
+              <div className="stat-lbl">Total Wages & Bonuses Earned</div>
+              <div className="stat-val" style={{ color: '#2563eb' }}>
+                £{ledgerTotalEarned.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                Finalized Payroll, Bonus & Opening Bal
+              </div>
+            </div>
+
+            <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
+              <div className="stat-lbl">Total Payments Disbursed</div>
+              <div className="stat-val" style={{ color: '#059669' }}>
+                £{ledgerTotalPaid.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                Cash & Bank Total
+              </div>
+            </div>
+
+            <div className="stat-card" style={{ borderLeft: '4px solid #ef4444' }}>
+              <div className="stat-lbl">Current Running Balance</div>
+              <div className="stat-val" style={{ color: ledgerOutstanding > 0 ? '#dc2626' : '#10b981' }}>
+                £{ledgerOutstanding.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                {ledgerOutstanding > 0 ? 'Amount Owed to Worker' : 'Fully Settled / Cleared'}
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="table-responsive">
+              <table className="custom-table">
+                <thead>
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
-                      No ledger transactions recorded yet.
-                    </td>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Transaction Description</th>
+                    <th>Details / Breakdown</th>
+                    <th style={{ textAlign: 'right' }}>Earned / Credit (£)</th>
+                    <th style={{ textAlign: 'right' }}>Paid / Debit (£)</th>
+                    <th style={{ textAlign: 'right' }}>Running Balance (£)</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {ledger.map(t => {
+                    const isOpening = t.transactionType === 'OPENING_BALANCE';
+                    return (
+                      <tr key={t._id}>
+                        <td>{new Date(t.date).toLocaleDateString('en-GB')}</td>
+                        <td>
+                          <span style={getLedgerBadgeStyle(t.transactionType)}>
+                            {t.transactionType ? t.transactionType.replace(/_/g, ' ') : 'TRANSACTION'}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 500 }}>{t.description}</td>
+                        <td style={{ fontSize: '12px', color: '#64748b' }}>
+                          {isOpening ? (
+                            employee.openingBalanceNote || 'Initial Balance Brought Forward'
+                          ) : t.breakdown ? (
+                            [
+                              t.breakdown.workingDays ? `${t.breakdown.workingDays}d worked` : null,
+                              t.breakdown.grossSalary ? `Gross: £${t.breakdown.grossSalary.toFixed(2)}` : null,
+                              t.breakdown.bonus > 0 ? `Bonus: +£${t.breakdown.bonus.toFixed(2)}` : null,
+                              t.breakdown.deductions > 0 ? `Ded: -£${t.breakdown.deductions.toFixed(2)}` : null,
+                              t.breakdown.paymentMethod ? `${t.breakdown.paymentMethod}${t.breakdown.paymentReference ? ` (${t.breakdown.paymentReference})` : ''}` : null
+                            ].filter(Boolean).join(' • ') || '—'
+                          ) : '—'}
+                        </td>
+                        <td style={{ fontWeight: 600, color: t.amountEarned > 0 ? '#2563eb' : '#94a3b8', textAlign: 'right' }}>
+                          {t.amountEarned > 0 ? `+£${t.amountEarned.toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ fontWeight: 600, color: t.amountPaid > 0 ? '#10b981' : '#94a3b8', textAlign: 'right' }}>
+                          {t.amountPaid > 0 ? `-£${t.amountPaid.toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ fontWeight: 700, color: (t.runningBalance || 0) > 0 ? '#d97706' : '#16a34a', fontSize: '14px', textAlign: 'right' }}>
+                          £{(t.runningBalance || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {ledger.length === 0 && (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                        No ledger transactions recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

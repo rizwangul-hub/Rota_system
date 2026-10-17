@@ -1430,8 +1430,15 @@ export default function ReportsPage() {
           </div>
 
           <div className="stat-grid" style={{ marginBottom: '20px' }}>
+            <div className="stat-card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+              <div className="stat-lbl">Opening Balance</div>
+              <div className="stat-val" style={{ color: '#8b5cf6' }}>
+                £{(ledgerData.summary?.openingBalance || 0).toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>Balance Brought Forward</div>
+            </div>
             <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
-              <div className="stat-lbl">Total Wages Earned</div>
+              <div className="stat-lbl">Total Wages & Bonuses Earned</div>
               <div className="stat-val" style={{ color: '#2563eb' }}>£{(ledgerData.summary?.totalEarned || 0).toFixed(2)}</div>
               <div style={{ fontSize: '12px', color: '#64748b' }}>Finalized Payroll Total</div>
             </div>
@@ -1458,33 +1465,43 @@ export default function ReportsPage() {
                     <th>Transaction Type</th>
                     <th>Description</th>
                     <th>Reference</th>
-                    <th>Earned / Credit (£)</th>
-                    <th>Paid / Debit (£)</th>
-                    <th>Running Balance (£)</th>
+                    <th style={{ textAlign: 'right' }}>Earned / Credit (£)</th>
+                    <th style={{ textAlign: 'right' }}>Paid / Debit (£)</th>
+                    <th style={{ textAlign: 'right' }}>Running Balance (£)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ledgerData.transactions?.map(t => (
-                    <tr key={t._id}>
-                      <td>{new Date(t.date).toLocaleDateString('en-GB')}</td>
-                      <td>
-                        <span className={`badge ${t.transactionType === 'SALARY_EARNED' ? 'badge-primary' : 'badge-success'}`}>
-                          {t.transactionType.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 500 }}>{t.description}</td>
-                      <td>{t.referenceType}</td>
-                      <td style={{ fontWeight: 600, color: t.amountEarned > 0 ? '#2563eb' : 'inherit' }}>
-                        {t.amountEarned > 0 ? `£${t.amountEarned.toFixed(2)}` : '-'}
-                      </td>
-                      <td style={{ fontWeight: 600, color: t.amountPaid > 0 ? '#059669' : 'inherit' }}>
-                        {t.amountPaid > 0 ? `£${t.amountPaid.toFixed(2)}` : '-'}
-                      </td>
-                      <td style={{ fontWeight: 700, color: '#0f172a' }}>
-                        £{(t.runningBalance || 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
+                  {ledgerData.transactions?.map(t => {
+                    const badgeStyle = {
+                      OPENING_BALANCE: { background: '#ede9fe', color: '#7c3aed' },
+                      BONUS_CREDIT: { background: '#ccfbf1', color: '#0f766e' },
+                      SALARY_EARNED: { background: '#dbeafe', color: '#1d4ed8' },
+                      SALARY_PAYMENT: { background: '#dcfce7', color: '#15803d' },
+                      DEDUCTION: { background: '#fee2e2', color: '#b91c1c' }
+                    }[t.transactionType] || { background: '#f1f5f9', color: '#475569' };
+
+                    return (
+                      <tr key={t._id}>
+                        <td>{new Date(t.date).toLocaleDateString('en-GB')}</td>
+                        <td>
+                          <span style={{ ...badgeStyle, padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, display: 'inline-block' }}>
+                            {t.transactionType ? t.transactionType.replace(/_/g, ' ') : 'TRANSACTION'}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 500 }}>{t.description}</td>
+                        <td style={{ color: '#64748b', fontSize: '12px' }}>{t.referenceType}</td>
+                        <td style={{ fontWeight: 600, color: t.amountEarned > 0 ? '#2563eb' : '#94a3b8', textAlign: 'right' }}>
+                          {t.amountEarned > 0 ? `+£${t.amountEarned.toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ fontWeight: 600, color: t.amountPaid > 0 ? '#10b981' : '#94a3b8', textAlign: 'right' }}>
+                          {t.amountPaid > 0 ? `-£${t.amountPaid.toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ fontWeight: 700, color: (t.runningBalance || 0) > 0 ? '#d97706' : '#16a34a', fontSize: '14px', textAlign: 'right' }}>
+                          £{(t.runningBalance || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {(!ledgerData.transactions || ledgerData.transactions.length === 0) && (
                     <tr>
                       <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>

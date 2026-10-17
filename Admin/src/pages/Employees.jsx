@@ -18,12 +18,6 @@ export default function Employees() {
   const [editModalEmployee, setEditModalEmployee] = useState(null);
   const [nextEmployeeId, setNextEmployeeId] = useState('');
 
-  // Form states
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    dailyWage: ''
-  });
 
   useEffect(() => {
     fetchEmployees();
@@ -74,12 +68,29 @@ export default function Employees() {
   };
 
 
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    dailyWage: '',
+    openingBalance: '',
+    openingBalanceNote: '',
+    openingBalanceDate: ''
+  });
+
   const [submitting, setSubmitting] = useState(false);
 
   const openCreateModal = async () => {
     setCreateModalOpen(true);
     setNextEmployeeId('');
-    setFormData({ name: '', email: '', dailyWage: '' });
+    setFormData({
+      name: '',
+      email: '',
+      dailyWage: '',
+      openingBalance: '',
+      openingBalanceNote: '',
+      openingBalanceDate: new Date().toISOString().split('T')[0]
+    });
     try {
       const response = await axios.get(`${API_BASE_URL}/employees/next-id`);
       if (response.data.success) setNextEmployeeId(response.data.employeeId);
@@ -97,14 +108,22 @@ export default function Employees() {
     }
     setSubmitting(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/employees`, formData);
+      const payload = {
+        ...formData,
+        dailyWage: Number(formData.dailyWage),
+        openingBalance: formData.openingBalance !== '' ? Number(formData.openingBalance) : 0
+      };
+      const res = await axios.post(`${API_BASE_URL}/employees`, payload);
       if (res.data.success) {
         setCreateModalOpen(false);
         window.alert(`Employee ${res.data.employee.name} was added with ID ${res.data.employee.employeeId}.`);
         setFormData({
           name: '',
           email: '',
-          dailyWage: ''
+          dailyWage: '',
+          openingBalance: '',
+          openingBalanceNote: '',
+          openingBalanceDate: ''
         });
         setNextEmployeeId('');
         fetchEmployees();
@@ -126,7 +145,12 @@ export default function Employees() {
         email: editModalEmployee.email,
         dailyWage: Number(editModalEmployee.dailyWage),
         employmentStatus: editModalEmployee.employmentStatus,
-        wageChangeReason: editModalEmployee.wageChangeReason || ''
+        wageChangeReason: editModalEmployee.wageChangeReason || '',
+        openingBalance: editModalEmployee.openingBalance !== '' && editModalEmployee.openingBalance !== undefined ? Number(editModalEmployee.openingBalance) : 0,
+        openingBalanceNote: editModalEmployee.openingBalanceNote || '',
+        openingBalanceDate: editModalEmployee.openingBalanceDate || undefined,
+        phone: editModalEmployee.phone || '',
+        notes: editModalEmployee.notes || ''
       });
       if (res.data.success) {
         setEditModalEmployee(null);
@@ -226,6 +250,7 @@ export default function Employees() {
                 <th>Employee ID</th>
                 <th>Full Name</th>
                 <th>Daily Wage</th>
+                <th>Opening Bal</th>
                 <th>Email</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -237,6 +262,9 @@ export default function Employees() {
                   <td style={{ fontWeight: 600, color: '#2563eb' }}>{emp.employeeId}</td>
                   <td style={{ fontWeight: 600 }}>{emp.name}</td>
                   <td style={{ fontWeight: 600 }}>£{emp.dailyWage?.toFixed(2)}</td>
+                  <td style={{ fontWeight: 600, color: (emp.openingBalance || 0) !== 0 ? '#7c3aed' : '#94a3b8' }}>
+                    {(emp.openingBalance || 0) !== 0 ? `£${Number(emp.openingBalance).toFixed(2)}` : '£0.00'}
+                  </td>
                   <td style={{ color: '#64748b' }}>{emp.email || '—'}</td>
                   <td>
                     <span className={`badge badge-${emp.employmentStatus === 'Active' ? 'present' : 'absent'}`}>
@@ -367,6 +395,34 @@ export default function Employees() {
                     />
                   </div>
                 </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Opening Balance (£)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-input"
+                      placeholder="0.00"
+                      value={formData.openingBalance}
+                      onChange={(e) => setFormData({ ...formData, openingBalance: e.target.value })}
+                    />
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                      Starting balance brought forward (positive = company owes worker)
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Opening Balance Note</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Brought forward balance"
+                      value={formData.openingBalanceNote}
+                      onChange={(e) => setFormData({ ...formData, openingBalanceNote: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-outline" onClick={() => setCreateModalOpen(false)}>
@@ -444,6 +500,34 @@ export default function Employees() {
                       placeholder="worker@example.com"
                       value={editModalEmployee.email || ''}
                       onChange={(e) => setEditModalEmployee({ ...editModalEmployee, email: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Opening Balance (£)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-input"
+                      placeholder="0.00"
+                      value={editModalEmployee.openingBalance ?? ''}
+                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, openingBalance: e.target.value })}
+                    />
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                      Initial balance brought forward (positive = company owes worker)
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Opening Balance Note</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Previous balance"
+                      value={editModalEmployee.openingBalanceNote || ''}
+                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, openingBalanceNote: e.target.value })}
                     />
                   </div>
                 </div>

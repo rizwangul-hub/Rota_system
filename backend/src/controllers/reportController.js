@@ -8,6 +8,7 @@ const Bonus = require('../models/Bonus');
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const LedgerTransaction = require('../models/LedgerTransaction');
+const { recalculateEmployeeLedger } = require('../utils/ledgerHelper');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -2499,6 +2500,9 @@ exports.getEmployeeLedger = async (req, res) => {
     const employee = await Employee.findById(employeeId).populate('assignedShop');
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
+    // Ensure running balances are updated
+    await recalculateEmployeeLedger(employeeId);
+
     const query = { employee: employeeId };
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -2508,12 +2512,13 @@ exports.getEmployeeLedger = async (req, res) => {
 
     const totalEarned = Number(ledgerTransactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0).toFixed(2));
     const totalPaid = Number(ledgerTransactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0).toFixed(2));
-    const outstanding = Number(Math.max(0, totalEarned - totalPaid).toFixed(2));
+    const outstanding = Number((totalEarned - totalPaid).toFixed(2));
 
     res.json({
       success: true,
       employee,
       summary: {
+        openingBalance: employee.openingBalance || 0,
         totalEarned,
         totalPaid,
         outstanding
@@ -2531,13 +2536,15 @@ exports.exportEmployeeLedgerExcel = async (req, res) => {
     const employee = await Employee.findById(employeeId).populate('assignedShop');
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
+    await recalculateEmployeeLedger(employeeId);
     const transactions = await LedgerTransaction.find({ employee: employeeId }).sort({ date: 1, createdAt: 1 });
-    const totalEarned = transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0);
-    const totalPaid = transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+    const totalEarned = Number(transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0).toFixed(2));
+    const totalPaid = Number(transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0).toFixed(2));
     const summary = {
+      openingBalance: employee.openingBalance || 0,
       totalEarned,
       totalPaid,
-      outstanding: Math.max(0, totalEarned - totalPaid)
+      outstanding: Number((totalEarned - totalPaid).toFixed(2))
     };
 
     const workbook = await buildLedgerExcel(employee, transactions, summary);
@@ -2565,13 +2572,15 @@ exports.exportEmployeeLedgerPDF = async (req, res) => {
     const employee = await Employee.findById(employeeId).populate('assignedShop');
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
+    await recalculateEmployeeLedger(employeeId);
     const transactions = await LedgerTransaction.find({ employee: employeeId }).sort({ date: 1, createdAt: 1 });
-    const totalEarned = transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0);
-    const totalPaid = transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+    const totalEarned = Number(transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0).toFixed(2));
+    const totalPaid = Number(transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0).toFixed(2));
     const summary = {
+      openingBalance: employee.openingBalance || 0,
       totalEarned,
       totalPaid,
-      outstanding: Math.max(0, totalEarned - totalPaid)
+      outstanding: Number((totalEarned - totalPaid).toFixed(2))
     };
 
     await logAction({

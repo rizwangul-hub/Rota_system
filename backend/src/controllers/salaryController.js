@@ -11,6 +11,7 @@ const LedgerTransaction = require('../models/LedgerTransaction');
 const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord, safeObjectId } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { validatePaymentAmount, calculatePaymentState } = require('../utils/payment');
+const { recalculateEmployeeLedger } = require('../utils/ledgerHelper');
 
 /**
  * Recompute a single WeeklySalary document's numbers and sync with adjustments and bonus
@@ -760,6 +761,8 @@ exports.finalizeWeeklySalary = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    await recalculateEmployeeLedger(salary.employee);
+
     await logAction({
       user: req.user._id,
       username: req.user.name,
@@ -997,15 +1000,23 @@ exports.getSalaryPayments = async (req, res) => {
 
 exports.getEmployeeLedger = async (req, res) => {
   try {
-    const transactions = await LedgerTransaction.find({ employee: req.params.employeeId })
-      .populate('createdBy', 'name username role')
-      .sort({ date: 1, createdAt: 1 });
-    const earned = Number(transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0).toFixed(2));
-    const paid = Number(transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0).toFixed(2));
+    const employeeId = req.params.employeeId;
+    const employee = await Employee.findById(employeeId).populate('assignedShop');
+    if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
+
+    const { transactions, totalEarned, totalPaid, currentBalance } = await recalculateEmployeeLedger(employeeId);
+
     res.json({
       success: true,
+      employee,
+      summary: {
+        openingBalance: employee.openingBalance || 0,
+        totalEarned,
+        totalPaid,
+        outstanding: currentBalance
+      },
       transactions,
-      totals: { earned, paid, outstanding: Number((earned - paid).toFixed(2)) }
+      totals: { earned: totalEarned, paid: totalPaid, outstanding: currentBalance }
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to fetch employee ledger.');

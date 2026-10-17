@@ -4,6 +4,7 @@ const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const WeeklySalary = require('../models/WeeklySalary');
 const { logAction } = require('../utils/audit');
+const { syncBonusToLedger, removeBonusFromLedger } = require('../utils/ledgerHelper');
 
 /**
  * Recalculate a WeeklySalary that has a bonus assigned.
@@ -142,6 +143,7 @@ exports.createBonus = async (req, res) => {
     if (bonus.assignedWeeklySalary) {
       await recalcSalaryForBonus(bonus.assignedWeeklySalary);
     }
+    await syncBonusToLedger(bonus, req.user._id);
 
     await logAction({
       user: req.user._id,
@@ -214,6 +216,7 @@ exports.updateBonus = async (req, res) => {
     if (bonus.assignedWeeklySalary) {
       await recalcSalaryForBonus(bonus.assignedWeeklySalary);
     }
+    await syncBonusToLedger(bonus, req.user._id);
 
     await logAction({
       user: req.user._id,
@@ -243,6 +246,7 @@ exports.deleteBonus = async (req, res) => {
     }
 
     const linkedSalaryId = bonus.assignedWeeklySalary;
+    const employeeId = bonus.employee;
 
     await Bonus.findByIdAndDelete(id);
 
@@ -250,6 +254,7 @@ exports.deleteBonus = async (req, res) => {
     if (linkedSalaryId) {
       await recalcSalaryForBonus(linkedSalaryId);
     }
+    await removeBonusFromLedger(id, employeeId);
 
     await logAction({
       user: req.user._id,

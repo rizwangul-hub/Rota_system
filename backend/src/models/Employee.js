@@ -93,6 +93,18 @@ const EmployeeSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  openingBalance: {
+    type: Number,
+    default: 0
+  },
+  openingBalanceDate: {
+    type: Date,
+    default: Date.now
+  },
+  openingBalanceNote: {
+    type: String,
+    default: ''
+  },
   wageHistory: [WageHistorySchema],
   shopHistory: [ShopHistorySchema]
 }, { timestamps: true });

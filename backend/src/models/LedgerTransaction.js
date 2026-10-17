@@ -14,6 +14,7 @@ const LedgerTransactionSchema = new mongoose.Schema({
   transactionType: {
     type: String,
     enum: [
+      'OPENING_BALANCE',     // Initial balance brought forward
       'SALARY_EARNED',       // Weekly salary finalized
       'PAYMENT_DISBURSED',   // Legacy name for salary payment
       'SALARY_PAYMENT',      // Paid to worker (Cash/Bank)
@@ -28,7 +29,7 @@ const LedgerTransactionSchema = new mongoose.Schema({
   },
   referenceType: {
     type: String,
-    enum: ['WeeklySalary', 'SalaryPayment', 'Bonus', 'Manual'],
+    enum: ['WeeklySalary', 'SalaryPayment', 'Bonus', 'Manual', 'OpeningBalance'],
     required: true
   },
   referenceId: {

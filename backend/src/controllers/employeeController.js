@@ -12,6 +12,7 @@ const RotaAssignmentClaim = require('../models/RotaAssignmentClaim');
 const RotaAvailability = require('../models/RotaAvailability');
 const { logAction } = require('../utils/audit');
 const { employeeAttendanceRosterEntry } = require('../utils/attendanceViews');
+const { syncEmployeeOpeningBalance } = require('../utils/ledgerHelper');
 
 async function findHighestEmployeeSequence() {
   const employees = await Employee.find({ employeeId: /^PIXX\d+$/i }).select('employeeId').lean();
@@ -130,7 +131,7 @@ exports.getEmployeeById = async (req, res) => {
 
 exports.createEmployee = async (req, res) => {
   try {
-    const { name, employeeId: requestedEmployeeId, phone, email, dailyWage, startDate, notes } = req.body;
+    const { name, employeeId: requestedEmployeeId, phone, email, dailyWage, startDate, notes, openingBalance, openingBalanceDate, openingBalanceNote } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Employee full name is required.' });
@@ -149,6 +150,8 @@ exports.createEmployee = async (req, res) => {
     }
 
     const hireDate = startDate ? new Date(startDate) : new Date();
+    const initialOpeningBalance = Number(openingBalance) || 0;
+    const initialOpeningDate = openingBalanceDate ? new Date(openingBalanceDate) : hireDate;
 
     const employee = await Employee.create({
       name: name.trim(),
@@ -159,6 +162,9 @@ exports.createEmployee = async (req, res) => {
       employmentStatus: 'Active',
       startDate: hireDate,
       notes: notes || '',
+      openingBalance: initialOpeningBalance,
+      openingBalanceDate: initialOpeningDate,
+      openingBalanceNote: openingBalanceNote ? openingBalanceNote.trim() : '',
       wageHistory: [
         {
           wage,
@@ -169,6 +175,10 @@ exports.createEmployee = async (req, res) => {
       ],
     });
 
+    if (initialOpeningBalance !== 0) {
+      await syncEmployeeOpeningBalance(employee, initialOpeningBalance, initialOpeningDate, openingBalanceNote, req.user._id);
+    }
+
     await logAction({
       user: req.user._id,
       username: req.user.name,
@@ -176,7 +186,7 @@ exports.createEmployee = async (req, res) => {
       action: 'EMPLOYEE_CREATED',
       recordType: 'Employee',
       recordId: employee._id,
-      details: `Created employee ${name} (${employee.employeeId}) with daily wage £${wage}`,
+      details: `Created employee ${name} (${employee.employeeId}) with daily wage £${wage}${initialOpeningBalance !== 0 ? ` and opening balance £${initialOpeningBalance}` : ''}`,
       req
     });
 
@@ -263,7 +273,30 @@ exports.updateEmployee = async (req, res) => {
       oldEmp.employmentStatus = updates.employmentStatus;
     }
 
+    // Opening balance update
+    let openingBalanceChanged = false;
+    if (updates.openingBalance !== undefined) {
+      const newOpeningBal = Number(updates.openingBalance) || 0;
+      if (newOpeningBal !== (oldEmp.openingBalance || 0)) {
+        auditDetails.push(`Changed opening balance from £${oldEmp.openingBalance || 0} to £${newOpeningBal}`);
+        oldEmp.openingBalance = newOpeningBal;
+        openingBalanceChanged = true;
+      }
+    }
+    if (updates.openingBalanceDate) {
+      oldEmp.openingBalanceDate = new Date(updates.openingBalanceDate);
+      openingBalanceChanged = true;
+    }
+    if (updates.openingBalanceNote !== undefined) {
+      oldEmp.openingBalanceNote = updates.openingBalanceNote ? updates.openingBalanceNote.trim() : '';
+      openingBalanceChanged = true;
+    }
+
     await oldEmp.save();
+
+    if (openingBalanceChanged) {
+      await syncEmployeeOpeningBalance(oldEmp, oldEmp.openingBalance, oldEmp.openingBalanceDate, oldEmp.openingBalanceNote, req.user._id);
+    }
     const updated = await Employee.findById(id);
 
     if (auditDetails.length > 0) {
@@ -330,8 +363,8 @@ exports.getEmployeeProfile = async (req, res) => {
     // Bonuses
     const bonuses = await Bonus.find({ employee: id }).sort({ year: -1, createdAt: -1 });
 
-    // Ledger transactions
-    const ledger = await LedgerTransaction.find({ employee: id }).sort({ date: -1 });
+    // Ledger transactions (recalculated to ensure 100% running balance accuracy)
+    const { transactions: ledger } = await recalculateEmployeeLedger(id);
 
     // Summary calculations (This Week, This Month, This Year)
     const now = new Date();
