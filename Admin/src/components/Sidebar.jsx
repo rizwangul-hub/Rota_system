@@ -87,7 +87,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
             </li>
             <li className="nav-item">
               <NavLink to="/distributor" onClick={() => setMobileOpen(false)}>
-                <Clock size={18} /> Pay Salaries
+                <Clock size={18} /> Arsalan / Pay Salaries
               </NavLink>
             </li>
 
@@ -123,13 +123,13 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
           </>
         )}
 
-        {/* SALARY DISTRIBUTOR Navigation */}
+        {/* SALARY DISTRIBUTOR (ARSALAN) Navigation */}
         {role === 'SALARY_DISTRIBUTOR' && (
           <>
             <li className="nav-section-title">Disbursement</li>
             <li className="nav-item">
               <NavLink to="/distributor" onClick={() => setMobileOpen(false)}>
-                <Banknote size={18} /> Pay Salaries
+                <Banknote size={18} /> Arsalan's Dashboard
               </NavLink>
             </li>
           </>

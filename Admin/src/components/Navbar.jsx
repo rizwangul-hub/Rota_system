@@ -11,7 +11,7 @@ const ROUTE_TITLES = {
   '/attendance-checker': { title: 'Attendance Approval', parent: 'Attendance', parentPath: '/attendance-checker' },
   '/salaries': { title: 'Weekly Salaries', parent: 'Payroll', parentPath: '/salaries' },
   '/bonuses': { title: 'Sales Commission', parent: 'Payroll', parentPath: '/salaries' },
-  '/distributor': { title: 'Salary Disbursement', parent: 'Payroll', parentPath: '/distributor' },
+  '/distributor': { title: "Arsalan's Dashboard", parent: 'Payroll', parentPath: '/distributor' },
   '/reports': { title: 'Reports & Analytics', parent: 'System', parentPath: '/reports' },
   '/audit': { title: 'Audit Trail', parent: 'System', parentPath: '/audit' }
 };
@@ -39,7 +39,7 @@ export default function Navbar({ setMobileOpen }) {
       case 'ATTENDANCE_CHECKER':
         return <span className="badge badge-checked">Attendance Checker</span>;
       case 'SALARY_DISTRIBUTOR':
-        return <span className="badge badge-paid">Salary Distributor</span>;
+        return <span className="badge badge-paid">Salary Distributor (Arsalan)</span>;
       default:
         return <span className="badge badge-pending">{role}</span>;
     }

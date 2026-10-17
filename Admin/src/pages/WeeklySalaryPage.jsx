@@ -357,6 +357,34 @@ export default function WeeklySalaryPage() {
 
   const isFinalized = (s) => ['FINALIZED', 'PAID', 'Finalized', 'Paid', 'PARTIALLY_PAID'].includes(s?.status);
   const alreadyGenerated = salaries.length > 0;
+  const unfinalizedSalaries = salaries.filter(s => !isFinalized(s));
+  const unfinalizedCount = unfinalizedSalaries.length;
+
+  const handleFinalizeAllSalaries = async () => {
+    if (unfinalizedCount === 0) {
+      showNotification('All salaries for this week are already finalized.');
+      return;
+    }
+    const weekLabel = weekInfo?.week?.weekLabel || (salaries[0] ? salaries[0].weekLabel : '');
+    if (!window.confirm(`Finalize all ${unfinalizedCount} salaries for week ${weekLabel}? This will lock the records and send them to Arsalan's dashboard for payment disbursement.`)) {
+      return;
+    }
+    setFinalizing(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/salaries/finalize-all`, {
+        weekLabel,
+        salaryIds: unfinalizedSalaries.map(s => s._id)
+      });
+      if (res.data.success) {
+        showNotification(res.data.message || `Successfully finalized ${res.data.count || unfinalizedCount} salaries.`);
+        fetchWeekInfoAndSalaries();
+      }
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to finalize all salaries.', true);
+    } finally {
+      setFinalizing(false);
+    }
+  };
 
   // The salary breakdown shown in the detail modal
   const activeSalary = detailData?.salary || detailSalary;
@@ -421,6 +449,31 @@ export default function WeeklySalaryPage() {
           >
             <Calculator size={15} /> {alreadyGenerated ? 'Regenerate' : 'Generate Salary'}
           </button>
+
+          {alreadyGenerated && (
+            <button
+              className="btn btn-sm"
+              onClick={handleFinalizeAllSalaries}
+              disabled={finalizing || unfinalizedCount === 0}
+              style={{
+                fontWeight: 600,
+                background: unfinalizedCount === 0 ? '#10b981' : '#059669',
+                borderColor: '#059669',
+                color: '#ffffff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              title={unfinalizedCount === 0 ? 'All salaries for this week are finalized' : `Finalize all ${unfinalizedCount} salaries`}
+            >
+              <Lock size={15} />
+              {finalizing
+                ? 'Finalizing All...'
+                : unfinalizedCount === 0
+                ? 'All Finalized ✓'
+                : `Finalize All Salaries (${unfinalizedCount})`}
+            </button>
+          )}
         </div>
       </div>
 

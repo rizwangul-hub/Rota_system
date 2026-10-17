@@ -195,9 +195,14 @@ exports.getDistributorDashboard = async (req, res) => {
     const totalOutstanding = salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
     const pendingCount = salaries.filter(s => s.balanceRemaining > 0).length;
 
+    const availableWeeks = await WeeklySalary.distinct('weekLabel', {
+      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] }
+    });
+
     res.json({
       success: true,
       currentWeek,
+      availableWeeks,
       metrics: {
         totalPayable: Number(totalPayable.toFixed(2)),
         totalPaid: Number(totalPaid.toFixed(2)),

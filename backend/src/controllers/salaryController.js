@@ -674,6 +674,105 @@ exports.updateSalaryDeduction = async (req, res) => {
 };
 
 /**
+ * Helper to finalize a single WeeklySalary document (locks record & writes ledger)
+ */
+async function finalizeSingleSalaryHelper(salary, user, req) {
+  if (['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'].includes(salary.status)) {
+    return salary;
+  }
+
+  await recalculateWeeklySalary(salary);
+
+  salary.status = salary.totalPaid >= salary.finalSalary && salary.finalSalary > 0 ? 'PAID' : 'FINALIZED';
+  salary.finalizedBy = user._id;
+  salary.finalizedAt = new Date();
+  salary.finalizationSnapshot = {
+    employee: salary.employee,
+    employeeName: salary.employeeName,
+    employeeId: salary.employeeId,
+    shop: salary.shop,
+    shopName: salary.shopName,
+    weekStartDate: salary.weekStartDate,
+    weekEndDate: salary.weekEndDate,
+    workingDays: salary.workingDays,
+    scheduledHours: salary.scheduledHours,
+    actualHours: salary.actualHours,
+    grossDailyWages: salary.grossDailyWages,
+    lateDeductions: salary.lateDeductions,
+    netAttendancePay: salary.netAttendancePay,
+    travelAllowance: salary.travelAllowance,
+    otherAllowances: salary.otherAllowances,
+    bonus: salary.bonus,
+    manualDeductions: salary.manualDeductions,
+    finalSalary: salary.finalSalary,
+    attendanceBreakdown: salary.attendanceBreakdown,
+    capturedAt: salary.finalizedAt
+  };
+  await salary.save();
+
+  // Lock corresponding attendances
+  await Attendance.updateMany(
+    { weeklySalary: salary._id },
+    { $set: { approvalStatus: 'Finalized' } }
+  );
+
+  // Create or update single ledger entry for this salary earned
+  const prevTransactions = await LedgerTransaction.find({
+    employee: salary.employee,
+    $nor: [
+      { transactionType: 'SALARY_EARNED', referenceId: salary._id }
+    ]
+  }).sort({ date: 1, createdAt: 1 });
+
+  let currentBalance = 0;
+  prevTransactions.forEach(t => {
+    currentBalance += (t.amountEarned || 0) - (t.amountPaid || 0);
+  });
+
+  const netEarned = salary.finalSalary;
+  const newBalance = currentBalance + netEarned;
+
+  await LedgerTransaction.findOneAndUpdate(
+    {
+      employee: salary.employee,
+      transactionType: 'SALARY_EARNED',
+      referenceId: salary._id
+    },
+    {
+      date: salary.weekEndDate,
+      description: `Weekly Salary for week ${salary.weekLabel} (${salary.shopName})`,
+      referenceType: 'WeeklySalary',
+      referenceId: salary._id,
+      attendancePay: salary.netAttendancePay,
+      lateDeduction: salary.lateDeductions,
+      allowance: (salary.travelAllowance || 0) + (salary.otherAllowances || 0),
+      bonus: salary.bonus || 0,
+      otherDeduction: salary.manualDeductions || 0,
+      amountEarned: netEarned,
+      amountPaid: 0,
+      runningBalance: newBalance,
+      createdBy: user._id
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  await recalculateEmployeeLedger(salary.employee);
+
+  await logAction({
+    user: user._id,
+    username: user.name,
+    role: user.role,
+    recordType: 'WeeklySalary',
+    recordId: salary._id,
+    action: 'SALARY_FINALIZED',
+    details: `Finalized weekly salary £${salary.finalSalary} for ${salary.employeeName} (${salary.weekLabel})`,
+    req
+  });
+
+  return salary;
+}
+
+/**
  * Admin finalizes weekly salary (Locks salary & creates Ledger entry without duplicates)
  */
 exports.finalizeWeeklySalary = async (req, res) => {
@@ -685,98 +784,64 @@ exports.finalizeWeeklySalary = async (req, res) => {
       return res.status(409).json({ success: false, message: 'This salary has already been finalized.' });
     }
 
-    await recalculateWeeklySalary(salary);
+    const finalizedSalary = await finalizeSingleSalaryHelper(salary, req.user, req);
+    res.json({ success: true, message: 'Weekly salary finalized successfully.', salary: finalizedSalary });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to finalize salary.');
+  }
+};
 
-    salary.status = salary.totalPaid >= salary.finalSalary && salary.finalSalary > 0 ? 'PAID' : 'FINALIZED';
-    salary.finalizedBy = req.user._id;
-    salary.finalizedAt = new Date();
-    salary.finalizationSnapshot = {
-      employee: salary.employee,
-      employeeName: salary.employeeName,
-      employeeId: salary.employeeId,
-      shop: salary.shop,
-      shopName: salary.shopName,
-      weekStartDate: salary.weekStartDate,
-      weekEndDate: salary.weekEndDate,
-      workingDays: salary.workingDays,
-      scheduledHours: salary.scheduledHours,
-      actualHours: salary.actualHours,
-      grossDailyWages: salary.grossDailyWages,
-      lateDeductions: salary.lateDeductions,
-      netAttendancePay: salary.netAttendancePay,
-      travelAllowance: salary.travelAllowance,
-      otherAllowances: salary.otherAllowances,
-      bonus: salary.bonus,
-      manualDeductions: salary.manualDeductions,
-      finalSalary: salary.finalSalary,
-      attendanceBreakdown: salary.attendanceBreakdown,
-      capturedAt: salary.finalizedAt
-    };
-    await salary.save();
+/**
+ * Admin finalizes all weekly salaries for a given week or list of salary IDs
+ */
+exports.finalizeAllWeeklySalaries = async (req, res) => {
+  try {
+    const { weekLabel, salaryIds } = req.body;
+    let query = {};
+    if (Array.isArray(salaryIds) && salaryIds.length > 0) {
+      query._id = { $in: salaryIds };
+    } else if (weekLabel) {
+      const altLabel = weekLabel.includes(' – ') ? weekLabel.replace(' – ', ' to ') : weekLabel.replace(' to ', ' – ');
+      query.weekLabel = { $in: [weekLabel, altLabel] };
+    } else {
+      return res.status(400).json({ success: false, message: 'Please provide weekLabel or salaryIds to finalize.' });
+    }
 
-    // Lock corresponding attendances
-    await Attendance.updateMany(
-      { weeklySalary: salary._id },
-      { $set: { approvalStatus: 'Finalized' } }
-    );
+    query.status = { $nin: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] };
 
-    // Create or update single ledger entry for this salary earned
-    // Calculate running balance for this employee
-    const prevTransactions = await LedgerTransaction.find({
-      employee: salary.employee,
-      $nor: [
-        { transactionType: 'SALARY_EARNED', referenceId: salary._id }
-      ]
-    }).sort({ date: 1, createdAt: 1 });
+    const salariesToFinalize = await WeeklySalary.find(query);
+    if (!salariesToFinalize.length) {
+      return res.json({
+        success: true,
+        count: 0,
+        message: 'All salaries for this period are already finalized.',
+        finalized: []
+      });
+    }
 
-    let currentBalance = 0;
-    prevTransactions.forEach(t => {
-      currentBalance += (t.amountEarned || 0) - (t.amountPaid || 0);
-    });
-
-    const netEarned = salary.finalSalary;
-    const newBalance = currentBalance + netEarned;
-
-    await LedgerTransaction.findOneAndUpdate(
-      {
-        employee: salary.employee,
-        transactionType: 'SALARY_EARNED',
-        referenceId: salary._id
-      },
-      {
-        date: salary.weekEndDate,
-        description: `Weekly Salary for week ${salary.weekLabel} (${salary.shopName})`,
-        referenceType: 'WeeklySalary',
-        referenceId: salary._id,
-        attendancePay: salary.netAttendancePay,
-        lateDeduction: salary.lateDeductions,
-        allowance: (salary.travelAllowance || 0) + (salary.otherAllowances || 0),
-        bonus: salary.bonus || 0,
-        otherDeduction: salary.manualDeductions || 0,
-        amountEarned: netEarned,
-        amountPaid: 0,
-        runningBalance: newBalance,
-        createdBy: req.user._id
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-
-    await recalculateEmployeeLedger(salary.employee);
+    const finalizedList = [];
+    for (const salary of salariesToFinalize) {
+      const fin = await finalizeSingleSalaryHelper(salary, req.user, req);
+      finalizedList.push(fin);
+    }
 
     await logAction({
       user: req.user._id,
       username: req.user.name,
       role: req.user.role,
-      recordType: 'WeeklySalary',
-      recordId: salary._id,
-      action: 'SALARY_FINALIZED',
-      details: `Finalized weekly salary £${salary.finalSalary} for ${salary.employeeName} (${salary.weekLabel})`,
+      action: 'SALARY_BULK_FINALIZED',
+      details: `Bulk finalized ${finalizedList.length} weekly salaries for ${weekLabel || 'selected records'}`,
       req
     });
 
-    res.json({ success: true, message: 'Weekly salary finalized successfully.', salary });
+    res.json({
+      success: true,
+      count: finalizedList.length,
+      message: `Successfully finalized ${finalizedList.length} salaries. These are now available in Arsalan's dashboard for payment.`,
+      finalized: finalizedList
+    });
   } catch (error) {
-    return sendServerError(res, error, 'Failed to finalize salary.');
+    return sendServerError(res, error, 'Failed to bulk finalize weekly salaries.');
   }
 };
 

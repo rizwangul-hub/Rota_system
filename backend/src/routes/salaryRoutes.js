@@ -23,6 +23,7 @@ router.delete('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), sa
 router.put('/:id/deduction', authenticate, authorize('ADMIN'), salaryController.updateSalaryDeduction);
 
 // Admin finalizes weekly salary
+router.post('/finalize-all', authenticate, authorize('ADMIN'), salaryController.finalizeAllWeeklySalaries);
 router.post('/:id/finalize', authenticate, authorize('ADMIN'), salaryController.finalizeWeeklySalary);
 
 // Salary Distributor or Admin records payment
