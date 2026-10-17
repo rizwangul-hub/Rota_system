@@ -13,12 +13,38 @@ exports.getAdminDashboard = async (req, res) => {
     const week = getWeekRange(todayStr);
     const { startDate, endDate, weekLabel } = week;
 
-    const totalEmployees = await Employee.countDocuments();
-    const activeEmployees = await Employee.countDocuments({ employmentStatus: 'Active' });
-    const totalShops = await Shop.countDocuments({ isActive: true });
+    const [currentYear, currentMonthNumber] = todayStr.split('-').map(Number);
+    const currentMonth = new Date(Date.UTC(currentYear, currentMonthNumber - 1, 1))
+      .toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
 
-    // Today's attendance
-    const todayAttendance = await Attendance.find({ dateString: todayStr });
+    // Parallelize all independent DB queries to dramatically reduce load time
+    const [
+      totalEmployees,
+      activeEmployees,
+      totalShops,
+      todayAttendance,
+      pendingAttendanceCount,
+      weekSalaries,
+      shops,
+      monthlyBonuses
+    ] = await Promise.all([
+      Employee.countDocuments(),
+      Employee.countDocuments({ employmentStatus: 'Active' }),
+      Shop.countDocuments({ isActive: true }),
+      Attendance.find({ dateString: todayStr }).lean(),
+      Attendance.countDocuments({ approvalStatus: 'Pending Review' }),
+      WeeklySalary.find({
+        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
+        $or: [
+          { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
+          { weekStartDateString: week.startDateString },
+          { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
+        ]
+      }).lean(),
+      Shop.find({ isActive: true }).lean(),
+      Bonus.find({ month: currentMonth, year: currentYear }).lean()
+    ]);
+
     const attendanceStats = {
       total: todayAttendance.length,
       present: todayAttendance.filter(a => a.status === 'Present').length,
@@ -29,22 +55,10 @@ exports.getAdminDashboard = async (req, res) => {
       totalWages: todayAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0)
     };
 
-    const pendingAttendanceCount = await Attendance.countDocuments({ approvalStatus: 'Pending Review' });
-
-    // Weekly salaries
-    const weekSalaries = await WeeklySalary.find({
-      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-      $or: [
-        { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
-        { weekStartDateString: week.startDateString },
-        { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
-      ]
-    });
     const thisWeekSalaryTotal = weekSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
     const thisWeekPaidTotal = weekSalaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
     const thisWeekOutstanding = weekSalaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
     const allocatedSalaryCentsByShop = new Map();
-    const shops = await Shop.find({ isActive: true });
     weekSalaries.forEach(salary => {
       const breakdown = salary.finalizationSnapshot?.attendanceBreakdown || salary.attendanceBreakdown || [];
       const weightsByShop = new Map();
@@ -82,11 +96,6 @@ exports.getAdminDashboard = async (req, res) => {
       });
     });
 
-    // Monthly bonus total
-    const [currentYear, currentMonthNumber] = todayStr.split('-').map(Number);
-    const currentMonth = new Date(Date.UTC(currentYear, currentMonthNumber - 1, 1))
-      .toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-    const monthlyBonuses = await Bonus.find({ month: currentMonth, year: currentYear });
     const monthlyBonusTotal = monthlyBonuses.reduce((sum, b) => sum + (b.bonusAmount || 0), 0);
 
     // Shop labour breakdown

@@ -1671,6 +1671,119 @@ exports.exportEmployeeMonthlyPDF = async (req, res) => {
 // 6. EMPLOYEE YEARLY REPORT
 // ============================================================
 
+async function fetchYearlyEmployeeData(employeeId, targetYear) {
+  const yearStartStr = `${targetYear}-01-01`;
+  const yearEndStr = `${targetYear}-12-31`;
+  const yearStartDate = new Date(Date.UTC(targetYear, 0, 1));
+  const yearEndDate = new Date(Date.UTC(targetYear, 11, 31, 23, 59, 59, 999));
+
+  // Run all 3 queries in parallel — 1 single round-trip instead of 48 sequential queries!
+  const [attendances, salaries, payments] = await Promise.all([
+    Attendance.find({
+      employee: employeeId,
+      dateString: { $gte: yearStartStr, $lte: yearEndStr }
+    }).populate('employee').lean(),
+    WeeklySalary.find({
+      employee: employeeId,
+      status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
+      $or: [
+        { weekEndDate: { $gte: yearStartDate, $lte: yearEndDate } },
+        { weekEndDateString: { $gte: yearStartStr, $lte: yearEndStr } }
+      ]
+    }).lean(),
+    SalaryPayment.find({
+      employee: employeeId,
+      paymentDate: { $gte: yearStartDate, $lte: yearEndDate }
+    }).lean()
+  ]);
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthlyRows = [];
+
+  let totalWorkingDays = 0;
+  let totalActualHours = 0;
+  let totalAttendancePay = 0;
+  let totalAllowances = 0;
+  let totalBonus = 0;
+  let totalDeductions = 0;
+  let totalFinalSalary = 0;
+  let totalPaid = 0;
+
+  for (let m = 0; m < 12; m++) {
+    const monthNumStr = String(m + 1).padStart(2, '0');
+    const mAttendances = attendances.filter(a => a.dateString && a.dateString.slice(5, 7) === monthNumStr);
+    const mWorkingDays = mAttendances.filter(a => a.status !== 'Absent').length;
+    const mActualHours = Number(mAttendances.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
+    const mAttendancePay = Number(mAttendances.reduce((sum, a) => {
+      if (a.status === 'Absent') return sum;
+      if (typeof a.attendancePay === 'number' && a.attendancePay > 0) return sum + a.attendancePay;
+      const wage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const calc = calculateAttendanceRecord({
+        dailyWage: wage,
+        shiftStart: a.shiftStart || '09:00',
+        shiftEnd: a.shiftEnd || '19:00',
+        timeReached: a.timeReached || a.shiftStart || '09:00',
+        workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+        status: a.status,
+        gracePeriodMinutes: 15
+      });
+      return sum + calc.attendancePay;
+    }, 0).toFixed(2));
+
+    const mSalaries = salaries.filter(s => {
+      if (s.weekEndDateString) return s.weekEndDateString.slice(5, 7) === monthNumStr;
+      if (s.weekEndDate) return new Date(s.weekEndDate).getUTCMonth() === m;
+      return false;
+    });
+
+    const mAllowances = Number(mSalaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2));
+    const mBonus = Number(mSalaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2));
+    const mDeductions = Number(mSalaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2));
+    const mFinalSalary = Number(mSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2));
+
+    const mPayments = payments.filter(p => p.paymentDate && new Date(p.paymentDate).getUTCMonth() === m);
+    const mPaid = Number(mPayments.reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2));
+    const mOutstanding = Number(Math.max(0, mFinalSalary - mPaid).toFixed(2));
+
+    totalWorkingDays += mWorkingDays;
+    totalActualHours += mActualHours;
+    totalAttendancePay += mAttendancePay;
+    totalAllowances += mAllowances;
+    totalBonus += mBonus;
+    totalDeductions += mDeductions;
+    totalFinalSalary += mFinalSalary;
+    totalPaid += mPaid;
+
+    monthlyRows.push({
+      monthNumber: m + 1,
+      monthName: monthNames[m],
+      workingDays: mWorkingDays,
+      actualHours: mActualHours,
+      attendancePay: mAttendancePay,
+      allowances: mAllowances,
+      bonus: mBonus,
+      deductions: mDeductions,
+      finalSalary: mFinalSalary,
+      paid: mPaid,
+      outstanding: mOutstanding
+    });
+  }
+
+  const yearlyTotals = {
+    totalWorkingDays,
+    totalActualHours: Number(totalActualHours.toFixed(2)),
+    totalAttendancePay: Number(totalAttendancePay.toFixed(2)),
+    totalAllowances: Number(totalAllowances.toFixed(2)),
+    totalBonus: Number(totalBonus.toFixed(2)),
+    totalDeductions: Number(totalDeductions.toFixed(2)),
+    totalFinalSalary: Number(totalFinalSalary.toFixed(2)),
+    totalPaid: Number(totalPaid.toFixed(2)),
+    totalOutstanding: Number(Math.max(0, totalFinalSalary - totalPaid).toFixed(2))
+  };
+
+  return { monthlyRows, yearlyTotals };
+}
+
 exports.getEmployeeYearlyReport = async (req, res) => {
   try {
     const { employeeId, year } = req.query;
@@ -1680,90 +1793,7 @@ exports.getEmployeeYearlyReport = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
     const targetYear = Number(year) || new Date().getFullYear();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthlyRows = [];
-
-    let totalWorkingDays = 0;
-    let totalActualHours = 0;
-    let totalAttendancePay = 0;
-    let totalAllowances = 0;
-    let totalBonus = 0;
-    let totalDeductions = 0;
-    let totalFinalSalary = 0;
-    let totalPaid = 0;
-
-    for (let m = 0; m < 12; m++) {
-      const monthStart = new Date(Date.UTC(targetYear, m, 1));
-      const monthEnd = new Date(Date.UTC(targetYear, m + 1, 0, 23, 59, 59, 999));
-      const startStr = `${targetYear}-${String(m + 1).padStart(2, '0')}-01`;
-      const lastDay = new Date(targetYear, m + 1, 0).getDate();
-      const endStr = `${targetYear}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-      // Attendance in month
-      const monthAttendances = await Attendance.find({
-        employee: employeeId,
-        dateString: { $gte: startStr, $lte: endStr }
-      });
-
-      const mWorkingDays = monthAttendances.filter(a => a.status !== 'Absent').length;
-      const mActualHours = Number(monthAttendances.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
-      const mAttendancePay = Number(monthAttendances.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2));
-
-      // Finalized weekly salaries overlapping month end date
-      const monthSalaries = await WeeklySalary.find({
-        employee: employeeId,
-        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-        weekEndDate: { $gte: monthStart, $lte: monthEnd }
-      });
-
-      const mAllowances = Number(monthSalaries.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0).toFixed(2));
-      const mBonus = Number(monthSalaries.reduce((sum, s) => sum + (s.bonus || 0), 0).toFixed(2));
-      const mDeductions = Number(monthSalaries.reduce((sum, s) => sum + (s.manualDeductions || 0), 0).toFixed(2));
-      const mFinalSalary = Number(monthSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0).toFixed(2));
-
-      // Payments in month
-      const monthPayments = await SalaryPayment.find({
-        employee: employeeId,
-        paymentDate: { $gte: monthStart, $lte: monthEnd }
-      });
-      const mPaid = Number(monthPayments.reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2));
-      const mOutstanding = Number(Math.max(0, mFinalSalary - mPaid).toFixed(2));
-
-      totalWorkingDays += mWorkingDays;
-      totalActualHours += mActualHours;
-      totalAttendancePay += mAttendancePay;
-      totalAllowances += mAllowances;
-      totalBonus += mBonus;
-      totalDeductions += mDeductions;
-      totalFinalSalary += mFinalSalary;
-      totalPaid += mPaid;
-
-      monthlyRows.push({
-        monthNumber: m + 1,
-        monthName: monthNames[m],
-        workingDays: mWorkingDays,
-        actualHours: mActualHours,
-        attendancePay: mAttendancePay,
-        allowances: mAllowances,
-        bonus: mBonus,
-        deductions: mDeductions,
-        finalSalary: mFinalSalary,
-        paid: mPaid,
-        outstanding: mOutstanding
-      });
-    }
-
-    const yearlyTotals = {
-      totalWorkingDays,
-      totalActualHours: Number(totalActualHours.toFixed(2)),
-      totalAttendancePay: Number(totalAttendancePay.toFixed(2)),
-      totalAllowances: Number(totalAllowances.toFixed(2)),
-      totalBonus: Number(totalBonus.toFixed(2)),
-      totalDeductions: Number(totalDeductions.toFixed(2)),
-      totalFinalSalary: Number(totalFinalSalary.toFixed(2)),
-      totalPaid: Number(totalPaid.toFixed(2)),
-      totalOutstanding: Number(Math.max(0, totalFinalSalary - totalPaid).toFixed(2))
-    };
+    const { monthlyRows, yearlyTotals } = await fetchYearlyEmployeeData(employeeId, targetYear);
 
     res.json({
       success: true,
@@ -1786,82 +1816,7 @@ exports.exportEmployeeYearlyExcel = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
     const targetYear = Number(year) || new Date().getFullYear();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthlyRows = [];
-    let totDays = 0, totHours = 0, totAtt = 0, totAllow = 0, totBonus = 0, totDed = 0, totFinal = 0, totPaid = 0;
-
-    for (let m = 0; m < 12; m++) {
-      const monthStart = new Date(Date.UTC(targetYear, m, 1));
-      const monthEnd = new Date(Date.UTC(targetYear, m + 1, 0, 23, 59, 59, 999));
-      const startStr = `${targetYear}-${String(m + 1).padStart(2, '0')}-01`;
-      const lastDay = new Date(targetYear, m + 1, 0).getDate();
-      const endStr = `${targetYear}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-      const atts = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } });
-      const wDays = atts.filter(a => a.status !== 'Absent').length;
-      const hours = Number(atts.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
-      const attPay = Number(atts.reduce((sum, a) => {
-        const wage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-        if (a.status === 'Absent') return sum;
-        const calc = calculateAttendanceRecord({
-          dailyWage: wage,
-          shiftStart: a.shiftStart || '09:00',
-          shiftEnd: a.shiftEnd || '19:00',
-          timeReached: a.timeReached || a.shiftStart || '09:00',
-          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
-          status: a.status,
-          gracePeriodMinutes: 15
-        });
-        return sum + calc.attendancePay;
-      }, 0).toFixed(2));
-
-      const sals = await WeeklySalary.find({
-        employee: employeeId,
-        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-        weekEndDate: { $gte: monthStart, $lte: monthEnd }
-      });
-      const allow = sals.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0);
-      const bon = sals.reduce((sum, s) => sum + (s.bonus || 0), 0);
-      const ded = sals.reduce((sum, s) => sum + (s.manualDeductions || 0), 0);
-      const fin = sals.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
-
-      const pays = await SalaryPayment.find({ employee: employeeId, paymentDate: { $gte: monthStart, $lte: monthEnd } });
-      const paid = pays.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      totDays += wDays;
-      totHours += hours;
-      totAtt += attPay;
-      totAllow += allow;
-      totBonus += bon;
-      totDed += ded;
-      totFinal += fin;
-      totPaid += paid;
-
-      monthlyRows.push({
-        monthName: monthNames[m],
-        workingDays: wDays,
-        actualHours: hours,
-        attendancePay: attPay,
-        allowances: allow,
-        bonus: bon,
-        deductions: ded,
-        finalSalary: fin,
-        paid,
-        outstanding: Math.max(0, fin - paid)
-      });
-    }
-
-    const yearlyTotals = {
-      totalWorkingDays: totDays,
-      totalActualHours: totHours,
-      totalAttendancePay: totAtt,
-      totalAllowances: totAllow,
-      totalBonus: totBonus,
-      totalDeductions: totDed,
-      totalFinalSalary: totFinal,
-      totalPaid: totPaid,
-      totalOutstanding: Math.max(0, totFinal - totPaid)
-    };
+    const { monthlyRows, yearlyTotals } = await fetchYearlyEmployeeData(employeeId, targetYear);
 
     const workbook = await buildEmployeeYearlyExcel(employee.name, employee.employeeId, employee.assignedShop?.name, targetYear, monthlyRows, yearlyTotals);
 
@@ -1889,82 +1844,7 @@ exports.exportEmployeeYearlyPDF = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
     const targetYear = Number(year) || new Date().getFullYear();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthlyRows = [];
-    let totDays = 0, totHours = 0, totAtt = 0, totAllow = 0, totBonus = 0, totDed = 0, totFinal = 0, totPaid = 0;
-
-    for (let m = 0; m < 12; m++) {
-      const monthStart = new Date(Date.UTC(targetYear, m, 1));
-      const monthEnd = new Date(Date.UTC(targetYear, m + 1, 0, 23, 59, 59, 999));
-      const startStr = `${targetYear}-${String(m + 1).padStart(2, '0')}-01`;
-      const lastDay = new Date(targetYear, m + 1, 0).getDate();
-      const endStr = `${targetYear}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-      const atts = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } });
-      const wDays = atts.filter(a => a.status !== 'Absent').length;
-      const hours = Number(atts.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
-      const attPay = Number(atts.reduce((sum, a) => {
-        const wage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
-        if (a.status === 'Absent') return sum;
-        const calc = calculateAttendanceRecord({
-          dailyWage: wage,
-          shiftStart: a.shiftStart || '09:00',
-          shiftEnd: a.shiftEnd || '19:00',
-          timeReached: a.timeReached || a.shiftStart || '09:00',
-          workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
-          status: a.status,
-          gracePeriodMinutes: 15
-        });
-        return sum + calc.attendancePay;
-      }, 0).toFixed(2));
-
-      const sals = await WeeklySalary.find({
-        employee: employeeId,
-        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-        weekEndDate: { $gte: monthStart, $lte: monthEnd }
-      });
-      const allow = sals.reduce((sum, s) => sum + (s.travelAllowance || 0) + (s.otherAllowances || 0), 0);
-      const bon = sals.reduce((sum, s) => sum + (s.bonus || 0), 0);
-      const ded = sals.reduce((sum, s) => sum + (s.manualDeductions || 0), 0);
-      const fin = sals.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
-
-      const pays = await SalaryPayment.find({ employee: employeeId, paymentDate: { $gte: monthStart, $lte: monthEnd } });
-      const paid = pays.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      totDays += wDays;
-      totHours += hours;
-      totAtt += attPay;
-      totAllow += allow;
-      totBonus += bon;
-      totDed += ded;
-      totFinal += fin;
-      totPaid += paid;
-
-      monthlyRows.push({
-        monthName: monthNames[m],
-        workingDays: wDays,
-        actualHours: hours,
-        attendancePay: attPay,
-        allowances: allow,
-        bonus: bon,
-        deductions: ded,
-        finalSalary: fin,
-        paid,
-        outstanding: Math.max(0, fin - paid)
-      });
-    }
-
-    const yearlyTotals = {
-      totalWorkingDays: totDays,
-      totalActualHours: totHours,
-      totalAttendancePay: totAtt,
-      totalAllowances: totAllow,
-      totalBonus: totBonus,
-      totalDeductions: totDed,
-      totalFinalSalary: totFinal,
-      totalPaid: totPaid,
-      totalOutstanding: Math.max(0, totFinal - totPaid)
-    };
+    const { monthlyRows, yearlyTotals } = await fetchYearlyEmployeeData(employeeId, targetYear);
 
     await logAction({
       user: req.user,
@@ -2765,10 +2645,10 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     const currentWeek = weekLabel || week.weekLabel;
     const sId = safeObjectId(shopId);
 
-    // 1. Active workforce
-    const activeEmployees = await Employee.countDocuments({ employmentStatus: 'Active' });
+    // 1. Compute 6 months trend date range
+    const sixMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
+    const sixMonthsAgoStr = `${sixMonthsAgo.getUTCFullYear()}-${String(sixMonthsAgo.getUTCMonth() + 1).padStart(2, '0')}-01`;
 
-    // 2. Finalized payroll query
     const salaryQuery = {
       status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
       $or: [
@@ -2778,8 +2658,41 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       ]
     };
 
-    const finalizedSalaries = await WeeklySalary.find(salaryQuery);
-    const shops = await Shop.find({ isActive: true });
+    const targetMonthStr = month || now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    const bonusQuery = { month: targetMonthStr, year: targetYear };
+    if (sId) bonusQuery.shop = sId;
+
+    const weekAttendanceQuery = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+    if (sId) weekAttendanceQuery.shop = sId;
+
+    // 2. Run all queries in parallel with Promise.all
+    const [
+      activeEmployees,
+      finalizedSalaries,
+      shops,
+      bonuses,
+      weekAttendances,
+      trendSalaries
+    ] = await Promise.all([
+      Employee.countDocuments({ employmentStatus: 'Active' }),
+      WeeklySalary.find(salaryQuery).lean(),
+      Shop.find({ isActive: true }).lean(),
+      Bonus.find(bonusQuery).lean(),
+      Attendance.find(weekAttendanceQuery).lean(),
+      WeeklySalary.find({
+        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
+        $or: [
+          { weekEndDate: { $gte: sixMonthsAgo } },
+          { weekEndDateString: { $gte: sixMonthsAgoStr } }
+        ]
+      }).lean()
+    ]);
+
     const selectedShopId = sId ? sId.toString() : null;
     const sumAllocated = field => Number(finalizedSalaries.reduce(
       (total, salary) => total + allocateWeeklySalaryValue(salary, shops, field, selectedShopId),
@@ -2794,12 +2707,6 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       + allocateWeeklySalaryValue(salary, shops, 'otherAllowances', selectedShopId)
     ), 0).toFixed(2));
     const deductions = sumAllocated('manualDeductions');
-
-    // 3. Bonuses for the selected month
-    const targetMonthStr = month || now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-    const bonusQuery = { month: targetMonthStr, year: targetYear };
-    if (sId) bonusQuery.shop = sId;
-    const bonuses = await Bonus.find(bonusQuery);
     const totalBonuses = Number(bonuses.reduce((sum, b) => sum + (b.bonusAmount || 0), 0).toFixed(2));
 
     // 4. Weekly payroll cost by shop and attendance hours by actual work location.
@@ -2823,14 +2730,6 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       });
     });
 
-    const weekAttendanceQuery = {
-      $or: [
-        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
-        { date: { $gte: week.startDate, $lte: week.endDate } }
-      ]
-    };
-    if (sId) weekAttendanceQuery.shop = sId;
-    const weekAttendances = await Attendance.find(weekAttendanceQuery);
     const weeklyHoursByShop = new Map();
     weekAttendances.forEach(attendance => {
       const attendanceShopId = String(attendance.shop?._id || attendance.shop || '');
@@ -2858,7 +2757,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       });
     });
 
-    // 5. Current-week status counts are attendance records (not distinct workers).
+    // 5. Current-week status counts
     const attendanceDistribution = {
       present: weekAttendances.filter(a => a.status === 'Present').length,
       late: weekAttendances.filter(a => a.status === 'Late').length,
@@ -2866,7 +2765,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       absent: weekAttendances.filter(a => a.status === 'Absent').length
     };
 
-    // 6. Monthly Salary Trend (last 6 months)
+    // 6. Monthly Salary Trend (last 6 months in memory from single query)
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const monthlySalaryTrend = [];
     for (let i = 5; i >= 0; i--) {
@@ -2875,13 +2774,15 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       const mYear = d.getUTCFullYear();
       const mStart = new Date(Date.UTC(mYear, d.getUTCMonth(), 1));
       const mEnd = new Date(Date.UTC(mYear, d.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+      const mPrefix = `${mYear}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 
-      const mSalaries = await WeeklySalary.find({
-        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
-        $or: [
-          { weekEndDate: { $gte: mStart, $lte: mEnd } },
-          { weekEndDateString: { $gte: `${mYear}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`, $lte: `${mYear}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(new Date(Date.UTC(mYear, d.getUTCMonth() + 1, 0)).getUTCDate()).padStart(2, '0')}` } }
-        ]
+      const mSalaries = trendSalaries.filter(s => {
+        if (s.weekEndDateString && s.weekEndDateString.startsWith(mPrefix)) return true;
+        if (s.weekEndDate) {
+          const dt = new Date(s.weekEndDate);
+          return dt >= mStart && dt <= mEnd;
+        }
+        return false;
       });
 
       monthlySalaryTrend.push({
