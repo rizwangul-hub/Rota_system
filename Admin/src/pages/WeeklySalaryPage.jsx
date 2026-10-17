@@ -356,8 +356,9 @@ export default function WeeklySalaryPage() {
   };
 
   const isFinalized = (s) => ['FINALIZED', 'PAID', 'Finalized', 'Paid', 'PARTIALLY_PAID'].includes(s?.status);
-  const alreadyGenerated = salaries.length > 0;
-  const unfinalizedSalaries = salaries.filter(s => !isFinalized(s));
+  const payableSalaries = salaries.filter(s => s.employee?.dailyWage !== 0);
+  const alreadyGenerated = payableSalaries.length > 0;
+  const unfinalizedSalaries = payableSalaries.filter(s => !isFinalized(s));
   const unfinalizedCount = unfinalizedSalaries.length;
 
   const handleFinalizeAllSalaries = async () => {
@@ -688,7 +689,7 @@ export default function WeeklySalaryPage() {
               </tr>
             </thead>
             <tbody>
-              {salaries.map(s => {
+              {payableSalaries.map(s => {
                 const hasAdj = (s.travelAllowance || 0) + (s.otherAllowances || 0) + (s.bonus || 0) + (s.manualDeductions || 0) > 0;
                 return (
                   <tr key={s._id}>
@@ -759,7 +760,7 @@ export default function WeeklySalaryPage() {
                 );
               })}
 
-              {salaries.length === 0 && !loading && (
+              {payableSalaries.length === 0 && !loading && (
                 <tr>
                   <td colSpan="15" style={{ textAlign: 'center', padding: '48px 16px', color: '#94a3b8' }}>
                     <div style={{ fontSize: '18px', marginBottom: '8px' }}>💰 No weekly salary records for this period</div>
