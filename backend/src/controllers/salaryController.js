@@ -226,7 +226,10 @@ exports.generateWeeklySalary = async (req, res) => {
 
       // Dynamically calculate lateness deductions and pay for each attendance record
       records.forEach(r => {
-        const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage || empDoc?.dailyWage);
+        const effectiveEmpWage = empDoc?.dailyWage ?? r.employee?.dailyWage;
+        const wage = (effectiveEmpWage !== undefined && effectiveEmpWage !== null)
+          ? Number(effectiveEmpWage)
+          : resolveDailyWage(r.dailyWage, effectiveEmpWage);
         r.dailyWage = wage;
         const calcResult = calculateAttendanceRecord({
           dailyWage: wage,

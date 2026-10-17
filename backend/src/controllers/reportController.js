@@ -94,7 +94,9 @@ exports.getDailyAttendanceReport = async (req, res) => {
       .sort({ shopName: 1, employeeName: 1 });
 
     records.forEach(r => {
-      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
+      const wage = (r.employee && r.employee.dailyWage !== undefined && r.employee.dailyWage !== null)
+        ? Number(r.employee.dailyWage)
+        : resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       r.dailyWage = wage;
       if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
@@ -187,7 +189,9 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
 
     const records = await Attendance.find(query).populate('employee').populate('shop').sort({ shopName: 1, employeeName: 1 });
     records.forEach(r => {
-      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
+      const wage = (r.employee && r.employee.dailyWage !== undefined && r.employee.dailyWage !== null)
+        ? Number(r.employee.dailyWage)
+        : resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       r.dailyWage = wage;
       if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
@@ -249,7 +253,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     const records = await Attendance.find(query).populate('employee').populate('shop').sort({ shopName: 1, employeeName: 1 });
     records.forEach(r => {
-      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
+      const wage = (r.employee && r.employee.dailyWage !== undefined && r.employee.dailyWage !== null)
+        ? Number(r.employee.dailyWage)
+        : resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       r.dailyWage = wage;
       if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
