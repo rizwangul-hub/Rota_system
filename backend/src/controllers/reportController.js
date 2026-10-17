@@ -942,7 +942,9 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
     ? targetWeekLabel.replace(' – ', ' to ')
     : targetWeekLabel.replace(' to ', ' – ');
 
+  const SYSTEM_START_DATE = new Date('2026-10-11T00:00:00.000Z');
   const query = {
+    weekStartDate: { $gte: SYSTEM_START_DATE },
     $or: [
       { weekLabel: { $in: [targetWeekLabel, altLabel, week.weekLabel, week.legacyWeekLabel] } },
       { weekStartDateString: week.startDateString },
@@ -2510,9 +2512,17 @@ exports.getEmployeeLedger = async (req, res) => {
     // Ensure running balances are updated
     await recalculateEmployeeLedger(employeeId);
 
-    const query = { employee: employeeId };
+    const SYSTEM_START_DATE = new Date('2026-10-11T00:00:00.000Z');
+    const query = {
+      employee: employeeId,
+      date: { $gte: SYSTEM_START_DATE }
+    };
     if (startDate && endDate) {
-      query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+      const parsedStart = new Date(startDate);
+      query.date = {
+        $gte: parsedStart > SYSTEM_START_DATE ? parsedStart : SYSTEM_START_DATE,
+        $lte: new Date(endDate)
+      };
     }
 
     const ledgerTransactions = await LedgerTransaction.find(query).sort({ date: 1, createdAt: 1 });
@@ -2544,7 +2554,10 @@ exports.exportEmployeeLedgerExcel = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
     await recalculateEmployeeLedger(employeeId);
-    const transactions = await LedgerTransaction.find({ employee: employeeId }).sort({ date: 1, createdAt: 1 });
+    const transactions = await LedgerTransaction.find({
+      employee: employeeId,
+      date: { $gte: new Date('2026-10-11T00:00:00.000Z') }
+    }).sort({ date: 1, createdAt: 1 });
     const totalEarned = Number(transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0).toFixed(2));
     const totalPaid = Number(transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0).toFixed(2));
     const summary = {
@@ -2580,7 +2593,10 @@ exports.exportEmployeeLedgerPDF = async (req, res) => {
     if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
 
     await recalculateEmployeeLedger(employeeId);
-    const transactions = await LedgerTransaction.find({ employee: employeeId }).sort({ date: 1, createdAt: 1 });
+    const transactions = await LedgerTransaction.find({
+      employee: employeeId,
+      date: { $gte: new Date('2026-10-11T00:00:00.000Z') }
+    }).sort({ date: 1, createdAt: 1 });
     const totalEarned = Number(transactions.reduce((sum, t) => sum + (t.amountEarned || 0), 0).toFixed(2));
     const totalPaid = Number(transactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0).toFixed(2));
     const summary = {

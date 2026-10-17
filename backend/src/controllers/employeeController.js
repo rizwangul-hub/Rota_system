@@ -240,17 +240,27 @@ exports.updateEmployee = async (req, res) => {
       });
       wageChanged = true;
 
-      // Update any attendance records for this employee where dailyWage was 0 or missing
+      // Update attendance records for this employee from effectiveDate onwards (and any with 0 wage)
       const mongoose = require('mongoose');
       if (mongoose.isValidObjectId(id)) {
         const Attendance = require('../models/Attendance');
-        const { calculateAttendanceRecord } = require('../utils/calc');
-        const zeroWages = await Attendance.find({
+        const { calculateAttendanceRecord, getUKDateString } = require('../utils/calc');
+        const effectiveDateStr = updates.wageEffectiveDate
+          ? updates.wageEffectiveDate.split('T')[0]
+          : getUKDateString(effectiveDate);
+
+        const attendancesToUpdate = await Attendance.find({
           employee: id,
-          $or: [{ dailyWage: { $exists: false } }, { dailyWage: 0 }, { dailyWage: null }]
+          $or: [
+            { dateString: { $gte: effectiveDateStr } },
+            { date: { $gte: new Date(effectiveDateStr + 'T00:00:00.000Z') } },
+            { dailyWage: { $exists: false } },
+            { dailyWage: 0 },
+            { dailyWage: null }
+          ]
         });
 
-        for (const attRec of zeroWages) {
+        for (const attRec of attendancesToUpdate) {
           attRec.dailyWage = newWage;
           if (attRec.status !== 'Absent') {
             const calc = calculateAttendanceRecord({

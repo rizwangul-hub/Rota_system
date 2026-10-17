@@ -172,7 +172,9 @@ exports.getDistributorDashboard = async (req, res) => {
     const { weekLabel, shopId, status } = req.query;
     const currentWeek = weekLabel || getWeekRange(new Date()).weekLabel;
 
-    const query = {};
+    const query = {
+      weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') }
+    };
     if (status && status !== 'All') {
       if (/^finalized$/i.test(status)) {
         query.status = { $in: ['FINALIZED', 'Finalized'] };
@@ -193,17 +195,40 @@ exports.getDistributorDashboard = async (req, res) => {
     }
     if (shopId) query.shop = shopId;
 
-    const salaries = await WeeklySalary.find(query)
+    const rawSalaries = await WeeklySalary.find(query)
       .populate('employee')
       .populate('shop')
       .sort({ status: 1, shopName: 1, employeeName: 1 });
 
-    const totalPayable = salaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
+    const salaries = rawSalaries.map(s => {
+      const sObj = s.toObject ? s.toObject() : { ...s };
+      const openingBal = Number(s.employee?.openingBalance || 0);
+      const weeklySalary = Number(s.finalSalary || 0);
+      const totalPayableForEmp = Number((weeklySalary + openingBal).toFixed(2));
+      const totalPaidForEmp = Number((s.totalPaid || 0).toFixed(2));
+      const balanceRemainingForEmp = Number(Math.max(0, totalPayableForEmp - totalPaidForEmp).toFixed(2));
+
+      sObj.openingBalance = openingBal;
+      sObj.weeklySalary = weeklySalary;
+      sObj.totalPayable = totalPayableForEmp;
+      sObj.balanceRemaining = balanceRemainingForEmp;
+      if (balanceRemainingForEmp === 0 && totalPaidForEmp > 0) {
+        sObj.status = 'PAID';
+      } else if (totalPaidForEmp > 0) {
+        sObj.status = 'PARTIALLY_PAID';
+      }
+      return sObj;
+    });
+
+    const totalWeeklyWages = salaries.reduce((sum, s) => sum + (s.weeklySalary || 0), 0);
+    const totalOpeningBalance = salaries.reduce((sum, s) => sum + (s.openingBalance || 0), 0);
+    const totalPayable = salaries.reduce((sum, s) => sum + (s.totalPayable || 0), 0);
     const totalPaid = salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
     const totalOutstanding = salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
     const pendingCount = salaries.filter(s => s.balanceRemaining > 0).length;
 
     const availableWeeks = await WeeklySalary.distinct('weekLabel', {
+      weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') },
       status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] }
     });
 
@@ -212,6 +237,8 @@ exports.getDistributorDashboard = async (req, res) => {
       currentWeek,
       availableWeeks,
       metrics: {
+        totalWeeklyWages: Number(totalWeeklyWages.toFixed(2)),
+        totalOpeningBalance: Number(totalOpeningBalance.toFixed(2)),
         totalPayable: Number(totalPayable.toFixed(2)),
         totalPaid: Number(totalPaid.toFixed(2)),
         totalOutstanding: Number(totalOutstanding.toFixed(2)),

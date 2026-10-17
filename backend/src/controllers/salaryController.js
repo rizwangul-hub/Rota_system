@@ -113,6 +113,13 @@ exports.generateWeeklySalary = async (req, res) => {
     const { date, shopId, isRegenerate } = req.body;
     const week = getWeekRange(date || new Date());
 
+    if (new Date(week.startDate) < new Date('2026-10-11T00:00:00.000Z')) {
+      return res.status(400).json({
+        success: false,
+        message: 'System baseline date is 11 October 2026. Weekly salaries cannot be generated before 11/10/2026.'
+      });
+    }
+
     // 1. Query checked attendance for this week
     const attendanceQuery = {
       $or: [
@@ -354,7 +361,9 @@ exports.regenerateWeeklySalary = async (req, res) => {
 exports.getWeeklySalaries = async (req, res) => {
   try {
     const { date, weekLabel, shopId, status, employeeId, search } = req.query;
-    const query = {};
+    const query = {
+      weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') }
+    };
 
     let resolvedWeek = null;
     if (weekLabel) {
@@ -877,6 +886,8 @@ exports.recordSalaryPayment = async (req, res) => {
 
     let salary;
     let payment;
+    let openingBal = 0;
+    let totalPayable = 0;
     let previousPaid = 0;
     let totalPaid = 0;
     let balanceRemaining = 0;
@@ -909,9 +920,14 @@ exports.recordSalaryPayment = async (req, res) => {
         }
       }
 
+      const Employee = require('../models/Employee');
+      const emp = await Employee.findById(salary.employee).session(session);
+      openingBal = Number(emp?.openingBalance || 0);
+      totalPayable = Number(((salary.finalSalary || 0) + openingBal).toFixed(2));
+
       const priorPayments = await SalaryPayment.find({ weeklySalary: salary._id }).session(session);
       previousPaid = Number(priorPayments.reduce((sum, record) => sum + record.amount, 0).toFixed(2));
-      const outstanding = Number(Math.max(0, salary.finalSalary - previousPaid).toFixed(2));
+      const outstanding = Number(Math.max(0, totalPayable - previousPaid).toFixed(2));
       if (outstanding <= 0) {
         outcome = { status: 400, message: 'This salary is already fully paid.' };
         return;
@@ -967,7 +983,7 @@ exports.recordSalaryPayment = async (req, res) => {
 
       [payment] = await SalaryPayment.create([paymentPayload], { session });
       totalPaid = Number((previousPaid + payAmount).toFixed(2));
-      balanceRemaining = Number(Math.max(0, salary.finalSalary - totalPaid).toFixed(2));
+      balanceRemaining = Number(Math.max(0, totalPayable - totalPaid).toFixed(2));
       salary.totalPaid = totalPaid;
       salary.balanceRemaining = balanceRemaining;
       salary.status = balanceRemaining === 0 ? 'PAID' : 'PARTIALLY_PAID';
@@ -1024,6 +1040,9 @@ exports.recordSalaryPayment = async (req, res) => {
         employeeName: salary.employeeName,
         employeeId: salary.employeeId,
         weekLabel: salary.weekLabel,
+        weeklySalary: salary.finalSalary,
+        openingBalance: openingBal,
+        totalPayable: totalPayable,
         paymentAmount: payAmount,
         paymentDate: payment.paymentDate,
         paymentMethod: normalizedMethod,

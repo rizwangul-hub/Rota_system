@@ -96,7 +96,11 @@ export default function SalaryDistributor() {
 
   const openPayModal = (salary) => {
     setPayModalSalary(salary);
-    const outstanding = Number(salary.balanceRemaining > 0 ? salary.balanceRemaining : salary.finalSalary || 0);
+    const openingBal = Number(salary.openingBalance || salary.employee?.openingBalance || 0);
+    const weeklySalary = Number(salary.weeklySalary || salary.finalSalary || 0);
+    const totalPayable = Number(salary.totalPayable || (weeklySalary + openingBal));
+    const totalPaid = Number(salary.totalPaid || 0);
+    const outstanding = Number(salary.balanceRemaining > 0 ? salary.balanceRemaining : Math.max(0, totalPayable - totalPaid));
     setPayAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentMethod('Cash');
@@ -121,9 +125,15 @@ export default function SalaryDistributor() {
         clientReference: `${payModalSalary._id}-${Date.now()}`
       });
       if (res.data.success) {
+        const openingBal = Number(payModalSalary.openingBalance || payModalSalary.employee?.openingBalance || 0);
+        const weeklySalary = Number(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0);
+        const totalPayable = Number(payModalSalary.totalPayable || (weeklySalary + openingBal));
         setPaymentReceipt(res.data.receipt || {
           employeeName: payModalSalary.employeeName,
           weekLabel: payModalSalary.weekLabel,
+          weeklySalary,
+          openingBalance: openingBal,
+          totalPayable,
           paymentAmount: amount,
           paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
           paymentMethod,
@@ -218,12 +228,26 @@ export default function SalaryDistributor() {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="stat-grid" style={{ marginBottom: '20px' }}>
+      <div className="stat-grid" style={{ marginBottom: '20px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
-          <div className="stat-lbl">Total Finalized Wages</div>
-          <div className="stat-val" style={{ color: '#2563eb' }}>£{metrics.totalPayable?.toFixed(2) || '0.00'}</div>
+          <div className="stat-lbl">Weekly Wages</div>
+          <div className="stat-val" style={{ color: '#2563eb' }}>£{metrics.totalWeeklyWages?.toFixed(2) || '0.00'}</div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-            Approved by Admin
+            Current week attendance
+          </div>
+        </div>
+        <div className="stat-card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+          <div className="stat-lbl">Opening Balance (Owed)</div>
+          <div className="stat-val" style={{ color: '#7c3aed' }}>£{metrics.totalOpeningBalance?.toFixed(2) || '0.00'}</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            Previous unpaid balance
+          </div>
+        </div>
+        <div className="stat-card" style={{ borderLeft: '4px solid #0284c7' }}>
+          <div className="stat-lbl">Total Payable</div>
+          <div className="stat-val" style={{ color: '#0284c7' }}>£{metrics.totalPayable?.toFixed(2) || '0.00'}</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            Weekly Wages + Opening
           </div>
         </div>
         <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
@@ -357,7 +381,9 @@ export default function SalaryDistributor() {
                 <th style={{ textAlign: 'center' }}>Work Days</th>
                 <th style={{ textAlign: 'right' }}>Daily Wage</th>
                 <th style={{ textAlign: 'right' }}>Deductions</th>
-                <th style={{ textAlign: 'right' }}>Final Salary</th>
+                <th style={{ textAlign: 'right' }}>Weekly Salary</th>
+                <th style={{ textAlign: 'right' }}>Opening Balance</th>
+                <th style={{ textAlign: 'right' }}>Total Payable</th>
                 <th style={{ textAlign: 'right' }}>Paid</th>
                 <th style={{ textAlign: 'right' }}>Remaining Balance</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
@@ -413,8 +439,20 @@ export default function SalaryDistributor() {
                         <span style={{ color: '#94a3b8' }}>£0.00</span>
                       )}
                     </td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>
+                      £{(s.weeklySalary || s.finalSalary || 0).toFixed(2)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {(s.openingBalance || 0) > 0 ? (
+                        <span style={{ color: '#7c3aed', fontWeight: 600, fontSize: '13px' }}>
+                          +£{(s.openingBalance || 0).toFixed(2)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>£0.00</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '14px', color: '#2563eb' }}>
-                      £{s.finalSalary?.toFixed(2)}
+                      £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0))).toFixed(2)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {(s.totalPaid || 0) > 0 ? (
@@ -545,7 +583,7 @@ export default function SalaryDistributor() {
 
               {filteredSalaries.length === 0 && !loading && (
                 <tr>
-                  <td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <td colSpan="13" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                     No finalized salary records found matching current criteria.
                   </td>
                 </tr>
@@ -604,17 +642,25 @@ export default function SalaryDistributor() {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                    <span style={{ color: '#64748b' }}>Final Total Salary:</span>
-                    <strong style={{ color: '#0f172a' }}>£{payModalSalary.finalSalary?.toFixed(2)}</strong>
+                    <span style={{ color: '#64748b' }}>Weekly Salary:</span>
+                    <strong style={{ color: '#0f172a' }}>£{(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0).toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
+                    <strong style={{ color: '#7c3aed' }}>+£{(payModalSalary.openingBalance || 0).toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '4px', borderTop: '1px dashed #e2e8f0', paddingTop: '4px' }}>
+                    <span style={{ fontWeight: 600, color: '#0f172a' }}>Total Payable Amount:</span>
+                    <strong style={{ color: '#2563eb', fontWeight: 700 }}>£{(payModalSalary.totalPayable || ((payModalSalary.finalSalary || 0) + (payModalSalary.openingBalance || 0))).toFixed(2)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
                     <span style={{ color: '#64748b' }}>Already Paid:</span>
-                    <span style={{ color: '#059669', fontWeight: 600 }}>£{payModalSalary.totalPaid?.toFixed(2) || '0.00'}</span>
+                    <span style={{ color: '#059669', fontWeight: 600 }}>£{(payModalSalary.totalPaid || 0).toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', borderTop: '1px solid #cbd5e1', paddingTop: '8px', marginTop: '6px' }}>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>Outstanding Balance:</span>
                     <strong style={{ color: '#d97706', fontSize: '17px' }}>
-                      £{payModalSalary.balanceRemaining?.toFixed(2)}
+                      £{(payModalSalary.balanceRemaining || 0).toFixed(2)}
                     </strong>
                   </div>
                 </div>
@@ -867,6 +913,24 @@ export default function SalaryDistributor() {
                   <span style={{ color: '#64748b' }}>Salary Week:</span>
                   <span>{paymentReceipt.weekLabel}</span>
                 </div>
+                {paymentReceipt.weeklySalary !== undefined && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Weekly Salary:</span>
+                    <span>£{paymentReceipt.weeklySalary?.toFixed(2)}</span>
+                  </div>
+                )}
+                {Boolean(paymentReceipt.openingBalance) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
+                    <span style={{ color: '#7c3aed' }}>+£{paymentReceipt.openingBalance?.toFixed(2)}</span>
+                  </div>
+                )}
+                {paymentReceipt.totalPayable !== undefined && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Total Payable:</span>
+                    <strong style={{ color: '#2563eb' }}>£{paymentReceipt.totalPayable?.toFixed(2)}</strong>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#64748b' }}>Payment Date:</span>
                   <span>{new Date(paymentReceipt.paymentDate).toLocaleString('en-GB')}</span>

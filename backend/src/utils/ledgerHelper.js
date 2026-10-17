@@ -1,15 +1,22 @@
 const LedgerTransaction = require('../models/LedgerTransaction');
 
+const SYSTEM_START_DATE_STR = '2026-10-11';
+const SYSTEM_START_DATE = new Date('2026-10-11T00:00:00.000Z');
+
 /**
  * Synchronize wage increases / adjustments with the ledger so wage change dates
  * appear as chronological audit milestones with increase date and details.
+ * Rule: Baseline date is 11 October 2026. Wage rates effective 11 October 2026
+ * are the starting base rate and must NOT create a WAGE_INCREASE ledger entry.
+ * Only wage changes on other dates (> 11 Oct 2026) appear in the ledger.
  */
 async function syncWageHistoryToLedger(employee, userId = null) {
   if (!employee || !employee._id) return;
+  const targetEmployeeId = employee._id;
   let wageHistory = employee.wageHistory;
   if (!wageHistory || !Array.isArray(wageHistory)) {
     const EmployeeModel = require('../models/Employee');
-    const query = EmployeeModel.findById(employee._id);
+    const query = EmployeeModel.findById(targetEmployeeId);
     const emp = typeof query?.select === 'function' ? await query.select('wageHistory').lean() : await query;
     wageHistory = emp?.wageHistory;
   }
@@ -20,20 +27,32 @@ async function syncWageHistoryToLedger(employee, userId = null) {
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const curr = sorted[i];
+    const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
+    const txDateStr = txDate.toISOString().split('T')[0];
+
+    // If effective date is 11 October 2026 or earlier, do not show as wage increase in ledger
+    if (txDateStr === SYSTEM_START_DATE_STR || txDate < SYSTEM_START_DATE) {
+      await LedgerTransaction.deleteMany({
+        employee: targetEmployeeId,
+        referenceId: curr._id,
+        referenceType: 'WageHistory'
+      });
+      continue;
+    }
+
     if (Number(curr.wage) !== Number(prev.wage)) {
       const isIncrease = Number(curr.wage) > Number(prev.wage);
       const reasonStr = curr.reason && curr.reason.trim() ? ` (${curr.reason.trim()})` : '';
       const description = `Daily wage ${isIncrease ? 'increased' : 'adjusted'} from £${Number(prev.wage).toFixed(2)} to £${Number(curr.wage).toFixed(2)}${reasonStr}`;
-      const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
 
       await LedgerTransaction.findOneAndUpdate(
         {
-          employee: emp._id,
+          employee: targetEmployeeId,
           referenceId: curr._id,
           referenceType: 'WageHistory'
         },
         {
-          employee: emp._id,
+          employee: targetEmployeeId,
           date: txDate,
           transactionType: 'WAGE_INCREASE',
           description,
@@ -54,17 +73,29 @@ async function syncWageHistoryToLedger(employee, userId = null) {
     }
   }
 
-  return await recalculateEmployeeLedger(emp._id);
+  return await recalculateEmployeeLedger(targetEmployeeId);
 }
 
 /**
  * Recalculate running balance across all transactions for an employee in chronological order.
- * This guarantees the ledger always stays mathematically consistent.
+ * Strictly enforces that all transactions start from 11 October 2026.
  */
 async function recalculateEmployeeLedger(employeeId) {
   if (!employeeId) return { transactions: [], totalEarned: 0, totalPaid: 0, currentBalance: 0 };
 
   try {
+    // Delete any obsolete transactions before system baseline 11 October 2026
+    await LedgerTransaction.deleteMany({
+      employee: employeeId,
+      date: { $lt: SYSTEM_START_DATE }
+    });
+    // Delete any wage increase transactions on baseline date 11 October 2026
+    await LedgerTransaction.deleteMany({
+      employee: employeeId,
+      transactionType: 'WAGE_INCREASE',
+      date: { $gte: SYSTEM_START_DATE, $lte: new Date('2026-10-11T23:59:59.999Z') }
+    });
+
     const EmployeeModel = require('../models/Employee');
     const emp = await EmployeeModel.findById(employeeId).select('wageHistory').lean();
     if (emp && emp.wageHistory && emp.wageHistory.length > 1) {
@@ -72,11 +103,22 @@ async function recalculateEmployeeLedger(employeeId) {
       for (let i = 1; i < sorted.length; i++) {
         const prev = sorted[i - 1];
         const curr = sorted[i];
+        const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
+        const txDateStr = txDate.toISOString().split('T')[0];
+
+        if (txDateStr === SYSTEM_START_DATE_STR || txDate < SYSTEM_START_DATE) {
+          await LedgerTransaction.deleteMany({
+            employee: employeeId,
+            referenceId: curr._id,
+            referenceType: 'WageHistory'
+          });
+          continue;
+        }
+
         if (Number(curr.wage) !== Number(prev.wage)) {
           const isIncrease = Number(curr.wage) > Number(prev.wage);
           const reasonStr = curr.reason && curr.reason.trim() ? ` (${curr.reason.trim()})` : '';
           const description = `Daily wage ${isIncrease ? 'increased' : 'adjusted'} from £${Number(prev.wage).toFixed(2)} to £${Number(curr.wage).toFixed(2)}${reasonStr}`;
-          const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
 
           await LedgerTransaction.findOneAndUpdate(
             {
@@ -109,8 +151,10 @@ async function recalculateEmployeeLedger(employeeId) {
     console.error('Error auto-syncing wage history into ledger:', err.message);
   }
 
-  const transactions = await LedgerTransaction.find({ employee: employeeId })
-    .sort({ date: 1, createdAt: 1 });
+  const transactions = await LedgerTransaction.find({
+    employee: employeeId,
+    date: { $gte: SYSTEM_START_DATE }
+  }).sort({ date: 1, createdAt: 1 });
 
   let running = 0;
   let totalEarned = 0;
@@ -144,7 +188,10 @@ async function syncEmployeeOpeningBalance(employee, openingBalance, openingBalan
   const balance = Number(openingBalance) || 0;
 
   if (balance !== 0) {
-    const txDate = openingBalanceDate ? new Date(openingBalanceDate) : (employee.startDate ? new Date(employee.startDate) : new Date());
+    let txDate = openingBalanceDate ? new Date(openingBalanceDate) : (employee.startDate ? new Date(employee.startDate) : new Date());
+    if (isNaN(txDate.getTime()) || txDate < SYSTEM_START_DATE) {
+      txDate = new Date(SYSTEM_START_DATE);
+    }
     txDate.setHours(0, 0, 0, 0);
 
     const amountEarned = balance >= 0 ? balance : 0;
