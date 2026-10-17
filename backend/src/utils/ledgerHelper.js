@@ -6,11 +6,16 @@ const LedgerTransaction = require('../models/LedgerTransaction');
  */
 async function syncWageHistoryToLedger(employee, userId = null) {
   if (!employee || !employee._id) return;
-  const EmployeeModel = require('../models/Employee');
-  const emp = await EmployeeModel.findById(employee._id).select('wageHistory').lean();
-  if (!emp || !emp.wageHistory || emp.wageHistory.length <= 1) return;
+  let wageHistory = employee.wageHistory;
+  if (!wageHistory || !Array.isArray(wageHistory)) {
+    const EmployeeModel = require('../models/Employee');
+    const query = EmployeeModel.findById(employee._id);
+    const emp = typeof query?.select === 'function' ? await query.select('wageHistory').lean() : await query;
+    wageHistory = emp?.wageHistory;
+  }
+  if (!wageHistory || wageHistory.length <= 1) return;
 
-  const sorted = [...emp.wageHistory].sort((a, b) => new Date(a.effectiveDate || a.createdAt || 0) - new Date(b.effectiveDate || b.createdAt || 0));
+  const sorted = [...wageHistory].sort((a, b) => new Date(a.effectiveDate || a.createdAt || 0) - new Date(b.effectiveDate || b.createdAt || 0));
 
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];

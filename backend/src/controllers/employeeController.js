@@ -241,32 +241,35 @@ exports.updateEmployee = async (req, res) => {
       wageChanged = true;
 
       // Update any attendance records for this employee where dailyWage was 0 or missing
-      const Attendance = require('../models/Attendance');
-      const { calculateAttendanceRecord } = require('../utils/calc');
-      const zeroWages = await Attendance.find({
-        employee: id,
-        $or: [{ dailyWage: { $exists: false } }, { dailyWage: 0 }, { dailyWage: null }]
-      });
+      const mongoose = require('mongoose');
+      if (mongoose.isValidObjectId(id)) {
+        const Attendance = require('../models/Attendance');
+        const { calculateAttendanceRecord } = require('../utils/calc');
+        const zeroWages = await Attendance.find({
+          employee: id,
+          $or: [{ dailyWage: { $exists: false } }, { dailyWage: 0 }, { dailyWage: null }]
+        });
 
-      for (const attRec of zeroWages) {
-        attRec.dailyWage = newWage;
-        if (attRec.status !== 'Absent') {
-          const calc = calculateAttendanceRecord({
-            dailyWage: newWage,
-            shiftStart: attRec.shiftStart || '09:00',
-            shiftEnd: attRec.shiftEnd || '19:00',
-            timeReached: attRec.timeReached || '09:00',
-            workerEndTime: attRec.workerEndTime || '19:00',
-            status: attRec.status,
-            gracePeriodMinutes: 15
-          });
-          attRec.hourlyWage = calc.hourlyWage;
-          attRec.lateDeduction = calc.lateDeduction;
-          attRec.attendancePay = calc.attendancePay;
-        } else {
-          attRec.attendancePay = 0;
+        for (const attRec of zeroWages) {
+          attRec.dailyWage = newWage;
+          if (attRec.status !== 'Absent') {
+            const calc = calculateAttendanceRecord({
+              dailyWage: newWage,
+              shiftStart: attRec.shiftStart || '09:00',
+              shiftEnd: attRec.shiftEnd || '19:00',
+              timeReached: attRec.timeReached || '09:00',
+              workerEndTime: attRec.workerEndTime || '19:00',
+              status: attRec.status,
+              gracePeriodMinutes: 15
+            });
+            attRec.hourlyWage = calc.hourlyWage;
+            attRec.lateDeduction = calc.lateDeduction;
+            attRec.attendancePay = calc.attendancePay;
+          } else {
+            attRec.attendancePay = 0;
+          }
+          await attRec.save();
         }
-        await attRec.save();
       }
     }
 

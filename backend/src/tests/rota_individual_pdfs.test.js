@@ -6,6 +6,7 @@ audit.logAction = async () => {};
 
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
+const ShopSchedule = require('../models/ShopSchedule');
 const WeeklyRota = require('../models/WeeklyRota');
 const rotaController = require('../controllers/rotaController');
 
@@ -75,6 +76,12 @@ async function run() {
       select: () => ({
         lean: async () => [{ _id: employeeId, name: 'Test Worker', employeeId: 'T-001' }]
       })
+    }));
+    replaceMethod(ShopSchedule, 'find', () => ({
+      lean: async () => [
+        { shop: null, dayOfWeek: 0, openingTime: '11:00', closingTime: '17:00', isActive: true },
+        { shop: null, dayOfWeek: 1, openingTime: '09:00', closingTime: '19:00', isActive: true }
+      ]
     }));
 
     const response = new CaptureResponse();

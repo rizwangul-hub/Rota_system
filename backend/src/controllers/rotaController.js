@@ -14,6 +14,47 @@ const {
   getWeek, dateInWeek, minutes, validateIntervals, validatePayload, isDateKey,
   findDuplicateEmployeeDates, getEmployeeDayAssignments, createAiRosterContext, resolveAiAssignments
 } = require('../utils/rota');
+const { getDayOfWeekUK, getDefaultShiftTimesForDate } = require('../utils/calc');
+
+function formatTime12Hour(value) {
+  if (!value) return '';
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value).trim());
+  if (!match) return value || '';
+
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  if (hours > 23 || Number(minutes) > 59) return value;
+
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes} ${period}`;
+}
+
+function getShopShiftTimes(shopId, dateKey, allShopSchedules) {
+  const d = new Date(`${dateKey}T12:00:00Z`);
+  const dayOfWeek = getDayOfWeekUK(d);
+
+  let sched = null;
+  if (shopId && Array.isArray(allShopSchedules)) {
+    sched = allShopSchedules.find(s => s.shop && String(s.shop) === String(shopId) && s.dayOfWeek === dayOfWeek && s.isActive !== false);
+    if (!sched) {
+      sched = allShopSchedules.find(s => !s.shop && s.dayOfWeek === dayOfWeek && s.isActive !== false);
+    }
+  }
+
+  if (sched && sched.openingTime && sched.closingTime) {
+    return {
+      startTime: sched.openingTime,
+      endTime: sched.closingTime
+    };
+  }
+
+  const fallback = getDefaultShiftTimesForDate(d);
+  return {
+    startTime: fallback.shiftStart,
+    endTime: fallback.shiftEnd
+  };
+}
 
 class RotaError extends Error {
   constructor(status, message, details = {}) {
@@ -299,10 +340,17 @@ async function persistDraft(req, res, input, generationMethod = input.generation
   const makeKey = a => `${id(a.homeShopId || a.shopId)}:${id(a.employeeId)}:${a.dateKey}`;
   const previousByDay = new Map(rota.assignments.map(a => [makeKey(a), a]));
   const nextByDay = new Map(input.assignments.map(a => [makeKey(a), a]));
+  const allShopSchedules = await ShopSchedule.find({ isActive: true }).lean();
   rota.assignments = input.assignments.map(assignment => {
     const previous = previousByDay.get(makeKey(assignment));
-    const startTime = assignment.startTime || '09:00';
-    const endTime = assignment.endTime || '17:00';
+    const targetShopId = getActualShopId(assignment);
+    const definedTimes = getShopShiftTimes(targetShopId, assignment.dateKey, allShopSchedules);
+    let startTime = assignment.startTime;
+    let endTime = assignment.endTime;
+    if (assignment.status !== 'CUSTOM' || (startTime === '09:00' && endTime === '17:00') || !startTime || !endTime) {
+      startTime = definedTimes.startTime;
+      endTime = definedTimes.endTime;
+    }
     const scheduledHours = (minutes(endTime) - minutes(startTime)) / 60;
     return {
       ...assignment,
@@ -1534,9 +1582,10 @@ exports.exportPdf = async (req, res) => {
             ...(rota.shopRoster || []).flatMap(roster => (roster.employeeIds || []).map(id)),
             ...assignments.map(assignment => id(assignment.employeeId))
           ])];
-          const [shops, employees] = await Promise.all([
+          const [shops, employees, allShopSchedules] = await Promise.all([
             shopIds.length ? Shop.find({ _id: { $in: shopIds } }).select('name').lean() : [],
-            employeeIds.length ? Employee.find({ _id: { $in: employeeIds } }).select('name employeeId').lean() : []
+            employeeIds.length ? Employee.find({ _id: { $in: employeeIds } }).select('name employeeId').lean() : [],
+            ShopSchedule.find({ isActive: true }).lean()
           ]);
           const shopsById = new Map(shops.map(shop => [id(shop._id), shop]));
           const employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
@@ -1596,18 +1645,18 @@ exports.exportPdf = async (req, res) => {
               const headerHeight = 28;
               const rowHeight = 25;
               const drawTableHeader = () => {
-                doc.rect(32, y, 778, headerHeight).fill('#1e293b');
+                doc.rect(32, y, 778, headerHeight).fill('#f1f5f9');
                 const columnWidths = [nameWidth, ...Array(7).fill(dayWidth)];
                 let columnX = 32;
                 columnWidths.forEach(width => {
-                  doc.rect(columnX, y, width, headerHeight).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                  doc.rect(columnX, y, width, headerHeight).strokeColor('#cbd5e1').lineWidth(0.8).stroke();
                   columnX += width;
                 });
-                doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7).text('WORKER', 38, y + 10, { width: nameWidth - 10 });
+                doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text('WORKER', 38, y + 10, { width: nameWidth - 10 });
                 weekDates.forEach((dateKey, index) => {
                   const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' })
                     .format(new Date(`${dateKey}T12:00:00.000Z`));
-                  doc.text(`${dayName} ${formatRotaDate(dateKey)}`, 32 + nameWidth + index * dayWidth, y + 10, {
+                  doc.fillColor('#0f172a').text(`${dayName} ${formatRotaDate(dateKey)}`, 32 + nameWidth + index * dayWidth, y + 10, {
                     width: dayWidth, align: 'center', lineBreak: false
                   });
                 });
@@ -1624,7 +1673,7 @@ exports.exportPdf = async (req, res) => {
                 doc.rect(32, y, 778, rowHeight).fill(shopPalette.pdfHex);
                 let columnX = 32;
                 [nameWidth, ...Array(7).fill(dayWidth)].forEach(width => {
-                  doc.rect(columnX, y, width, rowHeight).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                  doc.rect(columnX, y, width, rowHeight).strokeColor('#cbd5e1').lineWidth(0.8).stroke();
                   columnX += width;
                 });
                 doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
@@ -1633,13 +1682,28 @@ exports.exportPdf = async (req, res) => {
                   const schedule = schedules.get(`${id(employee._id)}:${dateKey}`);
                   const workingShopIds = [...(schedule?.working.keys() || [])];
                   let label = 'Available';
+                  let subLabel = '';
                   let status = 'AVAILABLE';
                   if (workingShopIds.includes(shopId)) {
                     const dayAssignment = schedule.working.get(shopId)[0];
-                    label = dayAssignment.status === 'CUSTOM' && dayAssignment.note
-                      ? dayAssignment.note
-                      : `Available ${dayAssignment.startTime}-${dayAssignment.endTime}`;
-                    if (dayAssignment.status === 'CUSTOM') status = 'CUSTOM';
+                    const definedTimes = getShopShiftTimes(shopId, dateKey, allShopSchedules);
+                    let sStart = dayAssignment.startTime;
+                    let sEnd = dayAssignment.endTime;
+                    if (dayAssignment.status !== 'CUSTOM' || (sStart === '09:00' && sEnd === '17:00') || !sStart || !sEnd) {
+                      sStart = definedTimes.startTime;
+                      sEnd = definedTimes.endTime;
+                    }
+                    const fStart = formatTime12Hour(sStart);
+                    const fEnd = formatTime12Hour(sEnd);
+
+                    if (dayAssignment.status === 'CUSTOM' && dayAssignment.note) {
+                      label = dayAssignment.note;
+                      status = 'CUSTOM';
+                    } else {
+                      label = 'Available';
+                      subLabel = `${fStart} – ${fEnd}`;
+                      status = dayAssignment.status === 'CUSTOM' ? 'CUSTOM' : 'AVAILABLE';
+                    }
                   } else if (workingShopIds.length) {
                     label = workingShopIds.map(otherShopId => shopsById.get(otherShopId)?.name || 'Other shop').join(', ');
                     status = 'LOANED';
@@ -1647,8 +1711,16 @@ exports.exportPdf = async (req, res) => {
                     label = 'OFF';
                     status = 'OFF';
                   }
-                  doc.fillColor(getRotaStatusTextColor(status)).font('Helvetica-Bold').fontSize(7)
-                    .text(label, 32 + nameWidth + index * dayWidth + 2, y + 8, { width: dayWidth - 4, align: 'center', lineBreak: false });
+
+                  if (subLabel) {
+                    doc.fillColor(getRotaStatusTextColor(status)).font('Helvetica-Bold').fontSize(6.5)
+                      .text(label, 32 + nameWidth + index * dayWidth + 2, y + 4, { width: dayWidth - 4, align: 'center', lineBreak: false });
+                    doc.fillColor('#475569').font('Helvetica').fontSize(6)
+                      .text(subLabel, 32 + nameWidth + index * dayWidth + 2, y + 14, { width: dayWidth - 4, align: 'center', lineBreak: false });
+                  } else {
+                    doc.fillColor(getRotaStatusTextColor(status)).font('Helvetica-Bold').fontSize(7)
+                      .text(label, 32 + nameWidth + index * dayWidth + 2, y + 8, { width: dayWidth - 4, align: 'center', lineBreak: false });
+                  }
                 });
                 y += rowHeight;
               });
@@ -1665,14 +1737,14 @@ exports.exportPdf = async (req, res) => {
               drawDetailPdfHeader(doc, `${employee.name} — Weekly Rota`, 'Your work location and rota status for each day', week);
               const left = 60;
               let y = 112;
-              doc.rect(left, y, 720, 26).fill('#1e293b');
+              doc.rect(left, y, 720, 26).fill('#f1f5f9');
               const workerColumnWidths = [100, 140, 240, 240];
               let columnX = left;
               workerColumnWidths.forEach(width => {
-                doc.rect(columnX, y, width, 26).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                doc.rect(columnX, y, width, 26).strokeColor('#cbd5e1').lineWidth(0.8).stroke();
                 columnX += width;
               });
-              doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8)
+              doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
                 .text('DAY', left + 10, y + 9, { width: 90 })
                 .text('DATE', left + 110, y + 9, { width: 120 })
                 .text('SHOP / LOCATION', left + 250, y + 9, { width: 220 })
@@ -1687,7 +1759,23 @@ exports.exportPdf = async (req, res) => {
                 if (workingShopIds.length) {
                   location = workingShopIds.map(shopId => shopsById.get(shopId)?.name || 'Other shop').join(', ');
                   const dayAssignment = schedule.working.get(workingShopIds[0])[0];
-                  shift = `${dayAssignment.startTime}–${dayAssignment.endTime}${dayAssignment.status === 'CUSTOM' && dayAssignment.note ? ` · ${dayAssignment.note}` : ''}`;
+                  const workingShopId = workingShopIds[0];
+                  const definedTimes = getShopShiftTimes(workingShopId, dateKey, allShopSchedules);
+
+                  let sStart = dayAssignment.startTime;
+                  let sEnd = dayAssignment.endTime;
+
+                  // If assignment is not custom, or was saved with the generic 09:00-17:00 placeholder,
+                  // apply the shop's defined schedule for this day
+                  if (dayAssignment.status !== 'CUSTOM' || (sStart === '09:00' && sEnd === '17:00') || !sStart || !sEnd) {
+                    sStart = definedTimes.startTime;
+                    sEnd = definedTimes.endTime;
+                  }
+
+                  const start12 = formatTime12Hour(sStart);
+                  const end12 = formatTime12Hour(sEnd);
+
+                  shift = `${start12} – ${end12}${dayAssignment.status === 'CUSTOM' && dayAssignment.note ? ` · ${dayAssignment.note}` : ''}`;
                   status = dayAssignment.status === 'CUSTOM' ? 'CUSTOM' : 'AVAILABLE';
                   if (workingShopIds.length > 1) status = 'CUSTOM';
                 } else if (schedule?.off) {
@@ -1698,7 +1786,7 @@ exports.exportPdf = async (req, res) => {
                 doc.rect(left, y, 720, 38).fill(index % 2 ? '#f8fafc' : '#ffffff');
                 columnX = left;
                 workerColumnWidths.forEach(width => {
-                  doc.rect(columnX, y, width, 38).strokeColor('#1e293b').lineWidth(0.8).stroke();
+                  doc.rect(columnX, y, width, 38).strokeColor('#cbd5e1').lineWidth(0.8).stroke();
                   columnX += width;
                 });
                 const dayName = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' })
