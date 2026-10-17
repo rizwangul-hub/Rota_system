@@ -25,7 +25,9 @@ import {
   Trash2,
   RotateCcw,
   AlertTriangle,
-  Info
+  Info,
+  LayoutGrid,
+  Table
 } from 'lucide-react';
 
 export default function SalaryDistributor() {
@@ -38,6 +40,7 @@ export default function SalaryDistributor() {
   const [searchQuery, setSearchQuery] = useState('');
   const [shops, setShops] = useState([]);
   const [metrics, setMetrics] = useState({});
+  const [viewMode, setViewMode] = useState(typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table');
 
   // Pay Modal state
   const [payModalSalary, setPayModalSalary] = useState(null);
@@ -492,290 +495,507 @@ export default function SalaryDistributor() {
         </div>
       </div>
 
-      {/* Interactive Status Tabs */}
+      {/* Interactive Status Tabs & View Switcher */}
       <div style={{
         display: 'flex',
-        gap: '10px',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '12px',
         marginBottom: '16px',
         flexWrap: 'wrap'
       }}>
-        {[
-          { key: 'All', label: 'All Salaries', count: tabCounts.all, color: '#334155', bg: '#f1f5f9' },
-          { key: 'FINALIZED', label: 'Awaiting Payment', count: tabCounts.awaiting, color: '#2563eb', bg: '#eff6ff' },
-          { key: 'PARTIALLY_PAID', label: 'Partially Paid (Remaining)', count: tabCounts.partial, color: '#d97706', bg: '#fffbeb' },
-          { key: 'PAID', label: 'Fully Paid', count: tabCounts.paid, color: '#059669', bg: '#ecfdf5' }
-        ].map(tab => {
-          const isActive = statusFilter === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setStatusFilter(tab.key)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                border: isActive ? `2px solid ${tab.color}` : '1px solid #cbd5e1',
-                background: isActive ? tab.bg : '#ffffff',
-                color: isActive ? tab.color : '#475569',
-                fontWeight: isActive ? 700 : 500,
-                fontSize: '13px',
-                cursor: 'pointer',
-                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <span>{tab.label}</span>
-              <span style={{
-                background: isActive ? tab.color : '#e2e8f0',
-                color: isActive ? '#ffffff' : '#475569',
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '12px'
-              }}>
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
+        {/* Status Filter Tabs */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[
+            { key: 'All', label: 'All Salaries', count: tabCounts.all, color: '#334155', bg: '#f1f5f9' },
+            { key: 'FINALIZED', label: 'Awaiting Payment', count: tabCounts.awaiting, color: '#2563eb', bg: '#eff6ff' },
+            { key: 'PARTIALLY_PAID', label: 'Partially Paid (Remaining)', count: tabCounts.partial, color: '#d97706', bg: '#fffbeb' },
+            { key: 'PAID', label: 'Fully Paid', count: tabCounts.paid, color: '#059669', bg: '#ecfdf5' }
+          ].map(tab => {
+            const isActive = statusFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatusFilter(tab.key)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: isActive ? `2px solid ${tab.color}` : '1px solid #cbd5e1',
+                  background: isActive ? tab.bg : '#ffffff',
+                  color: isActive ? tab.color : '#475569',
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>{tab.label}</span>
+                <span style={{
+                  background: isActive ? tab.color : '#e2e8f0',
+                  color: isActive ? '#ffffff' : '#475569',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: '10px'
+                }}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* View Switcher: Mobile Cards vs Compact Table */}
+        <div style={{
+          display: 'inline-flex',
+          background: '#f1f5f9',
+          padding: '3px',
+          borderRadius: '8px',
+          border: '1px solid #cbd5e1'
+        }}>
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              background: viewMode === 'cards' ? '#ffffff' : 'transparent',
+              color: viewMode === 'cards' ? '#2563eb' : '#64748b',
+              fontWeight: viewMode === 'cards' ? 700 : 500,
+              fontSize: '12px',
+              cursor: 'pointer',
+              boxShadow: viewMode === 'cards' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+            }}
+          >
+            <LayoutGrid size={13} /> Cards (Mobile)
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              background: viewMode === 'table' ? '#ffffff' : 'transparent',
+              color: viewMode === 'table' ? '#2563eb' : '#64748b',
+              fontWeight: viewMode === 'table' ? 700 : 500,
+              fontSize: '12px',
+              cursor: 'pointer',
+              boxShadow: viewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+            }}
+          >
+            <Table size={13} /> Compact Table
+          </button>
+        </div>
       </div>
 
-      {/* Salaries Table */}
-      <div className="card">
-        <div className="table-responsive">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>Worker Name</th>
-                <th>Shop Location</th>
-                <th>Week Period</th>
-                <th style={{ textAlign: 'center' }}>Work Days</th>
-                <th style={{ textAlign: 'right' }}>Daily Wage</th>
-                <th style={{ textAlign: 'right' }}>Deductions</th>
-                <th style={{ textAlign: 'right' }}>Weekly Salary</th>
-                <th style={{ textAlign: 'right' }}>Opening Balance</th>
-                <th style={{ textAlign: 'right' }}>Commission / Bonus</th>
-                <th style={{ textAlign: 'right' }}>Total Payable</th>
-                <th style={{ textAlign: 'right' }}>Paid</th>
-                <th style={{ textAlign: 'right' }}>Remaining Balance</th>
-                <th style={{ textAlign: 'center' }}>Status</th>
-                <th style={{ textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSalaries.map(s => {
-                const dailyWage = getDailyWage(s);
-                const totalDeductions = getTotalDeductions(s);
-                const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
-                const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
+      {/* Render View: Cards or Table */}
+      {viewMode === 'cards' ? (
+        /* Mobile Responsive Cards View (No Horizontal Scroll) */
+        <div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+            gap: '12px'
+          }}>
+            {filteredSalaries.map(s => {
+              const dailyWage = getDailyWage(s);
+              const totalDeductions = getTotalDeductions(s);
+              const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
+              const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
+              const openingBal = Number(s.openingBalance || 0);
+              const weeklySalary = Number(s.weeklySalary || s.finalSalary || 0);
+              const bonus = Number(s.bonus || 0);
+              const totalPayable = Number(s.totalPayable || (weeklySalary + openingBal + bonus));
+              const totalPaid = Number(s.totalPaid || 0);
+              const balanceRemaining = Number(s.balanceRemaining || 0);
 
-                return (
-                  <tr key={s._id} style={{ background: isPaid ? '#fcfdfd' : isPartial ? '#fffdfa' : '#ffffff' }}>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: '#0f172a' }}>
+              return (
+                <div
+                  key={s._id}
+                  style={{
+                    background: '#ffffff',
+                    border: isPaid ? '1px solid #bbf7d0' : isPartial ? '1px solid #fed7aa' : '1px solid #cbd5e1',
+                    borderLeft: isPaid ? '4px solid #10b981' : isPartial ? '4px solid #f59e0b' : '4px solid #2563eb',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}
+                >
+                  {/* Card Header: Worker Name, ID, Shop, Week & Status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>
                         {s.employeeName}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>
-                        {s.employeeId}
+                      <div style={{ fontSize: '11.5px', color: '#64748b', display: 'flex', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>{s.employeeId}</span>
+                        <span>•</span>
+                        <span>{s.shopName}</span>
                       </div>
-                    </td>
-                    <td>
-                      <span style={{ fontWeight: 500, color: '#334155' }}>
-                        {s.shopName}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '12px', color: '#475569' }}>
-                      {s.weekLabel}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span style={{
-                        background: '#eff6ff',
-                        color: '#1d4ed8',
-                        padding: '2px 8px',
-                        borderRadius: '6px',
-                        fontWeight: 700,
-                        fontSize: '12px'
-                      }}>
-                        {s.workingDays || 0}d
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, color: '#334155' }}>
-                      £{dailyWage.toFixed(2)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {totalDeductions > 0 ? (
-                        <span style={{ color: '#dc2626', fontWeight: 600 }}>
-                          -£{totalDeductions.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>£0.00</span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>
-                      £{(s.weeklySalary || s.finalSalary || 0).toFixed(2)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {(s.openingBalance || 0) > 0 ? (
-                        <span style={{ color: '#7c3aed', fontWeight: 600, fontSize: '13px' }}>
-                          +£{(s.openingBalance || 0).toFixed(2)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>£0.00</span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {(s.bonus || 0) > 0 ? (
-                        <span style={{ color: '#db2777', fontWeight: 600, fontSize: '13px' }}>
-                          +£{(s.bonus || 0).toFixed(2)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>£0.00</span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '14px', color: '#2563eb' }}>
-                      £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0) + (s.bonus || 0))).toFixed(2)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {(s.totalPaid || 0) > 0 ? (
-                        <span style={{ color: '#059669', fontWeight: 700 }}>
-                          £{s.totalPaid.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>£0.00</span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {s.balanceRemaining > 0 ? (
-                        <div>
-                          <span style={{
-                            fontWeight: 700,
-                            color: isPartial ? '#d97706' : '#b45309',
-                            fontSize: '14px'
-                          }}>
-                            £{(s.balanceRemaining || 0).toFixed(2)}
-                          </span>
-                          {isPartial && (
-                            <div style={{ fontSize: '10.5px', color: '#d97706', fontWeight: 600 }}>
-                              remaining
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>
-                          £0.00
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px' }}>
+                        {s.weekLabel}
+                      </div>
+                    </div>
+                    <div>
                       {isPaid ? (
-                        <span style={{
-                          background: '#ecfdf5',
-                          color: '#059669',
-                          border: '1px solid #a7f3d0',
-                          padding: '3px 10px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <CheckCircle2 size={12} /> Paid
+                        <span style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <CheckCircle2 size={11} /> Paid
                         </span>
                       ) : isPartial ? (
-                        <span style={{
-                          background: '#fffbeb',
-                          color: '#b45309',
-                          border: '1px solid #fde68a',
-                          padding: '3px 10px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <Clock size={12} /> Partially Paid
+                        <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <Clock size={11} /> Partially Paid
                         </span>
                       ) : (
-                        <span style={{
-                          background: '#eff6ff',
-                          color: '#1d4ed8',
-                          border: '1px solid #bfdbfe',
-                          padding: '3px 10px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: 600
-                        }}>
+                        <span style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600 }}>
                           Awaiting Payment
                         </span>
                       )}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          onClick={() => openDetailsModal(s)}
-                          title="View complete breakdown & payment history"
-                          style={{ padding: '5px 8px', fontSize: '12px' }}
-                        >
-                          <Eye size={13} /> Details
-                        </button>
+                    </div>
+                  </div>
 
-                        {s.balanceRemaining > 0 ? (
-                          <button
-                            className="btn btn-sm"
-                            onClick={() => openPayModal(s)}
-                            style={{
-                              fontWeight: 700,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '5px 12px',
-                              background: isPartial ? '#d97706' : '#059669',
-                              borderColor: isPartial ? '#b45309' : '#047857',
-                              color: '#ffffff'
-                            }}
-                            title={isPartial ? 'Pay remaining balance to worker' : 'Submit payment when giving salary to worker'}
-                          >
-                            <HandCoins size={14} />
-                            {isPartial ? `Pay Remaining (£${s.balanceRemaining.toFixed(2)})` : 'Pay Salary'}
-                          </button>
+                  {/* Card Metrics Breakdown */}
+                  <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748b' }}>Attendance:</span>
+                      <strong style={{ color: '#0f172a' }}>{s.workingDays || 0}d @ £{dailyWage.toFixed(2)}/d</strong>
+                    </div>
+                    {totalDeductions > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Deductions:</span>
+                        <strong style={{ color: '#dc2626' }}>-£{totalDeductions.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748b' }}>Weekly Salary:</span>
+                      <strong style={{ color: '#0f172a' }}>£{weeklySalary.toFixed(2)}</strong>
+                    </div>
+                    {openingBal > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
+                        <strong style={{ color: '#7c3aed' }}>+£{openingBal.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    {bonus > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Commission / Bonus:</span>
+                        <strong style={{ color: '#db2777' }}>+£{bonus.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '6px', marginTop: '2px' }}>
+                      <span style={{ fontWeight: 600, color: '#0f172a' }}>Total Payable:</span>
+                      <strong style={{ color: '#2563eb', fontSize: '14px', fontWeight: 800 }}>£{totalPayable.toFixed(2)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#64748b' }}>Paid So Far:</span>
+                      <strong style={{ color: '#059669' }}>£{totalPaid.toFixed(2)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #cbd5e1', paddingTop: '6px', marginTop: '2px' }}>
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>Remaining Balance:</span>
+                      <strong style={{ color: balanceRemaining > 0 ? (isPartial ? '#d97706' : '#b45309') : '#059669', fontSize: '15px', fontWeight: 800 }}>
+                        £{balanceRemaining.toFixed(2)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => openDetailsModal(s)}
+                      style={{ flex: 1, padding: '7px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                    >
+                      <Eye size={13} /> Details
+                    </button>
+                    {balanceRemaining > 0 ? (
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => openPayModal(s)}
+                        style={{
+                          flex: 1.5,
+                          fontWeight: 700,
+                          fontSize: '12.5px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px',
+                          padding: '7px 12px',
+                          background: isPartial ? '#d97706' : '#059669',
+                          borderColor: isPartial ? '#b45309' : '#047857',
+                          color: '#ffffff'
+                        }}
+                      >
+                        <HandCoins size={14} />
+                        {isPartial ? `Pay Remaining (£${balanceRemaining.toFixed(2)})` : 'Pay Salary'}
+                      </button>
+                    ) : (
+                      <div style={{ flex: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '12px', color: '#059669', fontWeight: 700, background: '#ecfdf5', borderRadius: '6px' }}>
+                        <CheckCircle2 size={13} /> Paid
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredSalaries.length === 0 && !loading && (
+            <div className="card" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+              No finalized salary records found matching current criteria.
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Compact Salaries Table View */
+        <div className="card">
+          <div className="table-responsive">
+            <table className="custom-table" style={{ fontSize: '12px' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '8px 10px', minWidth: '130px', position: 'sticky', left: 0, zIndex: 3, background: '#f8fafc', borderRight: '1px solid #e2e8f0' }}>Worker Name</th>
+                  <th style={{ padding: '8px 8px', minWidth: '100px' }}>Shop</th>
+                  <th style={{ padding: '8px 8px', minWidth: '110px' }}>Period</th>
+                  <th style={{ textAlign: 'center', padding: '8px 4px', width: '50px' }}>Days</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Wage</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Deduct.</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Salary</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Opening</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Bonus</th>
+                  <th style={{ textAlign: 'right', padding: '8px 8px', minWidth: '85px' }}>Payable</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Paid</th>
+                  <th style={{ textAlign: 'right', padding: '8px 8px', minWidth: '85px' }}>Remaining</th>
+                  <th style={{ textAlign: 'center', padding: '8px 6px', minWidth: '95px' }}>Status</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', minWidth: '130px', position: 'sticky', right: 0, zIndex: 3, background: '#f8fafc', borderLeft: '1px solid #e2e8f0' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSalaries.map(s => {
+                  const dailyWage = getDailyWage(s);
+                  const totalDeductions = getTotalDeductions(s);
+                  const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
+                  const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
+                  const rowBg = isPaid ? '#fcfdfd' : isPartial ? '#fffdfa' : '#ffffff';
+
+                  return (
+                    <tr key={s._id} style={{ background: rowBg }}>
+                      <td style={{ padding: '8px 10px', position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '1px solid #e2e8f0' }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>
+                          {s.employeeName}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                          {s.employeeId}
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px 8px' }}>
+                        <span style={{ fontWeight: 500, color: '#334155' }}>
+                          {s.shopName}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 8px', fontSize: '11.5px', color: '#475569' }}>
+                        {s.weekLabel}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px 4px' }}>
+                        <span style={{
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          padding: '1px 6px',
+                          borderRadius: '5px',
+                          fontWeight: 700,
+                          fontSize: '11px'
+                        }}>
+                          {s.workingDays || 0}d
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px', fontWeight: 600, color: '#334155' }}>
+                        £{dailyWage.toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
+                        {totalDeductions > 0 ? (
+                          <span style={{ color: '#dc2626', fontWeight: 600 }}>
+                            -£{totalDeductions.toFixed(2)}
+                          </span>
                         ) : (
+                          <span style={{ color: '#94a3b8' }}>£0.00</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px', fontWeight: 600, color: '#0f172a' }}>
+                        £{(s.weeklySalary || s.finalSalary || 0).toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
+                        {(s.openingBalance || 0) > 0 ? (
+                          <span style={{ color: '#7c3aed', fontWeight: 600 }}>
+                            +£{(s.openingBalance || 0).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>£0.00</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
+                        {(s.bonus || 0) > 0 ? (
+                          <span style={{ color: '#db2777', fontWeight: 600 }}>
+                            +£{(s.bonus || 0).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>£0.00</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 8px', fontWeight: 700, color: '#2563eb' }}>
+                        £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0) + (s.bonus || 0))).toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
+                        {(s.totalPaid || 0) > 0 ? (
+                          <span style={{ color: '#059669', fontWeight: 700 }}>
+                            £{s.totalPaid.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>£0.00</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 8px' }}>
+                        {s.balanceRemaining > 0 ? (
+                          <div>
+                            <span style={{
+                              fontWeight: 700,
+                              color: isPartial ? '#d97706' : '#b45309'
+                            }}>
+                              £{(s.balanceRemaining || 0).toFixed(2)}
+                            </span>
+                            {isPartial && (
+                              <div style={{ fontSize: '10px', color: '#d97706', fontWeight: 600 }}>
+                                remaining
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: '#059669', fontWeight: 700 }}>
+                            £0.00
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px 6px' }}>
+                        {isPaid ? (
                           <span style={{
-                            fontSize: '12px',
-                            color: '#16a34a',
+                            background: '#ecfdf5',
+                            color: '#059669',
+                            border: '1px solid #a7f3d0',
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            fontSize: '10.5px',
                             fontWeight: 700,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 8px',
-                            background: '#ecfdf5',
-                            borderRadius: '6px'
+                            gap: '3px'
                           }}>
-                            <CheckCircle2 size={13} /> Paid
+                            <CheckCircle2 size={11} /> Paid
+                          </span>
+                        ) : isPartial ? (
+                          <span style={{
+                            background: '#fffbeb',
+                            color: '#b45309',
+                            border: '1px solid #fde68a',
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}>
+                            <Clock size={11} /> Partial
+                          </span>
+                        ) : (
+                          <span style={{
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            fontSize: '10.5px',
+                            fontWeight: 600
+                          }}>
+                            Awaiting
                           </span>
                         )}
-                      </div>
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 10px', position: 'sticky', right: 0, zIndex: 2, background: rowBg, borderLeft: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
+                          <button
+                            className="btn btn-outline btn-xs"
+                            onClick={() => openDetailsModal(s)}
+                            title="View complete breakdown & payment history"
+                            style={{ padding: '4px 7px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            <Eye size={12} /> Details
+                          </button>
+
+                          {s.balanceRemaining > 0 ? (
+                            <button
+                              className="btn btn-xs"
+                              onClick={() => openPayModal(s)}
+                              style={{
+                                fontWeight: 700,
+                                fontSize: '11px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '4px 9px',
+                                background: isPartial ? '#d97706' : '#059669',
+                                borderColor: isPartial ? '#b45309' : '#047857',
+                                color: '#ffffff'
+                              }}
+                              title={isPartial ? 'Pay remaining balance' : 'Submit payment'}
+                            >
+                              <HandCoins size={12} />
+                              {isPartial ? `Pay (£${s.balanceRemaining.toFixed(2)})` : 'Pay'}
+                            </button>
+                          ) : (
+                            <span style={{
+                              fontSize: '11px',
+                              color: '#16a34a',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '3px 6px',
+                              background: '#ecfdf5',
+                              borderRadius: '5px'
+                            }}>
+                              <CheckCircle2 size={12} /> Paid
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredSalaries.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan="14" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      No finalized salary records found matching current criteria.
                     </td>
                   </tr>
-                );
-              })}
-
-              {filteredSalaries.length === 0 && !loading && (
-                <tr>
-                  <td colSpan="14" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                    No finalized salary records found matching current criteria.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Pay Modal ("Submit Payment") */}
       {payModalSalary && (
