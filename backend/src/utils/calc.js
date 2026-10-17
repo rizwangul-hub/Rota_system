@@ -164,18 +164,32 @@ function calculateAttendanceRecord({
   }
 
   let earlyLeaveDeduction = 0;
-  if (earlyLeaveMinutes > 0 && computedStatus !== 'Half') {
+  if (earlyLeaveMinutes > 0) {
     earlyLeaveDeduction = Number((hourlyWage * (earlyLeaveMinutes / 60)).toFixed(2));
   }
 
   const totalDeduction = Number((arrivalDeduction + earlyLeaveDeduction).toFixed(2));
 
-  let basePay = wage;
+  let attendancePay = 0;
+  let finalLateDeduction = totalDeduction;
+
   if (computedStatus === 'Half') {
-    basePay = Number((wage / 2).toFixed(2));
+    const halfDayWage = Number((wage / 2).toFixed(2));
+    if (totalDeduction >= halfDayWage) {
+      // Deduction from missing hours already equals or exceeds a half day's wage:
+      // Worker receives daily wage minus the lateness/missing hours deduction
+      attendancePay = Number(Math.max(0, wage - totalDeduction).toFixed(2));
+      finalLateDeduction = totalDeduction;
+    } else {
+      // Half day with partial or no lateness: worker receives half day pay minus any lateness
+      attendancePay = Number(Math.max(0, halfDayWage - totalDeduction).toFixed(2));
+      finalLateDeduction = Number(Math.max(0, wage - attendancePay).toFixed(2));
+    }
+  } else {
+    attendancePay = Number(Math.max(0, wage - totalDeduction).toFixed(2));
+    finalLateDeduction = totalDeduction;
   }
 
-  const attendancePay = Number(Math.max(0, basePay - totalDeduction).toFixed(2));
   const actualHours = calculateWorkedHours(timeReached, workerEndTime, scheduledHours, computedStatus);
 
   return {
@@ -184,7 +198,7 @@ function calculateAttendanceRecord({
     lateMinutes,
     earlyLeaveMinutes,
     hourlyWage: Number(hourlyWage.toFixed(2)),
-    lateDeduction: totalDeduction,
+    lateDeduction: finalLateDeduction,
     arrivalDeduction,
     earlyLeaveDeduction,
     attendancePay,
@@ -407,6 +421,7 @@ module.exports = {
   calculateScheduledHours,
   calculateWorkedHours,
   calculateLateMinutes,
+  calculateEarlyLeaveMinutes,
   calculateAttendanceRecord,
   getDefaultShiftTimesForDate,
   getDayOfWeekUK,
