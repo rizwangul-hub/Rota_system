@@ -12,7 +12,7 @@ const RotaAssignmentClaim = require('../models/RotaAssignmentClaim');
 const RotaAvailability = require('../models/RotaAvailability');
 const { logAction } = require('../utils/audit');
 const { employeeAttendanceRosterEntry } = require('../utils/attendanceViews');
-const { syncEmployeeOpeningBalance, syncWageHistoryToLedger } = require('../utils/ledgerHelper');
+const { syncEmployeeOpeningBalance, syncWageHistoryToLedger, recalculateEmployeeLedger } = require('../utils/ledgerHelper');
 
 async function findHighestEmployeeSequence() {
   const employees = await Employee.find({ employeeId: /^PIXX\d+$/i }).select('employeeId').lean();
