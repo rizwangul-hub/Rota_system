@@ -317,7 +317,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     // Mobile-optimized A4 Portrait layout
     const doc = new PDFDocument({
-      margin: 20,
+      margin: 16,
       size: 'A4',
       layout: 'portrait',
       autoFirstPage: true
@@ -326,8 +326,8 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     const chunks = [];
     doc.on('data', chunk => chunks.push(chunk));
 
-    const PAGE_W = 555.28;
-    const MARGIN_LEFT = 20;
+    const PAGE_W = 563.28;
+    const MARGIN_LEFT = 16;
     const DARK = '#0f172a';
     const BLUE = '#2563eb';
     const SLATE = '#64748b';
@@ -345,22 +345,22 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     const formattedDate = formatUKDate(dateStr);
 
-    let curY = 18;
+    let curY = 16;
 
     // ── HEADER BANNER ──────────────────────────────────────────
-    doc.rect(MARGIN_LEFT, curY, PAGE_W, 44).fillAndStroke('#f8fafc', '#cbd5e1');
+    doc.rect(MARGIN_LEFT, curY, PAGE_W, 48).fillAndStroke('#f8fafc', '#cbd5e1');
 
-    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14)
-       .text('PIXX ROTA', MARGIN_LEFT + 14, curY + 8, { lineBreak: false });
-    doc.font('Helvetica').fontSize(7.5).fillColor('#64748b')
-       .text('PixxTechnologies UK  •  Daily Workforce Attendance', MARGIN_LEFT + 14, curY + 26, { lineBreak: false });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(16)
+       .text('PIXX ROTA', MARGIN_LEFT + 14, curY + 10, { lineBreak: false });
+    doc.font('Helvetica').fontSize(8.5).fillColor('#64748b')
+       .text('PixxTechnologies UK  •  Daily Workforce Attendance', MARGIN_LEFT + 14, curY + 30, { lineBreak: false });
 
-    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
-       .text(formattedDate, MARGIN_LEFT + 200, curY + 8, { width: PAGE_W - 210, align: 'right', lineBreak: false });
-    doc.font('Helvetica').fontSize(7.5).fillColor('#2563eb')
-       .text(shopDoc ? `Shop: ${shopDoc.name}` : 'Times in 12-Hour UK Format  •  All Active Shops', MARGIN_LEFT + 200, curY + 25, { width: PAGE_W - 210, align: 'right', lineBreak: false });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(11.5)
+       .text(formattedDate, MARGIN_LEFT + 200, curY + 10, { width: PAGE_W - 214, align: 'right', lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#2563eb')
+       .text(shopDoc ? `Shop: ${shopDoc.name}` : 'Times in 12-Hour UK Format  •  All Active Shops', MARGIN_LEFT + 200, curY + 29, { width: PAGE_W - 214, align: 'right', lineBreak: false });
 
-    curY += 48;
+    curY += 56;
 
     // ── 5 EXECUTIVE KPI CARDS ──────────────────────────────────
     const kpis = [
@@ -375,23 +375,32 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     kpis.forEach((kpi, idx) => {
       const kx = MARGIN_LEFT + idx * (kpiW + kpiGap);
-      doc.roundedRect(kx, curY, kpiW, 32, 4).fillAndStroke('#f8fafc', LIGHT_BORDER);
+      doc.roundedRect(kx, curY, kpiW, 40, 4).fillAndStroke('#f8fafc', LIGHT_BORDER);
 
-      doc.fillColor(kpi.color).font('Helvetica-Bold').fontSize(12)
-         .text(String(kpi.value), kx, curY + 5, { width: kpiW, align: 'center', lineBreak: false });
-      doc.fillColor(SLATE).font('Helvetica-Bold').fontSize(6)
-         .text(kpi.label, kx, curY + 21, { width: kpiW, align: 'center', lineBreak: false });
+      doc.fillColor(kpi.color).font('Helvetica-Bold').fontSize(15)
+         .text(String(kpi.value), kx, curY + 6, { width: kpiW, align: 'center', lineBreak: false });
+      doc.fillColor(SLATE).font('Helvetica-Bold').fontSize(7.5)
+         .text(kpi.label, kx, curY + 26, { width: kpiW, align: 'center', lineBreak: false });
     });
 
-    curY += 37;
+    curY += 48;
 
     const drawContinuationBanner = () => {
-      doc.rect(MARGIN_LEFT, 18, PAGE_W, 24).fillAndStroke('#f8fafc', '#cbd5e1');
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9)
-         .text('PIXX ROTA  •  DAILY ATTENDANCE (CONTINUED)', MARGIN_LEFT + 12, 26, { lineBreak: false });
-      doc.fillColor('#64748b').font('Helvetica').fontSize(8)
-         .text(formattedDate, MARGIN_LEFT + 250, 26, { width: PAGE_W - 258, align: 'right', lineBreak: false });
+      doc.rect(MARGIN_LEFT, 16, PAGE_W, 26).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
+         .text('PIXX ROTA  •  DAILY ATTENDANCE (CONTINUED)', MARGIN_LEFT + 12, 24, { lineBreak: false });
+      doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(9)
+         .text(formattedDate, MARGIN_LEFT + 250, 24, { width: PAGE_W - 258, align: 'right', lineBreak: false });
     };
+
+    // ── DYNAMIC ROW HEIGHT TO FILL PAGE ON MOBILE WITHOUT EMPTY BOTTOM ──
+    const totalStaffCount = records.length || 1;
+    const availableTableSpace = 755 - curY - (sortedShopNames.length * 44);
+    const dynamicRowH = Math.floor(availableTableSpace / totalStaffCount);
+    // Generous, mobile-friendly row height: between 25 and 32 pt
+    const rowH = Math.max(25, Math.min(32, dynamicRowH));
+    const sectionHeaderH = 22;
+    const tableHeaderH = 16;
 
     // ── DRAW SHOP SECTIONS ──────────────────────────────────────
     for (const shopName of sortedShopNames) {
@@ -399,15 +408,11 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       const isAbsentGroup = shopName === 'ABSENT / OFF';
       const sc = getShopColor(isAbsentGroup ? 'ABSENT / OFF' : shopName);
 
-      const sectionHeaderH = 16;
-      const tableHeaderH = 13;
-      const rowH = 19.5;
-
       // Check if we need page break
       if (curY + sectionHeaderH + tableHeaderH + rowH > doc.page.height - 45) {
-        doc.addPage({ margin: 20, size: 'A4', layout: 'portrait' });
+        doc.addPage({ margin: 16, size: 'A4', layout: 'portrait' });
         drawContinuationBanner();
-        curY = 48;
+        curY = 50;
       }
 
       // 1. Shop Header Bar - Light print-friendly background with subtle border and crisp dark text
@@ -417,13 +422,13 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       const dotColor = isAbsentGroup ? '#dc2626' : (sc.primary || '#2563eb');
 
       doc.roundedRect(MARGIN_LEFT, curY, PAGE_W, sectionHeaderH, 3).fillAndStroke(headerBg, headerBorder);
-      doc.circle(MARGIN_LEFT + 8, curY + 8, 2.5).fill(dotColor);
+      doc.circle(MARGIN_LEFT + 10, curY + 11, 3).fill(dotColor);
 
-      doc.fillColor(headerText).font('Helvetica-Bold').fontSize(8.5)
+      doc.fillColor(headerText).font('Helvetica-Bold').fontSize(10)
          .text(
            isAbsentGroup ? 'ABSENT / OFF DUTY' : `${shopName.toUpperCase()} CYCLES`,
-           MARGIN_LEFT + 15,
-           curY + 4,
+           MARGIN_LEFT + 18,
+           curY + 5.5,
            { lineBreak: false }
          );
 
@@ -431,30 +436,30 @@ exports.exportDailyAttendancePDF = async (req, res) => {
         ? `${group.length} Staff Off / Absent`
         : `${group.length} ${group.length === 1 ? 'Worker' : 'Workers'} on Duty`;
 
-      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(headerText)
-         .text(countText, MARGIN_LEFT + 300, curY + 4.5, { width: PAGE_W - 308, align: 'right', lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(headerText)
+         .text(countText, MARGIN_LEFT + 340, curY + 6.5, { width: PAGE_W - 350, align: 'right', lineBreak: false });
 
       curY += sectionHeaderH;
 
       // 2. Table Column Headers
       doc.rect(MARGIN_LEFT, curY, PAGE_W, tableHeaderH).fill(isAbsentGroup ? '#fee2e2' : '#f1f5f9');
-      doc.fillColor(isAbsentGroup ? '#991b1b' : '#334155').font('Helvetica-Bold').fontSize(6.5);
+      doc.fillColor(isAbsentGroup ? '#991b1b' : '#334155').font('Helvetica-Bold').fontSize(7.5);
 
       if (!isAbsentGroup) {
-        doc.text('#', MARGIN_LEFT + 2, curY + 3.5, { width: 18, align: 'center', lineBreak: false });
-        doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 3.5, { width: 146, lineBreak: false });
-        doc.text('SCHEDULED SHIFT', MARGIN_LEFT + 174, curY + 3.5, { width: 90, align: 'center', lineBreak: false });
-        doc.fillColor('#1d4ed8').text('ARRIVAL (TIME COME)', MARGIN_LEFT + 268, curY + 3.5, { width: 106, align: 'center', lineBreak: false });
+        doc.text('#', MARGIN_LEFT + 2, curY + 4, { width: 20, align: 'center', lineBreak: false });
+        doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 4, { width: 156, lineBreak: false });
+        doc.text('SCHEDULED SHIFT', MARGIN_LEFT + 182, curY + 4, { width: 96, align: 'center', lineBreak: false });
+        doc.fillColor('#1d4ed8').text('ARRIVAL (TIME COME)', MARGIN_LEFT + 280, curY + 4, { width: 118, align: 'center', lineBreak: false });
         doc.fillColor('#334155');
-        doc.text('LEFT AT', MARGIN_LEFT + 378, curY + 3.5, { width: 60, align: 'center', lineBreak: false });
-        doc.text('WORKED', MARGIN_LEFT + 442, curY + 3.5, { width: 44, align: 'center', lineBreak: false });
-        doc.text('STATUS', MARGIN_LEFT + 488, curY + 3.5, { width: 64, align: 'center', lineBreak: false });
+        doc.text('LEFT AT', MARGIN_LEFT + 400, curY + 4, { width: 56, align: 'center', lineBreak: false });
+        doc.text('WORKED', MARGIN_LEFT + 458, curY + 4, { width: 46, align: 'center', lineBreak: false });
+        doc.text('STATUS', MARGIN_LEFT + 506, curY + 4, { width: 55, align: 'center', lineBreak: false });
       } else {
-        doc.text('#', MARGIN_LEFT + 2, curY + 3.5, { width: 18, align: 'center', lineBreak: false });
-        doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 3.5, { width: 165, lineBreak: false });
-        doc.text('ASSIGNED SHOP', MARGIN_LEFT + 195, curY + 3.5, { width: 130, align: 'left', lineBreak: false });
-        doc.text('STATUS', MARGIN_LEFT + 330, curY + 3.5, { width: 90, align: 'center', lineBreak: false });
-        doc.text('NOTES / REMARKS', MARGIN_LEFT + 425, curY + 3.5, { width: 125, align: 'left', lineBreak: false });
+        doc.text('#', MARGIN_LEFT + 2, curY + 4, { width: 20, align: 'center', lineBreak: false });
+        doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 4, { width: 176, lineBreak: false });
+        doc.text('ASSIGNED SHOP', MARGIN_LEFT + 204, curY + 4, { width: 120, lineBreak: false });
+        doc.text('STATUS', MARGIN_LEFT + 328, curY + 4, { width: 85, align: 'center', lineBreak: false });
+        doc.text('NOTES / REMARKS', MARGIN_LEFT + 418, curY + 4, { width: 143, lineBreak: false });
       }
 
       curY += tableHeaderH;
@@ -462,27 +467,27 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       // 3. Table Rows
       group.forEach((r, idx) => {
         if (curY + rowH > doc.page.height - 40) {
-          doc.addPage({ margin: 20, size: 'A4', layout: 'portrait' });
+          doc.addPage({ margin: 16, size: 'A4', layout: 'portrait' });
           drawContinuationBanner();
-          curY = 48;
+          curY = 50;
 
           doc.rect(MARGIN_LEFT, curY, PAGE_W, tableHeaderH).fill(isAbsentGroup ? '#fee2e2' : '#f1f5f9');
-          doc.fillColor(isAbsentGroup ? '#991b1b' : '#334155').font('Helvetica-Bold').fontSize(6.5);
+          doc.fillColor(isAbsentGroup ? '#991b1b' : '#334155').font('Helvetica-Bold').fontSize(7.5);
           if (!isAbsentGroup) {
-            doc.text('#', MARGIN_LEFT + 2, curY + 3.5, { width: 18, align: 'center', lineBreak: false });
-            doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 3.5, { width: 146, lineBreak: false });
-            doc.text('SCHEDULED SHIFT', MARGIN_LEFT + 174, curY + 3.5, { width: 90, align: 'center', lineBreak: false });
-            doc.fillColor('#1d4ed8').text('ARRIVAL (TIME COME)', MARGIN_LEFT + 268, curY + 3.5, { width: 106, align: 'center', lineBreak: false });
+            doc.text('#', MARGIN_LEFT + 2, curY + 4, { width: 20, align: 'center', lineBreak: false });
+            doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 4, { width: 156, lineBreak: false });
+            doc.text('SCHEDULED SHIFT', MARGIN_LEFT + 182, curY + 4, { width: 96, align: 'center', lineBreak: false });
+            doc.fillColor('#1d4ed8').text('ARRIVAL (TIME COME)', MARGIN_LEFT + 280, curY + 4, { width: 118, align: 'center', lineBreak: false });
             doc.fillColor('#334155');
-            doc.text('LEFT AT', MARGIN_LEFT + 378, curY + 3.5, { width: 60, align: 'center', lineBreak: false });
-            doc.text('WORKED', MARGIN_LEFT + 442, curY + 3.5, { width: 44, align: 'center', lineBreak: false });
-            doc.text('STATUS', MARGIN_LEFT + 488, curY + 3.5, { width: 64, align: 'center', lineBreak: false });
+            doc.text('LEFT AT', MARGIN_LEFT + 400, curY + 4, { width: 56, align: 'center', lineBreak: false });
+            doc.text('WORKED', MARGIN_LEFT + 458, curY + 4, { width: 46, align: 'center', lineBreak: false });
+            doc.text('STATUS', MARGIN_LEFT + 506, curY + 4, { width: 55, align: 'center', lineBreak: false });
           } else {
-            doc.text('#', MARGIN_LEFT + 2, curY + 3.5, { width: 18, align: 'center', lineBreak: false });
-            doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 3.5, { width: 165, lineBreak: false });
-            doc.text('ASSIGNED SHOP', MARGIN_LEFT + 195, curY + 3.5, { width: 130, align: 'left', lineBreak: false });
-            doc.text('STATUS', MARGIN_LEFT + 330, curY + 3.5, { width: 90, align: 'center', lineBreak: false });
-            doc.text('NOTES / REMARKS', MARGIN_LEFT + 425, curY + 3.5, { width: 125, align: 'left', lineBreak: false });
+            doc.text('#', MARGIN_LEFT + 2, curY + 4, { width: 20, align: 'center', lineBreak: false });
+            doc.text('WORKER NAME', MARGIN_LEFT + 24, curY + 4, { width: 176, lineBreak: false });
+            doc.text('ASSIGNED SHOP', MARGIN_LEFT + 204, curY + 4, { width: 120, lineBreak: false });
+            doc.text('STATUS', MARGIN_LEFT + 328, curY + 4, { width: 85, align: 'center', lineBreak: false });
+            doc.text('NOTES / REMARKS', MARGIN_LEFT + 418, curY + 4, { width: 143, lineBreak: false });
           }
           curY += tableHeaderH;
         }
@@ -496,18 +501,20 @@ exports.exportDailyAttendancePDF = async (req, res) => {
         doc.strokeColor(LIGHT_BORDER).lineWidth(0.5)
            .moveTo(MARGIN_LEFT, curY + rowH).lineTo(MARGIN_LEFT + PAGE_W, curY + rowH).stroke();
 
-        if (!isAbsentGroup) {
-          doc.fillColor(SLATE).font('Helvetica').fontSize(7)
-             .text(String(idx + 1), MARGIN_LEFT + 2, curY + 5.5, { width: 18, align: 'center', lineBreak: false });
+        const textY = curY + (rowH - 12) / 2;
 
-          doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
-             .text(r.employeeName || 'Unknown', MARGIN_LEFT + 24, curY + 5.5, { width: 146, lineBreak: false });
+        if (!isAbsentGroup) {
+          doc.fillColor(SLATE).font('Helvetica').fontSize(8.5)
+             .text(String(idx + 1), MARGIN_LEFT + 2, textY + 1.5, { width: 20, align: 'center', lineBreak: false });
+
+          doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
+             .text(r.employeeName || 'Unknown', MARGIN_LEFT + 24, textY, { width: 156, lineBreak: false });
 
           const shiftStr = (r.shiftStart && r.shiftEnd)
             ? `${formatTime12hPadded(r.shiftStart)} - ${formatTime12hPadded(r.shiftEnd)}`
             : '--';
-          doc.fillColor('#475569').font('Helvetica').fontSize(6.5)
-             .text(shiftStr, MARGIN_LEFT + 174, curY + 6, { width: 90, align: 'center', lineBreak: false });
+          doc.fillColor('#475569').font('Helvetica').fontSize(8.5)
+             .text(shiftStr, MARGIN_LEFT + 182, textY + 1, { width: 96, align: 'center', lineBreak: false });
 
           // ARRIVAL (TIME COME) - PROMINENT FOR BOSS
           const isLate = r.status === 'Late' || (r.lateMinutes && r.lateMinutes > 0);
@@ -515,32 +522,32 @@ exports.exportDailyAttendancePDF = async (req, res) => {
             const reachedStr = formatTime12hPadded(r.timeReached);
             if (isLate) {
               const lateBadgeText = r.lateMinutes ? `(+${r.lateMinutes}m)` : '(Late)';
-              doc.fillColor('#b45309').font('Helvetica-Bold').fontSize(7.5)
-                 .text(`${reachedStr}  ${lateBadgeText}`, MARGIN_LEFT + 268, curY + 5.5, { width: 106, align: 'center', lineBreak: false });
+              doc.fillColor('#b45309').font('Helvetica-Bold').fontSize(10)
+                 .text(`${reachedStr}  ${lateBadgeText}`, MARGIN_LEFT + 280, textY, { width: 118, align: 'center', lineBreak: false });
             } else {
-              doc.fillColor('#15803d').font('Helvetica-Bold').fontSize(7.5)
-                 .text(`${reachedStr}  (On Time)`, MARGIN_LEFT + 268, curY + 5.5, { width: 106, align: 'center', lineBreak: false });
+              doc.fillColor('#15803d').font('Helvetica-Bold').fontSize(10)
+                 .text(`${reachedStr}  (On Time)`, MARGIN_LEFT + 280, textY, { width: 118, align: 'center', lineBreak: false });
             }
           } else {
-            doc.fillColor('#94a3b8').font('Helvetica').fontSize(7)
-               .text('--', MARGIN_LEFT + 268, curY + 5.5, { width: 106, align: 'center', lineBreak: false });
+            doc.fillColor('#94a3b8').font('Helvetica').fontSize(8.5)
+               .text('--', MARGIN_LEFT + 280, textY, { width: 118, align: 'center', lineBreak: false });
           }
 
           const leftStr = r.workerEndTime ? formatTime12hPadded(r.workerEndTime) : '--';
-          doc.fillColor('#475569').font('Helvetica').fontSize(7)
-             .text(leftStr, MARGIN_LEFT + 378, curY + 5.5, { width: 60, align: 'center', lineBreak: false });
+          doc.fillColor('#475569').font('Helvetica').fontSize(8.5)
+             .text(leftStr, MARGIN_LEFT + 400, textY + 1, { width: 56, align: 'center', lineBreak: false });
 
           const workedStr = (r.actualHours !== undefined && r.actualHours !== null)
             ? `${Number(r.actualHours).toFixed(1)}h`
             : '--';
-          doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7)
-             .text(workedStr, MARGIN_LEFT + 442, curY + 5.5, { width: 44, align: 'center', lineBreak: false });
+          doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(9.5)
+             .text(workedStr, MARGIN_LEFT + 458, textY, { width: 46, align: 'center', lineBreak: false });
 
           // Status Badge Pill
-          const pillX = MARGIN_LEFT + 490;
-          const pillY = curY + 3;
-          const pillW = 60;
-          const pillH = 13.5;
+          const pillW = 52;
+          const pillH = 17;
+          const pillX = MARGIN_LEFT + 508;
+          const pillY = curY + (rowH - pillH) / 2;
 
           let pillBg = '#dcfce7';
           let pillFg = '#166534';
@@ -549,90 +556,89 @@ exports.exportDailyAttendancePDF = async (req, res) => {
           if (r.status === 'Late') {
             pillBg = '#fef3c7'; pillFg = '#b45309'; pillLabel = 'LATE';
           } else if (r.status === 'Half') {
-            pillBg = '#e0f2fe'; pillFg = '#0369a1'; pillLabel = 'HALF DAY';
+            pillBg = '#e0f2fe'; pillFg = '#0369a1'; pillLabel = 'HALF';
           } else if (r.status === 'Absent') {
             pillBg = '#fee2e2'; pillFg = '#991b1b'; pillLabel = 'ABSENT';
           }
 
-          doc.roundedRect(pillX, pillY, pillW, pillH, 5).fill(pillBg);
-          doc.fillColor(pillFg).font('Helvetica-Bold').fontSize(6)
-             .text(pillLabel, pillX, pillY + 3.5, { width: pillW, align: 'center', lineBreak: false });
+          doc.roundedRect(pillX, pillY, pillW, pillH, 4).fill(pillBg);
+          doc.fillColor(pillFg).font('Helvetica-Bold').fontSize(8)
+             .text(pillLabel, pillX, pillY + 4, { width: pillW, align: 'center', lineBreak: false });
 
         } else {
           // Absent row
-          doc.fillColor('#991b1b').font('Helvetica').fontSize(7)
-             .text(String(idx + 1), MARGIN_LEFT + 2, curY + 5.5, { width: 18, align: 'center', lineBreak: false });
+          doc.fillColor('#991b1b').font('Helvetica').fontSize(8.5)
+             .text(String(idx + 1), MARGIN_LEFT + 2, textY + 1.5, { width: 20, align: 'center', lineBreak: false });
 
+          doc.fillColor('#991b1b').font('Helvetica-Bold').fontSize(10)
+             .text(r.employeeName || 'Unknown', MARGIN_LEFT + 24, textY, { width: 176, lineBreak: false });
+
+          doc.fillColor('#475569').font('Helvetica').fontSize(8.5)
+             .text(r.shopName || 'Not Assigned', MARGIN_LEFT + 204, textY + 1, { width: 120, lineBreak: false });
+
+          const pillW = 75;
+          const pillH = 17;
+          const pillX = MARGIN_LEFT + 333;
+          const pillY = curY + (rowH - pillH) / 2;
+          doc.roundedRect(pillX, pillY, pillW, pillH, 4).fill('#fee2e2');
           doc.fillColor('#991b1b').font('Helvetica-Bold').fontSize(8)
-             .text(r.employeeName || 'Unknown', MARGIN_LEFT + 24, curY + 5.5, { width: 165, lineBreak: false });
+             .text('ABSENT / OFF', pillX, pillY + 4, { width: pillW, align: 'center', lineBreak: false });
 
-          doc.fillColor('#64748b').font('Helvetica').fontSize(7)
-             .text('Not Assigned', MARGIN_LEFT + 195, curY + 5.5, { width: 130, lineBreak: false });
-
-          const pillX = MARGIN_LEFT + 340;
-          const pillY = curY + 3;
-          const pillW = 68;
-          const pillH = 13.5;
-          doc.roundedRect(pillX, pillY, pillW, pillH, 5).fill('#fee2e2');
-          doc.fillColor('#991b1b').font('Helvetica-Bold').fontSize(6)
-             .text('ABSENT / OFF', pillX, pillY + 3.5, { width: pillW, align: 'center', lineBreak: false });
-
-          doc.fillColor('#64748b').font('Helvetica-Oblique').fontSize(6.5)
-             .text(r.remarks || 'Scheduled day off', MARGIN_LEFT + 425, curY + 5.5, { width: 125, lineBreak: false });
+          doc.fillColor('#64748b').font('Helvetica-Oblique').fontSize(8)
+             .text(r.remarks || 'Scheduled day off', MARGIN_LEFT + 418, textY + 1, { width: 143, lineBreak: false });
         }
 
         curY += rowH;
       });
 
-      curY += 4;
+      curY += 6;
     }
 
     // ── SIGNATURES / VERIFICATION SECTION ─────────────────────
-    const sigNeededH = 65;
-    if (curY + sigNeededH > doc.page.height - 30) {
-      doc.addPage({ margin: 20, size: 'A4', layout: 'portrait' });
+    const sigBoxH = 60;
+    const sigBoxW = (PAGE_W - 14) / 2;
+
+    if (curY + sigBoxH > doc.page.height - 20) {
+      doc.addPage({ margin: 16, size: 'A4', layout: 'portrait' });
       drawContinuationBanner();
-      curY = 48;
+      curY = 50;
     }
 
-    curY += 4;
-    const sigBoxW = (PAGE_W - 14) / 2;
-    const sigBoxH = 58;
+    // Anchor signatures to bottom of page when fitting on single page
+    const sigY = Math.max(curY + 10, doc.page.height - 16 - sigBoxH);
 
     // Box 1: Usman (Operator)
-    doc.roundedRect(MARGIN_LEFT, curY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', LIGHT_BORDER);
-    doc.rect(MARGIN_LEFT, curY, sigBoxW, 14).fill('#f1f5f9');
-    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(7)
-       .text('SUBMITTED BY (ATTENDANCE OPERATOR)', MARGIN_LEFT + 8, curY + 3.5, { lineBreak: false });
+    doc.roundedRect(MARGIN_LEFT, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
+    doc.rect(MARGIN_LEFT, sigY, sigBoxW, 16).fill('#f1f5f9');
+    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8)
+       .text('SUBMITTED BY (ATTENDANCE OPERATOR)', MARGIN_LEFT + 10, sigY + 4, { lineBreak: false });
 
     if (usmanSign) {
-      try { doc.image(usmanSign, MARGIN_LEFT + 8, curY + 16, { fit: [85, 26] }); } catch (e) {}
+      try { doc.image(usmanSign, MARGIN_LEFT + 10, sigY + 20, { fit: [95, 28] }); } catch (e) {}
     }
-    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(7.5)
-       .text('Usman Salahuddin', MARGIN_LEFT + 100, curY + 20, { lineBreak: false });
-    doc.fillColor(SLATE).font('Helvetica').fontSize(6)
-       .text('Attendance Operator  •  PixxTechnologies UK', MARGIN_LEFT + 100, curY + 32, { lineBreak: false });
+    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9.5)
+       .text('Usman Salahuddin', MARGIN_LEFT + 115, sigY + 22, { lineBreak: false });
+    doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
+       .text('Attendance Operator  •  PixxTechnologies UK', MARGIN_LEFT + 115, sigY + 38, { lineBreak: false });
 
     // Box 2: Sarfraz (Checker)
     const rightX = MARGIN_LEFT + sigBoxW + 14;
-    doc.roundedRect(rightX, curY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', LIGHT_BORDER);
-    doc.rect(rightX, curY, sigBoxW, 14).fill('#f1f5f9');
-    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(7)
-       .text('VERIFIED BY (ATTENDANCE CHECKER)', rightX + 8, curY + 3.5, { lineBreak: false });
+    doc.roundedRect(rightX, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
+    doc.rect(rightX, sigY, sigBoxW, 16).fill('#f1f5f9');
+    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8)
+       .text('VERIFIED BY (ATTENDANCE CHECKER)', rightX + 10, sigY + 4, { lineBreak: false });
 
     if (sarfrazSign) {
-      try { doc.image(sarfrazSign, rightX + 8, curY + 16, { fit: [85, 26] }); } catch (e) {}
+      try { doc.image(sarfrazSign, rightX + 10, sigY + 20, { fit: [95, 28] }); } catch (e) {}
     }
-    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(7.5)
-       .text('Sarfraz Khan', rightX + 100, curY + 20, { lineBreak: false });
-    doc.fillColor(SLATE).font('Helvetica').fontSize(6)
-       .text('Attendance Checker  •  PixxTechnologies UK', rightX + 100, curY + 32, { lineBreak: false });
-
-    curY += sigBoxH + 4;
+    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9.5)
+       .text('Sarfraz Khan', rightX + 115, sigY + 22, { lineBreak: false });
+    doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
+       .text('Attendance Checker  •  PixxTechnologies UK', rightX + 115, sigY + 38, { lineBreak: false });
 
     // Bottom footer: turn off bottom margin auto-page-break
     doc.page.margins.bottom = 0;
-    doc.fillColor('#94a3b8').font('Helvetica').fontSize(6)
+    doc.fillColor('#94a3b8').font('Helvetica').fontSize(7)
        .text(
          `PIXX ROTA  •  Confidential Attendance Record  •  Date: ${formattedDate}`,
          MARGIN_LEFT,
