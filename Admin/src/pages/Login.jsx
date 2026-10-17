@@ -1,7 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User as UserIcon, ArrowRight, Eye, EyeOff, Shield, Download, Check } from 'lucide-react';
+import {
+  Lock,
+  User as UserIcon,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Shield,
+  Download,
+  Check,
+  Smartphone,
+  Share,
+  PlusSquare,
+  MoreVertical,
+  X,
+  Sparkles,
+  Monitor
+} from 'lucide-react';
 import logo from '../assets/logo.jpg';
 
 export default function Login() {
@@ -10,10 +26,21 @@ export default function Login() {
 
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() =>
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true
+    typeof window !== 'undefined' && (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true
+    )
   );
   const [showInstallInstructions, setShowInstallInstructions] = useState(false);
+
+  const isIOSDevice = typeof navigator !== 'undefined' && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+  const isAndroidDevice = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+  const initialOs = isIOSDevice ? 'ios' : isAndroidDevice ? 'android' : 'desktop';
+  const [activeOsTab, setActiveOsTab] = useState(initialOs);
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -49,23 +76,25 @@ export default function Login() {
   }, []);
 
   const handleInstall = async () => {
-    if (!installPrompt) {
-      setShowInstallInstructions(true);
-      return;
+    // If native prompt is available (Android Chrome, Edge, Chromium)
+    if (installPrompt) {
+      try {
+        await installPrompt.prompt();
+        const { outcome } = await installPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+          setShowInstallInstructions(false);
+          setInstallPrompt(null);
+          return;
+        }
+      } catch (installError) {
+        console.warn('The browser could not open the native install prompt:', installError);
+      }
     }
 
-    try {
-      await installPrompt.prompt();
-      const { outcome } = await installPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstalled(true);
-        setShowInstallInstructions(false);
-      }
-      setInstallPrompt(null);
-    } catch (installError) {
-      console.error('The browser could not open the Rota System install prompt:', installError);
-      setShowInstallInstructions(true);
-    }
+    // Fallback or iOS Safari: show beautiful step-by-step device guide
+    setActiveOsTab(isIOSDevice ? 'ios' : isAndroidDevice ? 'android' : 'desktop');
+    setShowInstallInstructions(true);
   };
 
   const handleSubmit = async (e) => {
@@ -219,25 +248,476 @@ export default function Login() {
           {isInstalled ? 'Rota System is already installed' : 'Install Rota System'}
         </button>
 
+        {/* Responsive Mobile / Desktop Install Modal */}
         {showInstallInstructions && !isInstalled && (
           <div
-            role="status"
             style={{
-              marginTop: '12px',
-              padding: '12px',
-              border: '1px solid #bfdbfe',
-              borderRadius: '8px',
-              background: '#eff6ff',
-              color: '#1e3a8a',
-              fontSize: '12px'
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.75)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
             }}
+            onClick={() => setShowInstallInstructions(false)}
           >
-            <strong>Install Rota System in your browser</strong>
-            <p style={{ marginTop: '4px' }}>
-              In Chrome or Edge, open the browser menu and choose <strong>Install Rota System</strong> or
-              {' '}<strong>Apps → Install this site as an app</strong>. If that option is missing, make sure
-              you are using the secure website address and try again.
-            </p>
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                maxWidth: '430px',
+                width: '100%',
+                padding: '24px',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+                position: 'relative',
+                maxHeight: '90vh',
+                overflowY: 'auto'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    background: '#eff6ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Smartphone size={20} color="#2563eb" />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
+                      Install Rota System
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                      Add mobile web shortcut directly to your screen
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInstallInstructions(false)}
+                  style={{
+                    background: '#f1f5f9',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '28px',
+                    height: '28px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748b'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* OS Tabs */}
+              <div style={{
+                display: 'flex',
+                background: '#f8fafc',
+                padding: '4px',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                marginBottom: '16px',
+                gap: '4px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveOsTab('ios')}
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: activeOsTab === 'ios' ? '#ffffff' : 'transparent',
+                    color: activeOsTab === 'ios' ? '#0f172a' : '#64748b',
+                    fontWeight: activeOsTab === 'ios' ? 700 : 500,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    boxShadow: activeOsTab === 'ios' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  🍏 iPhone (iOS)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveOsTab('android')}
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: activeOsTab === 'android' ? '#ffffff' : 'transparent',
+                    color: activeOsTab === 'android' ? '#0f172a' : '#64748b',
+                    fontWeight: activeOsTab === 'android' ? 700 : 500,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    boxShadow: activeOsTab === 'android' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  🤖 Android
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveOsTab('desktop')}
+                  style={{
+                    flex: 1,
+                    padding: '6px 8px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: activeOsTab === 'desktop' ? '#ffffff' : 'transparent',
+                    color: activeOsTab === 'desktop' ? '#0f172a' : '#64748b',
+                    fontWeight: activeOsTab === 'desktop' ? 700 : 500,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    boxShadow: activeOsTab === 'desktop' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  💻 Desktop / PC
+                </button>
+              </div>
+
+              {/* iOS Guide */}
+              {activeOsTab === 'ios' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>1</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      Tap the <strong>Share</strong> icon{' '}
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        verticalAlign: 'middle',
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        padding: '2px 6px',
+                        borderRadius: '5px',
+                        fontWeight: 700,
+                        fontSize: '11px'
+                      }}>
+                        <Share size={13} style={{ marginRight: '3px' }} /> Share
+                      </span>
+                      {' '}at the bottom bar of Safari.
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>2</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      Scroll down in the share sheet and tap{' '}
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        verticalAlign: 'middle',
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        padding: '2px 6px',
+                        borderRadius: '5px',
+                        fontWeight: 700,
+                        fontSize: '11px'
+                      }}>
+                        <PlusSquare size={13} style={{ marginRight: '3px' }} /> Add to Home Screen
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>3</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      Tap <strong>Add</strong> in the top right. The Rota System icon will appear immediately on your home screen!
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    fontSize: '12px',
+                    color: '#065f46',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginTop: '4px'
+                  }}>
+                    <Sparkles size={16} color="#059669" style={{ flexShrink: 0 }} />
+                    <span>Launches in full-screen standalone mode with no browser address bar!</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Android Guide */}
+              {activeOsTab === 'android' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {installPrompt && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={async () => {
+                        try {
+                          await installPrompt.prompt();
+                          const { outcome } = await installPrompt.userChoice;
+                          if (outcome === 'accepted') {
+                            setIsInstalled(true);
+                            setShowInstallInstructions(false);
+                            setInstallPrompt(null);
+                          }
+                        } catch (err) {
+                          console.warn(err);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        marginBottom: '6px',
+                        fontWeight: 700
+                      }}
+                    >
+                      <Download size={16} /> Tap Here for 1-Click Android Install
+                    </button>
+                  )}
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#059669',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>1</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      In Chrome, tap the <strong>three dots menu</strong>{' '}
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        verticalAlign: 'middle',
+                        background: '#e2e8f0',
+                        color: '#334155',
+                        padding: '2px 5px',
+                        borderRadius: '4px',
+                        fontWeight: 700,
+                        fontSize: '11px'
+                      }}>
+                        <MoreVertical size={13} />
+                      </span>
+                      {' '}in the top right.
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#059669',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>2</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong> from the menu.
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#059669',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>3</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      Tap <strong>Install</strong>. Android will download the shortcut icon onto your home screen!
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop Guide */}
+              {activeOsTab === 'desktop' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#475569',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>1</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      In Google Chrome or Microsoft Edge, look at the right side of the address bar at the top.
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{
+                      background: '#475569',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      flexShrink: 0
+                    }}>2</span>
+                    <div style={{ fontSize: '13px', color: '#1e293b' }}>
+                      Click the <strong>Install</strong> icon ⊕ in the address bar (or click <strong>Menu ⋮ → Save and share → Install Rota System</strong>).
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop: '18px' }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setShowInstallInstructions(false)}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  Got It, Close
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

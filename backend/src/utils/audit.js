@@ -6,7 +6,7 @@ const { logServerError } = require('./httpErrors');
  */
 async function logAction({ user, username, role, action, recordType = '', recordId = '', details = '', req = null }) {
   try {
-    const ipAddress = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '') : '';
+    const ipAddress = req ? (req.headers?.['x-forwarded-for'] || req.ip || req.socket?.remoteAddress || '') : '';
     await AuditLog.create({
       user: user?._id || user || null,
       username: username || user?.name || user?.username || 'System',
