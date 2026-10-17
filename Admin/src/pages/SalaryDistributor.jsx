@@ -335,16 +335,19 @@ export default function SalaryDistributor() {
     }
   };
 
+  // Filter out unpaid staff with daily wage 0 as requested
+  const payableSalaries = salaries.filter(s => s.employee?.dailyWage !== 0);
+
   // Calculate counts for status tabs
   const tabCounts = {
-    all: salaries.length,
-    awaiting: salaries.filter(s => (s.totalPaid || 0) === 0 && (s.balanceRemaining || 0) > 0).length,
-    partial: salaries.filter(s => (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0).length,
-    paid: salaries.filter(s => (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid').length
+    all: payableSalaries.length,
+    awaiting: payableSalaries.filter(s => (s.totalPaid || 0) === 0 && (s.balanceRemaining || 0) > 0).length,
+    partial: payableSalaries.filter(s => (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0).length,
+    paid: payableSalaries.filter(s => (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid').length
   };
 
   // Filter salaries by status tab and search query (Employee Name or ID)
-  const filteredSalaries = salaries.filter(s => {
+  const filteredSalaries = payableSalaries.filter(s => {
     if (statusFilter === 'FINALIZED') {
       const isAwaiting = (s.totalPaid || 0) === 0 && (s.balanceRemaining || 0) > 0;
       if (!isAwaiting) return false;

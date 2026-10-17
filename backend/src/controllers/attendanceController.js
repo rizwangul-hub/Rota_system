@@ -3,7 +3,7 @@ const { sendServerError } = require('../utils/httpErrors');
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const SystemSetting = require('../models/SystemSetting');
-const { calculateAttendanceRecord, formatUKDate, getUKDateString } = require('../utils/calc');
+const { calculateAttendanceRecord, formatUKDate, getUKDateString, resolveDailyWage } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { attendanceOperatorRecord, attendanceCheckerRecord } = require('../utils/attendanceViews');
 
@@ -77,8 +77,8 @@ exports.saveAttendance = async (req, res) => {
       });
     }
 
-    // Historical wage snapshot: preserve existing non-zero daily wage if editing; use current employee wage if new or 0
-    const dailyWage = (existing && existing.dailyWage > 0) ? existing.dailyWage : (employee.dailyWage || 50);
+    // Historical wage snapshot: preserve existing daily wage (including 0); otherwise use current employee wage
+    const dailyWage = resolveDailyWage(existing?.dailyWage, employee?.dailyWage);
     const gracePeriod = await getGracePeriod();
 
     const start = isAbsent ? '' : (shiftStart || '09:00');
@@ -224,8 +224,8 @@ exports.saveAttendanceBatch = async (req, res) => {
       }
 
       const isAbsent = item.status === 'Absent';
-      // Preserve historical non-zero daily wage if existing; snapshot current if new or 0
-      const dailyWage = (existing && existing.dailyWage > 0) ? existing.dailyWage : (employee.dailyWage || 50);
+      // Preserve historical daily wage if existing; snapshot current employee wage if new
+      const dailyWage = resolveDailyWage(existing?.dailyWage, employee?.dailyWage);
       const start = isAbsent ? '' : (item.shiftStart || '09:00');
       const end = isAbsent ? '' : (item.shiftEnd || '19:00');
       const reached = isAbsent ? '' : (item.timeReached || start);
@@ -444,7 +444,7 @@ exports.updateAttendanceRecord = async (req, res) => {
 
     const gracePeriod = await getGracePeriod();
     const employee = record.employee ? await Employee.findById(record.employee) : null;
-    const dailyWage = (record.dailyWage && record.dailyWage > 0) ? record.dailyWage : (employee?.dailyWage || 50);
+    const dailyWage = resolveDailyWage(record.dailyWage, employee?.dailyWage);
 
     const calcResult = calculateAttendanceRecord({
       dailyWage,

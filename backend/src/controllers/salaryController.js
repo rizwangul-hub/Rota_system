@@ -8,7 +8,7 @@ const SalaryAdjustment = require('../models/SalaryAdjustment');
 const SalaryPayment = require('../models/SalaryPayment');
 const Bonus = require('../models/Bonus');
 const LedgerTransaction = require('../models/LedgerTransaction');
-const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord, safeObjectId } = require('../utils/calc');
+const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord, safeObjectId, resolveDailyWage } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { validatePaymentAmount, calculatePaymentState } = require('../utils/payment');
 const { recalculateEmployeeLedger } = require('../utils/ledgerHelper');
@@ -184,6 +184,41 @@ exports.generateWeeklySalary = async (req, res) => {
       // Sort records chronologically
       const records = group.records.sort((a, b) => (a.dateString || '').localeCompare(b.dateString || ''));
 
+      // Check if employee has 0 daily wage (unpaid staff like Ali, Arslan, Ash, Sam)
+      let empDoc = null;
+      if (group.employee) {
+        empDoc = await Employee.findById(group.employee);
+      }
+      const workerDailyWage = resolveDailyWage(records[0]?.dailyWage, empDoc?.dailyWage);
+
+      if (workerDailyWage === 0 || (empDoc && empDoc.dailyWage === 0)) {
+        // Exclude worker from weekly salary generation as requested
+        // Remove any non-finalized weekly salary for this unpaid worker
+        if (group.employee) {
+          await WeeklySalary.deleteMany({
+            employee: group.employee,
+            weekStartDateString: week.startDateString,
+            status: { $in: ['Generated', 'Draft', 'Pending'] }
+          });
+        }
+        // Ensure their attendance records for this week accurately have 0 financials
+        for (const r of records) {
+          await Attendance.updateOne(
+            { _id: r._id },
+            {
+              $set: {
+                dailyWage: 0,
+                hourlyWage: 0,
+                lateDeduction: 0,
+                attendancePay: 0,
+                weeklySalary: null
+              }
+            }
+          );
+        }
+        continue;
+      }
+
       // Check working days (exclude Absent, preserve Half and Present/Late)
       const workingDays = records.filter(r => r.status !== 'Absent').length;
       const scheduledHours = Number(records.reduce((sum, r) => sum + (Number(r.scheduledHours) || 0), 0).toFixed(2));
@@ -191,7 +226,7 @@ exports.generateWeeklySalary = async (req, res) => {
 
       // Dynamically calculate lateness deductions and pay for each attendance record
       records.forEach(r => {
-        const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+        const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage || empDoc?.dailyWage);
         r.dailyWage = wage;
         const calcResult = calculateAttendanceRecord({
           dailyWage: wage,
@@ -207,7 +242,7 @@ exports.generateWeeklySalary = async (req, res) => {
         r.attendancePay = calcResult.attendancePay;
       });
 
-      const grossDailyWages = Number(records.reduce((sum, r) => sum + (Number(r.dailyWage) || 50), 0).toFixed(2));
+      const grossDailyWages = Number(records.reduce((sum, r) => sum + (Number(r.dailyWage) || 0), 0).toFixed(2));
       const lateDeductions = Number(records.reduce((sum, r) => sum + (Number(r.lateDeduction) || 0), 0).toFixed(2));
       const netAttendancePay = Number(records.reduce((sum, r) => sum + (Number(r.attendancePay) || 0), 0).toFixed(2));
 
@@ -236,7 +271,7 @@ exports.generateWeeklySalary = async (req, res) => {
           scheduledHours: r.scheduledHours || 0,
           actualHours: r.actualHours || 0,
           status: r.status,
-          dailyWage: r.dailyWage || 50,
+          dailyWage: r.dailyWage != null ? r.dailyWage : 0,
           lateMinutes: r.lateMinutes || 0,
           lateDeduction: r.lateDeduction || 0,
           attendancePay: r.attendancePay || 0,
@@ -392,10 +427,16 @@ exports.getWeeklySalaries = async (req, res) => {
       ];
     }
 
-    const salaries = await WeeklySalary.find(query)
+    const rawSalaries = await WeeklySalary.find(query)
       .populate('employee')
       .populate('shop')
       .sort({ weekStartDate: -1, shopName: 1, employeeName: 1 });
+
+    // Exclude unpaid workers whose daily wage is 0 as requested
+    const salaries = rawSalaries.filter(s => {
+      if (s.employee && s.employee.dailyWage === 0) return false;
+      return true;
+    });
 
     // Aggregate totals for the week
     const totals = {

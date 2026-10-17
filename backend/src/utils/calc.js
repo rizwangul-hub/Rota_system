@@ -79,6 +79,20 @@ function calculateEarlyLeaveMinutes(shiftEnd, workerEndTime) {
 }
 
 /**
+ * Safely resolve daily wage snapshot or current wage, allowing £0.00 wages.
+ * Only falls back to 50 if both recordWage and employeeWage are undefined/null/empty.
+ */
+function resolveDailyWage(recordWage, employeeWage) {
+  if (recordWage !== undefined && recordWage !== null && recordWage !== '' && !isNaN(Number(recordWage))) {
+    return Math.max(0, Number(recordWage));
+  }
+  if (employeeWage !== undefined && employeeWage !== null && employeeWage !== '' && !isNaN(Number(employeeWage))) {
+    return Math.max(0, Number(employeeWage));
+  }
+  return 50;
+}
+
+/**
  * Core lateness, early leave & wage calculation:
  *
  * Daily wage = £50 (or custom employee daily wage)
@@ -98,7 +112,7 @@ function calculateEarlyLeaveMinutes(shiftEnd, workerEndTime) {
  * Attendance Pay = Math.max(0, Base Pay - Total Deduction)
  */
 function calculateAttendanceRecord({
-  dailyWage = 0,
+  dailyWage,
   shiftStart = '09:00',
   shiftEnd = '19:00',
   timeReached = '09:00',
@@ -106,22 +120,33 @@ function calculateAttendanceRecord({
   status = 'Present',
   gracePeriodMinutes = 15,
 }) {
-  const wage = (Number(dailyWage) && Number(dailyWage) > 0) ? Number(dailyWage) : 50;
+  const wage = (dailyWage !== undefined && dailyWage !== null && dailyWage !== '' && !isNaN(Number(dailyWage)))
+    ? Math.max(0, Number(dailyWage))
+    : 50;
   const scheduledHours = calculateScheduledHours(shiftStart, shiftEnd);
-  const hourlyWage = scheduledHours > 0 ? Number((wage / scheduledHours).toFixed(4)) : 0;
+  const hourlyWage = (scheduledHours > 0 && wage > 0) ? Number((wage / scheduledHours).toFixed(4)) : 0;
 
-  if (status === 'Absent') {
+  if (status === 'Absent' || wage === 0) {
+    const actualHours = (status === 'Absent') ? 0 : calculateWorkedHours(timeReached, workerEndTime, scheduledHours, status);
+    const lateMinutes = (status === 'Absent') ? 0 : calculateLateMinutes(shiftStart, timeReached);
+    const earlyLeaveMinutes = (status === 'Absent') ? 0 : calculateEarlyLeaveMinutes(shiftEnd, workerEndTime);
+    let computedStatus = status;
+    if (status !== 'Absent') {
+      if (!status || status === 'Present' || status === 'Late') {
+        computedStatus = lateMinutes > gracePeriodMinutes ? 'Late' : 'Present';
+      }
+    }
     return {
       scheduledHours,
-      actualHours: 0,
-      lateMinutes: 0,
-      earlyLeaveMinutes: 0,
-      hourlyWage,
+      actualHours,
+      lateMinutes,
+      earlyLeaveMinutes,
+      hourlyWage: 0,
       lateDeduction: 0,
       arrivalDeduction: 0,
       earlyLeaveDeduction: 0,
       attendancePay: 0,
-      status: 'Absent'
+      status: computedStatus || 'Present'
     };
   }
 
@@ -134,7 +159,7 @@ function calculateAttendanceRecord({
   }
 
   let arrivalDeduction = 0;
-  if (lateMinutes > gracePeriodMinutes) {
+  if (lateMinutes > gracePeriodMinutes && hourlyWage > 0) {
     arrivalDeduction = Number((hourlyWage * (lateMinutes / 60)).toFixed(2));
   }
 
@@ -389,5 +414,6 @@ module.exports = {
   getUKDateString,
   getWeekRange,
   calculateFinalWeeklySalary,
-  calculateWeeklySalaryComponents
+  calculateWeeklySalaryComponents,
+  resolveDailyWage
 };

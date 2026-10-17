@@ -200,6 +200,12 @@ exports.getDistributorDashboard = async (req, res) => {
       .populate('shop')
       .sort({ status: 1, shopName: 1, employeeName: 1 });
 
+    // Exclude unpaid workers whose daily wage is 0 from distributor dashboard
+    const eligibleSalaries = rawSalaries.filter(s => {
+      if (s.employee && s.employee.dailyWage === 0) return false;
+      return true;
+    });
+
     const Bonus = require('../models/Bonus');
     const allBonuses = await Bonus.find({ status: { $ne: 'DRAFT' } }).lean();
     const bonusMap = {};
@@ -210,7 +216,7 @@ exports.getDistributorDashboard = async (req, res) => {
       bonusMap[empKey].push(b);
     });
 
-    const salaries = rawSalaries.map(s => {
+    const salaries = eligibleSalaries.map(s => {
       const sObj = s.toObject ? s.toObject() : { ...s };
       const empKey = (s.employee?._id || s.employee || '').toString();
       const empBonuses = bonusMap[empKey] || [];

@@ -36,7 +36,7 @@ const {
   getShopColor,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
-const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, calculateWeeklySalaryComponents, safeObjectId, getDayOfWeekUK } = require('../utils/calc');
+const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, calculateWeeklySalaryComponents, safeObjectId, getDayOfWeekUK, resolveDailyWage } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const {
   attendanceOperatorRecord,
@@ -94,7 +94,7 @@ exports.getDailyAttendanceReport = async (req, res) => {
       .sort({ shopName: 1, employeeName: 1 });
 
     records.forEach(r => {
-      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       r.dailyWage = wage;
       if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
@@ -187,7 +187,7 @@ exports.exportDailyAttendanceExcel = async (req, res) => {
 
     const records = await Attendance.find(query).populate('employee').populate('shop').sort({ shopName: 1, employeeName: 1 });
     records.forEach(r => {
-      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       r.dailyWage = wage;
       if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
@@ -249,7 +249,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     const records = await Attendance.find(query).populate('employee').populate('shop').sort({ shopName: 1, employeeName: 1 });
     records.forEach(r => {
-      const wage = (r.dailyWage && r.dailyWage > 0) ? r.dailyWage : (r.employee?.dailyWage || 50);
+      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       r.dailyWage = wage;
       if (r.status !== 'Absent') {
         const calc = calculateAttendanceRecord({
@@ -1093,7 +1093,7 @@ async function fetchWeeklySalariesWithFallback({ weekLabel, date, shopId, employ
           };
         }
         const rec = empMap[key];
-        const effectiveWage = (Number(a.dailyWage) && Number(a.dailyWage) > 0) ? Number(a.dailyWage) : (Number(a.employee?.dailyWage) || 50);
+        const effectiveWage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
         const calcResult = calculateAttendanceRecord({
           dailyWage: effectiveWage,
           shiftStart: a.shiftStart || '09:00',
@@ -1302,7 +1302,7 @@ exports.getEmployeeMonthlyReport = async (req, res) => {
 
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dailyRecords = attendances.map(r => {
-      const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       let calc = { hourlyWage: 0, lateMinutes: 0, lateDeduction: 0, attendancePay: 0 };
       if (r.status !== 'Absent') {
         calc = calculateAttendanceRecord({
@@ -1452,7 +1452,7 @@ exports.exportEmployeeMonthlyExcel = async (req, res) => {
     const attendances = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } }).populate('shop').sort({ dateString: 1 });
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dailyRecords = attendances.map(r => {
-      const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       let calc = { hourlyWage: 0, lateMinutes: 0, lateDeduction: 0, attendancePay: 0 };
       if (r.status !== 'Absent') {
         calc = calculateAttendanceRecord({
@@ -1570,7 +1570,7 @@ exports.exportEmployeeMonthlyPDF = async (req, res) => {
     const attendances = await Attendance.find({ employee: employeeId, dateString: { $gte: startStr, $lte: endStr } }).populate('shop').sort({ dateString: 1 });
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dailyRecords = attendances.map(r => {
-      const wage = (Number(r.dailyWage) && Number(r.dailyWage) > 0) ? Number(r.dailyWage) : (Number(r.employee?.dailyWage) || 50);
+      const wage = resolveDailyWage(r.dailyWage, r.employee?.dailyWage);
       let calc = { hourlyWage: 0, lateMinutes: 0, lateDeduction: 0, attendancePay: 0 };
       if (r.status !== 'Absent') {
         calc = calculateAttendanceRecord({
@@ -1727,7 +1727,7 @@ async function fetchYearlyEmployeeData(employeeId, targetYear) {
     const mAttendancePay = Number(mAttendances.reduce((sum, a) => {
       if (a.status === 'Absent') return sum;
       if (typeof a.attendancePay === 'number' && a.attendancePay > 0) return sum + a.attendancePay;
-      const wage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const wage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
       const calc = calculateAttendanceRecord({
         dailyWage: wage,
         shiftStart: a.shiftStart || '09:00',
@@ -2041,7 +2041,7 @@ exports.getShopLabourHours = async (req, res) => {
       empEntry.hours = Number((Number(empEntry.hours || 0) + act).toFixed(2));
       empEntry.lateMinutes = Number(empEntry.lateMinutes || 0) + lMin;
 
-      const effectiveWage = (Number(a.dailyWage) && Number(a.dailyWage) > 0) ? Number(a.dailyWage) : (Number(a.employee?.dailyWage) || 50);
+      const effectiveWage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
       const calcResult = calculateAttendanceRecord({
         dailyWage: effectiveWage,
         shiftStart: a.shiftStart || '09:00',
@@ -2121,7 +2121,7 @@ exports.getMonthlyShopLabourSummary = async (req, res) => {
       const scheduledHours = Number(attendances.reduce((sum, a) => sum + (a.scheduledHours || 0), 0).toFixed(2));
       const actualHours = Number(attendances.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2));
       const lateDeductions = Number(attendances.reduce((sum, a) => {
-        const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        const effectiveWage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
         const calcResult = calculateAttendanceRecord({
           dailyWage: effectiveWage,
           shiftStart: a.shiftStart || '09:00',
@@ -2134,7 +2134,7 @@ exports.getMonthlyShopLabourSummary = async (req, res) => {
         return sum + calcResult.lateDeduction;
       }, 0).toFixed(2));
       const attendancePay = Number(attendances.reduce((sum, a) => {
-        const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+        const effectiveWage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
         const calcResult = calculateAttendanceRecord({
           dailyWage: effectiveWage,
           shiftStart: a.shiftStart || '09:00',
@@ -2231,7 +2231,7 @@ exports.exportShopLabourExcel = async (req, res) => {
       e.hours += (a.actualHours || 0);
       e.lateMinutes += (a.lateMinutes || 0);
 
-      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const effectiveWage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
       const calcResult = calculateAttendanceRecord({
         dailyWage: effectiveWage,
         shiftStart: a.shiftStart || '09:00',
@@ -2302,7 +2302,7 @@ exports.exportShopLabourPDF = async (req, res) => {
       e.hours += (a.actualHours || 0);
       e.lateMinutes += (a.lateMinutes || 0);
 
-      const effectiveWage = (a.dailyWage && a.dailyWage > 0) ? a.dailyWage : (a.employee?.dailyWage || 50);
+      const effectiveWage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
       const calcResult = calculateAttendanceRecord({
         dailyWage: effectiveWage,
         shiftStart: a.shiftStart || '09:00',
