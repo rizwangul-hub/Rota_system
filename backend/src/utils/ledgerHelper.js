@@ -31,7 +31,7 @@ async function syncWageHistoryToLedger(employee, userId = null) {
     const txDateStr = txDate.toISOString().split('T')[0];
 
     // If effective date is 11 October 2026 or earlier, do not show as wage increase in ledger
-    if (txDateStr === SYSTEM_START_DATE_STR || txDate < SYSTEM_START_DATE) {
+    if (txDateStr <= SYSTEM_START_DATE_STR || txDate <= SYSTEM_START_DATE) {
       await LedgerTransaction.deleteMany({
         employee: targetEmployeeId,
         referenceId: curr._id,
@@ -89,11 +89,11 @@ async function recalculateEmployeeLedger(employeeId) {
       employee: employeeId,
       date: { $lt: SYSTEM_START_DATE }
     });
-    // Delete any wage increase transactions on baseline date 11 October 2026
+    // Delete any wage increase transactions on baseline date 11 October 2026 or earlier
     await LedgerTransaction.deleteMany({
       employee: employeeId,
       transactionType: 'WAGE_INCREASE',
-      date: { $gte: SYSTEM_START_DATE, $lte: new Date('2026-10-11T23:59:59.999Z') }
+      date: { $lte: new Date('2026-10-11T23:59:59.999Z') }
     });
 
     const EmployeeModel = require('../models/Employee');
@@ -106,7 +106,7 @@ async function recalculateEmployeeLedger(employeeId) {
         const txDate = curr.effectiveDate ? new Date(curr.effectiveDate) : new Date();
         const txDateStr = txDate.toISOString().split('T')[0];
 
-        if (txDateStr === SYSTEM_START_DATE_STR || txDate < SYSTEM_START_DATE) {
+        if (txDateStr <= SYSTEM_START_DATE_STR || txDate <= SYSTEM_START_DATE) {
           await LedgerTransaction.deleteMany({
             employee: employeeId,
             referenceId: curr._id,

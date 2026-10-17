@@ -145,7 +145,7 @@ export default function Employees() {
         email: editModalEmployee.email,
         dailyWage: Number(editModalEmployee.dailyWage),
         employmentStatus: editModalEmployee.employmentStatus,
-        wageEffectiveDate: editModalEmployee.wageEffectiveDate || undefined,
+        wageEffectiveDate: editModalEmployee.wageEffectiveDate || '2026-10-11',
         wageChangeReason: editModalEmployee.wageChangeReason || '',
         openingBalance: editModalEmployee.openingBalance !== '' && editModalEmployee.openingBalance !== undefined ? Number(editModalEmployee.openingBalance) : 0,
         openingBalanceNote: editModalEmployee.openingBalanceNote || '',
@@ -277,7 +277,7 @@ export default function Employees() {
                       <Link to={`/employees/${emp._id}`} className="btn btn-outline btn-sm" title="View Full Profile & History">
                         <Eye size={13} /> Profile
                       </Link>
-                      <button className="btn btn-outline btn-sm" onClick={() => setEditModalEmployee({ ...emp, wageEffectiveDate: new Date().toISOString().split('T')[0], wageChangeReason: '' })} title="Edit Employee">
+                      <button className="btn btn-outline btn-sm" onClick={() => setEditModalEmployee({ ...emp, wageEffectiveDate: '2026-10-11', wageChangeReason: '' })} title="Edit Employee">
                         <Edit size={13} />
                       </button>
                       <button

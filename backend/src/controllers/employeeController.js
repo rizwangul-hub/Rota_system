@@ -230,13 +230,41 @@ exports.updateEmployee = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Daily wage must be a non-negative number.' });
       }
       auditDetails.push(`Changed daily wage from £${oldEmp.dailyWage} to £${newWage}`);
-      oldEmp.dailyWage = newWage;
-      const effectiveDate = updates.wageEffectiveDate ? new Date(updates.wageEffectiveDate) : new Date();
+      // Parse effectiveDate cleanly
+      let effectiveDate = new Date('2026-10-11T00:00:00.000Z');
+      if (updates.wageEffectiveDate) {
+        const rawDate = String(updates.wageEffectiveDate).trim();
+        if (rawDate.includes('/')) {
+          const parts = rawDate.split('/');
+          if (parts.length === 3) {
+            // DD/MM/YYYY -> YYYY-MM-DD
+            effectiveDate = new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T00:00:00.000Z`);
+          } else if (parts.length === 2) {
+            // DD/MM -> 2026-MM-DD
+            effectiveDate = new Date(`2026-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T00:00:00.000Z`);
+          }
+        } else if (/^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+          effectiveDate = new Date(`${rawDate.slice(0, 10)}T00:00:00.000Z`);
+        } else {
+          const d = new Date(rawDate);
+          if (!isNaN(d.getTime())) effectiveDate = d;
+        }
+      }
+      if (isNaN(effectiveDate.getTime())) {
+        effectiveDate = new Date('2026-10-11T00:00:00.000Z');
+      }
+
+      const effectiveDateStr = effectiveDate.toISOString().slice(0, 10);
+      const isBaseRate = effectiveDateStr <= '2026-10-11';
+      if (isBaseRate) {
+        effectiveDate = new Date('2026-10-11T00:00:00.000Z');
+      }
+
       oldEmp.wageHistory.push({
         wage: newWage,
         effectiveDate,
         changedBy: req.user._id,
-        reason: updates.wageChangeReason || 'Administrative adjustment'
+        reason: updates.wageChangeReason || (isBaseRate ? 'Base starting daily wage' : 'Administrative adjustment')
       });
       wageChanged = true;
 
@@ -245,9 +273,6 @@ exports.updateEmployee = async (req, res) => {
       if (mongoose.isValidObjectId(id)) {
         const Attendance = require('../models/Attendance');
         const { calculateAttendanceRecord, getUKDateString } = require('../utils/calc');
-        const effectiveDateStr = updates.wageEffectiveDate
-          ? updates.wageEffectiveDate.split('T')[0]
-          : getUKDateString(effectiveDate);
 
         const attendancesToUpdate = await Attendance.find({
           employee: id,
