@@ -852,7 +852,7 @@ exports.recordSalaryPayment = async (req, res) => {
   let session;
   try {
     const { id } = req.params; // weeklySalary id
-    const { amount, paymentMethod = 'Cash', notes = '', clientReference } = req.body || {};
+    const { amount, paymentMethod = 'Cash', notes = '', clientReference, paymentDate } = req.body || {};
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid salary record ID.' });
     }
@@ -939,6 +939,14 @@ exports.recordSalaryPayment = async (req, res) => {
         return;
       }
 
+      let pDate = new Date();
+      if (paymentDate) {
+        const parsed = new Date(paymentDate);
+        if (!isNaN(parsed.getTime())) {
+          pDate = parsed;
+        }
+      }
+
       const paymentPayload = {
         weeklySalary: salary._id,
         employee: salary.employee,
@@ -948,7 +956,7 @@ exports.recordSalaryPayment = async (req, res) => {
         weekLabel: salary.weekLabel,
         amount: payAmount,
         paymentMethod: normalizedMethod,
-        paymentDate: new Date(),
+        paymentDate: pDate,
         paidBy: req.user._id,
         paidByName: req.user.name,
         notes: notes.trim()

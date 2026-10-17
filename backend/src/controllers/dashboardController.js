@@ -174,7 +174,15 @@ exports.getDistributorDashboard = async (req, res) => {
 
     const query = {};
     if (status && status !== 'All') {
-      query.status = status;
+      if (/^finalized$/i.test(status)) {
+        query.status = { $in: ['FINALIZED', 'Finalized'] };
+      } else if (/^partially[_\s]?paid$/i.test(status)) {
+        query.status = { $in: ['PARTIALLY_PAID', 'Partially Paid'] };
+      } else if (/^paid$/i.test(status)) {
+        query.status = { $in: ['PAID', 'Paid'] };
+      } else {
+        query.status = status;
+      }
     } else {
       query.status = { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] };
     }

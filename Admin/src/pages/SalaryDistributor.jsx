@@ -13,7 +13,8 @@ import {
   Search,
   HandCoins,
   Receipt,
-  UserCheck
+  UserCheck,
+  Clock
 } from 'lucide-react';
 
 export default function SalaryDistributor() {
@@ -30,6 +31,7 @@ export default function SalaryDistributor() {
   // Pay Modal state
   const [payModalSalary, setPayModalSalary] = useState(null);
   const [payAmount, setPayAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [payNotes, setPayNotes] = useState('');
   const [isPaying, setIsPaying] = useState(false);
@@ -47,7 +49,7 @@ export default function SalaryDistributor() {
 
   useEffect(() => {
     fetchDistributorData();
-  }, [selectedWeek, selectedShop, statusFilter]);
+  }, [selectedWeek, selectedShop]);
 
   const fetchShops = async () => {
     try {
@@ -64,7 +66,6 @@ export default function SalaryDistributor() {
       const params = {};
       if (selectedWeek && selectedWeek !== 'All') params.weekLabel = selectedWeek;
       if (selectedShop) params.shopId = selectedShop;
-      if (statusFilter && statusFilter !== 'All') params.status = statusFilter;
 
       const res = await axios.get(`${API_BASE_URL}/dashboard/distributor`, { params });
       if (res.data.success) {
@@ -95,7 +96,9 @@ export default function SalaryDistributor() {
 
   const openPayModal = (salary) => {
     setPayModalSalary(salary);
-    setPayAmount(salary.balanceRemaining > 0 ? salary.balanceRemaining : salary.finalSalary);
+    const outstanding = Number(salary.balanceRemaining > 0 ? salary.balanceRemaining : salary.finalSalary || 0);
+    setPayAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
+    setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentMethod('Cash');
     setPayNotes(`Cash handed over to ${salary.employeeName} at ${salary.shopName}`);
   };
@@ -112,6 +115,7 @@ export default function SalaryDistributor() {
     try {
       const res = await axios.post(`${API_BASE_URL}/salaries/${payModalSalary._id}/pay`, {
         amount,
+        paymentDate,
         paymentMethod,
         notes: payNotes,
         clientReference: `${payModalSalary._id}-${Date.now()}`
@@ -121,7 +125,7 @@ export default function SalaryDistributor() {
           employeeName: payModalSalary.employeeName,
           weekLabel: payModalSalary.weekLabel,
           paymentAmount: amount,
-          paymentDate: new Date(),
+          paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
           paymentMethod,
           previousPaid: payModalSalary.totalPaid,
           newTotalPaid: (payModalSalary.totalPaid || 0) + amount,
@@ -151,8 +155,27 @@ export default function SalaryDistributor() {
     }
   };
 
-  // Filter salaries by search query (Employee Name or ID)
+  // Calculate counts for status tabs
+  const tabCounts = {
+    all: salaries.length,
+    awaiting: salaries.filter(s => (s.totalPaid || 0) === 0 && (s.balanceRemaining || 0) > 0).length,
+    partial: salaries.filter(s => (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0).length,
+    paid: salaries.filter(s => (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid').length
+  };
+
+  // Filter salaries by status tab and search query (Employee Name or ID)
   const filteredSalaries = salaries.filter(s => {
+    if (statusFilter === 'FINALIZED') {
+      const isAwaiting = (s.totalPaid || 0) === 0 && (s.balanceRemaining || 0) > 0;
+      if (!isAwaiting) return false;
+    } else if (statusFilter === 'PARTIALLY_PAID') {
+      const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
+      if (!isPartial) return false;
+    } else if (statusFilter === 'PAID') {
+      const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
+      if (!isPaid) return false;
+    }
+
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
@@ -186,7 +209,7 @@ export default function SalaryDistributor() {
             </span>
           </div>
           <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px', margin: 0 }}>
-            Review finalized workforce wages • Submit payments directly when giving salary to workers
+            Pay weekly salaries in full or partial installments • Track remaining balances in real-time
           </p>
         </div>
         <button className="btn btn-outline btn-sm" onClick={fetchDistributorData} disabled={loading}>
@@ -220,7 +243,7 @@ export default function SalaryDistributor() {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="card" style={{ marginBottom: '20px', padding: '14px 18px', background: '#f8fafc', borderColor: '#cbd5e1' }}>
+      <div className="card" style={{ marginBottom: '16px', padding: '14px 18px', background: '#f8fafc', borderColor: '#cbd5e1' }}>
         <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Week Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -254,23 +277,6 @@ export default function SalaryDistributor() {
             </select>
           </div>
 
-          {/* Status Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Filter size={15} color="#64748b" />
-            <label className="form-label" style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Status:</label>
-            <select
-              className="form-select"
-              style={{ width: '150px', fontSize: '13px' }}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="All">All Statuses</option>
-              <option value="FINALIZED">Awaiting Payment</option>
-              <option value="PARTIALLY_PAID">Partially Paid</option>
-              <option value="PAID">Fully Paid</option>
-            </select>
-          </div>
-
           {/* Search Input */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 200px' }}>
             <div style={{ position: 'relative', width: '100%' }}>
@@ -288,6 +294,57 @@ export default function SalaryDistributor() {
         </div>
       </div>
 
+      {/* Interactive Status Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: '10px',
+        marginBottom: '16px',
+        flexWrap: 'wrap'
+      }}>
+        {[
+          { key: 'All', label: 'All Salaries', count: tabCounts.all, color: '#334155', bg: '#f1f5f9' },
+          { key: 'FINALIZED', label: 'Awaiting Payment', count: tabCounts.awaiting, color: '#2563eb', bg: '#eff6ff' },
+          { key: 'PARTIALLY_PAID', label: 'Partially Paid (Remaining)', count: tabCounts.partial, color: '#d97706', bg: '#fffbeb' },
+          { key: 'PAID', label: 'Fully Paid', count: tabCounts.paid, color: '#059669', bg: '#ecfdf5' }
+        ].map(tab => {
+          const isActive = statusFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setStatusFilter(tab.key)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: isActive ? `2px solid ${tab.color}` : '1px solid #cbd5e1',
+                background: isActive ? tab.bg : '#ffffff',
+                color: isActive ? tab.color : '#475569',
+                fontWeight: isActive ? 700 : 500,
+                fontSize: '13px',
+                cursor: 'pointer',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span>{tab.label}</span>
+              <span style={{
+                background: isActive ? tab.color : '#e2e8f0',
+                color: isActive ? '#ffffff' : '#475569',
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '12px'
+              }}>
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Salaries Table */}
       <div className="card">
         <div className="table-responsive">
@@ -302,7 +359,7 @@ export default function SalaryDistributor() {
                 <th style={{ textAlign: 'right' }}>Deductions</th>
                 <th style={{ textAlign: 'right' }}>Final Salary</th>
                 <th style={{ textAlign: 'right' }}>Paid</th>
-                <th style={{ textAlign: 'right' }}>Outstanding</th>
+                <th style={{ textAlign: 'right' }}>Remaining Balance</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ textAlign: 'right' }}>Action</th>
               </tr>
@@ -311,10 +368,11 @@ export default function SalaryDistributor() {
               {filteredSalaries.map(s => {
                 const dailyWage = getDailyWage(s);
                 const totalDeductions = getTotalDeductions(s);
-                const isPaid = s.balanceRemaining <= 0;
+                const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
+                const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
 
                 return (
-                  <tr key={s._id} style={{ background: isPaid ? '#fafafa' : '#ffffff' }}>
+                  <tr key={s._id} style={{ background: isPaid ? '#fcfdfd' : isPartial ? '#fffdfa' : '#ffffff' }}>
                     <td>
                       <div style={{ fontWeight: 600, fontSize: '14px', color: '#0f172a' }}>
                         {s.employeeName}
@@ -358,22 +416,81 @@ export default function SalaryDistributor() {
                     <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '14px', color: '#2563eb' }}>
                       £{s.finalSalary?.toFixed(2)}
                     </td>
-                    <td style={{ textAlign: 'right', color: '#059669', fontWeight: 600 }}>
-                      £{(s.totalPaid || 0).toFixed(2)}
+                    <td style={{ textAlign: 'right' }}>
+                      {(s.totalPaid || 0) > 0 ? (
+                        <span style={{ color: '#059669', fontWeight: 700 }}>
+                          £{s.totalPaid.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>£0.00</span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <span style={{
-                        fontWeight: 700,
-                        color: s.balanceRemaining > 0 ? '#d97706' : '#16a34a',
-                        fontSize: '14px'
-                      }}>
-                        £{(s.balanceRemaining || 0).toFixed(2)}
-                      </span>
+                      {s.balanceRemaining > 0 ? (
+                        <div>
+                          <span style={{
+                            fontWeight: 700,
+                            color: isPartial ? '#d97706' : '#b45309',
+                            fontSize: '14px'
+                          }}>
+                            £{(s.balanceRemaining || 0).toFixed(2)}
+                          </span>
+                          {isPartial && (
+                            <div style={{ fontSize: '10.5px', color: '#d97706', fontWeight: 600 }}>
+                              remaining
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>
+                          £0.00
+                        </span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <span className={`badge badge-${s.status === 'PAID' ? 'paid' : s.status === 'PARTIALLY_PAID' ? 'pending' : 'finalized'}`}>
-                        {s.status === 'FINALIZED' ? 'Finalized' : s.status}
-                      </span>
+                      {isPaid ? (
+                        <span style={{
+                          background: '#ecfdf5',
+                          color: '#059669',
+                          border: '1px solid #a7f3d0',
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <CheckCircle2 size={12} /> Paid
+                        </span>
+                      ) : isPartial ? (
+                        <span style={{
+                          background: '#fffbeb',
+                          color: '#b45309',
+                          border: '1px solid #fde68a',
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <Clock size={12} /> Partially Paid
+                        </span>
+                      ) : (
+                        <span style={{
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px solid #bfdbfe',
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 600
+                        }}>
+                          Awaiting Payment
+                        </span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
@@ -388,18 +505,22 @@ export default function SalaryDistributor() {
 
                         {s.balanceRemaining > 0 ? (
                           <button
-                            className="btn btn-success btn-sm"
+                            className="btn btn-sm"
                             onClick={() => openPayModal(s)}
                             style={{
                               fontWeight: 700,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '5px',
-                              padding: '5px 12px'
+                              padding: '5px 12px',
+                              background: isPartial ? '#d97706' : '#059669',
+                              borderColor: isPartial ? '#b45309' : '#047857',
+                              color: '#ffffff'
                             }}
-                            title="Submit payment when giving salary to worker"
+                            title={isPartial ? 'Pay remaining balance to worker' : 'Submit payment when giving salary to worker'}
                           >
-                            <HandCoins size={14} /> Submit Payment
+                            <HandCoins size={14} />
+                            {isPartial ? `Pay Remaining (£${s.balanceRemaining.toFixed(2)})` : 'Pay Salary'}
                           </button>
                         ) : (
                           <span style={{
@@ -440,7 +561,8 @@ export default function SalaryDistributor() {
           <div className="modal-card" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
               <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <HandCoins size={18} color="#059669" /> Submit Salary Payment: {payModalSalary.employeeName}
+                <HandCoins size={18} color="#059669" />
+                {payModalSalary.totalPaid > 0 ? 'Pay Remaining Salary' : 'Submit Salary Payment'}: {payModalSalary.employeeName}
               </h2>
               <button
                 onClick={() => setPayModalSalary(null)}
@@ -487,7 +609,7 @@ export default function SalaryDistributor() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
                     <span style={{ color: '#64748b' }}>Already Paid:</span>
-                    <span style={{ color: '#059669', fontWeight: 600 }}>£{payModalSalary.totalPaid?.toFixed(2)}</span>
+                    <span style={{ color: '#059669', fontWeight: 600 }}>£{payModalSalary.totalPaid?.toFixed(2) || '0.00'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', borderTop: '1px solid #cbd5e1', paddingTop: '8px', marginTop: '6px' }}>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>Outstanding Balance:</span>
@@ -497,8 +619,47 @@ export default function SalaryDistributor() {
                   </div>
                 </div>
 
+                {/* Payment Date Selection */}
                 <div className="form-group" style={{ marginBottom: '14px' }}>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Amount to Submit (£)</label>
+                  <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={15} color="#2563eb" /> Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    style={{ fontSize: '14px' }}
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    required
+                  />
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    Select the date when this payment was handed over or transferred.
+                  </div>
+                </div>
+
+                {/* Amount to Submit with Quick Buttons */}
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>Amount to Submit (£)</label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs"
+                        onClick={() => setPayAmount(payModalSalary.balanceRemaining?.toFixed(2))}
+                        style={{ fontSize: '11px', padding: '3px 8px', background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe', fontWeight: 600 }}
+                      >
+                        Pay Full (£{payModalSalary.balanceRemaining?.toFixed(2)})
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs"
+                        onClick={() => setPayAmount((payModalSalary.balanceRemaining / 2).toFixed(2))}
+                        style={{ fontSize: '11px', padding: '3px 8px', background: '#fffbeb', color: '#d97706', borderColor: '#fde68a', fontWeight: 600 }}
+                      >
+                        Pay Half (£{(payModalSalary.balanceRemaining / 2).toFixed(2)})
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="number"
                     step="0.01"
@@ -511,10 +672,11 @@ export default function SalaryDistributor() {
                     required
                   />
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Full payment (£{payModalSalary.balanceRemaining?.toFixed(2)}) or partial installment.
+                    You can pay full, half, or any custom partial amount now and pay the remaining balance later.
                   </div>
                 </div>
 
+                {/* Payment Method */}
                 <div className="form-group" style={{ marginBottom: '14px' }}>
                   <label className="form-label" style={{ fontWeight: 600 }}>Payment Method</label>
                   <select
@@ -527,28 +689,43 @@ export default function SalaryDistributor() {
                   </select>
                 </div>
 
+                {/* Notes */}
                 <div className="form-group" style={{ marginBottom: '14px' }}>
                   <label className="form-label" style={{ fontWeight: 600 }}>Notes / Remarks (Optional)</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Handed cash in person"
+                    placeholder="e.g. Paid half salary, remaining will be given later"
                     value={payNotes}
                     onChange={(e) => setPayNotes(e.target.value)}
                   />
                 </div>
 
+                {/* Live Balance Preview Calculation */}
                 {payAmount && (
-                  <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '10px 14px', borderRadius: '8px' }}>
+                  <div style={{
+                    background: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#fffbeb' : '#ecfdf5',
+                    border: `1px solid ${Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#fde68a' : '#a7f3d0'}`,
+                    padding: '12px 16px',
+                    borderRadius: '8px'
+                  }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                      <span style={{ color: '#475569' }}>Submitting Payout:</span>
+                      <span style={{ color: '#475569' }}>Submitting Payout ({paymentDate}):</span>
                       <strong style={{ color: '#059669' }}>£{Number(payAmount || 0).toFixed(2)}</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px', borderTop: '1px dashed #6ee7b7', paddingTop: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '6px', borderTop: '1px dashed #cbd5e1', paddingTop: '6px' }}>
                       <span style={{ fontWeight: 600, color: '#1e293b' }}>Remaining Balance After Payment:</span>
-                      <strong style={{ color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#d97706' : '#059669' }}>
+                      <strong style={{
+                        fontSize: '15px',
+                        color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#d97706' : '#059669'
+                      }}>
                         £{Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)).toFixed(2)}
                       </strong>
+                    </div>
+                    <div style={{ fontSize: '12px', marginTop: '6px', color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#b45309' : '#047857' }}>
+                      {Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0
+                        ? `ℹ️ Worker will have £${Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)).toFixed(2)} remaining. You can pay the remaining amount at another time.`
+                        : '✓ Entire salary cleared! Status will be marked as FULLY PAID.'}
                     </div>
                   </div>
                 )}
@@ -558,7 +735,7 @@ export default function SalaryDistributor() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-success btn-lg" disabled={isPaying} style={{ fontWeight: 700 }}>
-                  {isPaying ? 'Submitting...' : `Submit Payment (£${Number(payAmount || 0).toFixed(2)})`}
+                  {isPaying ? 'Submitting...' : Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? `Submit Partial Payment (£${Number(payAmount || 0).toFixed(2)})` : `Submit Full Payment (£${Number(payAmount || 0).toFixed(2)})`}
                 </button>
               </div>
             </form>
