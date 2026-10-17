@@ -778,22 +778,22 @@ export default function SalaryDistributor() {
 
       {/* Pay Modal ("Submit Payment") */}
       {payModalSalary && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '520px' }}>
-            <div className="modal-header">
+        <div className="modal-overlay" style={{ zIndex: 10000, overflowY: 'auto', padding: '16px' }}>
+          <div className="modal-card" style={{ maxWidth: '540px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="modal-header" style={{ flexShrink: 0, borderBottom: '1px solid #e2e8f0', padding: '14px 18px', background: '#f8fafc' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <HandCoins size={18} color="#059669" />
                 {payModalSalary.totalPaid > 0 ? 'Pay Remaining Salary' : 'Submit Salary Payment'}: {payModalSalary.employeeName}
               </h2>
               <button
                 onClick={() => setPayModalSalary(null)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' }}
               >
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleConfirmPayment}>
-              <div className="modal-body">
+            <form onSubmit={handleConfirmPayment} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', margin: 0 }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '18px 20px' }}>
                 {/* Worker summary banner */}
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px 18px', borderRadius: '8px', marginBottom: '16px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px', marginBottom: '8px' }}>
@@ -965,7 +965,7 @@ export default function SalaryDistributor() {
                   </div>
                 )}
               </div>
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ flexShrink: 0, background: '#ffffff', borderTop: '1px solid #e2e8f0', padding: '14px 20px', position: 'sticky', bottom: 0, zIndex: 10, display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button type="button" className="btn btn-outline" onClick={() => setPayModalSalary(null)}>
                   Cancel
                 </button>
@@ -1416,9 +1416,9 @@ export default function SalaryDistributor() {
 
       {/* Payment Confirmation Receipt Modal */}
       {paymentReceipt && (
-        <div className="modal-overlay" style={{ zIndex: 10002 }}>
-          <div className="modal-card" style={{ maxWidth: '480px' }}>
-            <div className="modal-header" style={{ background: '#ecfdf5', borderBottom: '1px solid #a7f3d0' }}>
+        <div className="modal-overlay" style={{ zIndex: 10002, overflowY: 'auto', padding: '16px' }}>
+          <div className="modal-card" style={{ maxWidth: '480px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="modal-header" style={{ flexShrink: 0, background: '#ecfdf5', borderBottom: '1px solid #a7f3d0' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#065f46', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CheckCircle2 size={18} color="#059669" /> Payment Confirmation Receipt
               </h2>
@@ -1426,7 +1426,7 @@ export default function SalaryDistributor() {
                 <X size={18} />
               </button>
             </div>
-            <div className="modal-body" style={{ padding: '20px' }}>
+            <div className="modal-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '20px' }}>
               <div style={{ textAlign: 'center', marginBottom: '16px' }}>
                 <div style={{ fontSize: '12px', color: '#64748b' }}>AMOUNT DISBURSED</div>
                 <div style={{ fontSize: '28px', fontWeight: 800, color: '#059669' }}>
@@ -1498,7 +1498,7 @@ export default function SalaryDistributor() {
                 </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div className="modal-footer" style={{ flexShrink: 0, background: '#ffffff', position: 'sticky', bottom: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {paymentReceipt.paymentId && (
                   <>
@@ -1536,9 +1536,9 @@ export default function SalaryDistributor() {
 
       {/* Edit Payment Modal */}
       {editPaymentModal && (
-        <div className="modal-overlay" style={{ zIndex: 10005 }}>
-          <div className="modal-card" style={{ maxWidth: '480px' }}>
-            <div className="modal-header" style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+        <div className="modal-overlay" style={{ zIndex: 10005, overflowY: 'auto', padding: '16px' }}>
+          <div className="modal-card" style={{ maxWidth: '480px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="modal-header" style={{ flexShrink: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Edit2 size={18} color="#2563eb" /> Edit Salary Payout: {editPaymentModal.employeeName}
               </h2>
@@ -1549,8 +1549,8 @@ export default function SalaryDistributor() {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleUpdatePayment}>
-              <div className="modal-body">
+            <form onSubmit={handleUpdatePayment} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', margin: 0 }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '20px' }}>
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '12.5px', color: '#1e40af' }}>
                   Modify the payment date, amount, method, or notes. The salary balance and worker ledger will automatically recalculate.
                 </div>
@@ -1616,7 +1616,7 @@ export default function SalaryDistributor() {
                 </div>
               </div>
 
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ flexShrink: 0, background: '#ffffff', position: 'sticky', bottom: 0, zIndex: 10, borderTop: '1px solid #e2e8f0', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button type="button" className="btn btn-outline" onClick={() => setEditPaymentModal(null)}>
                   Cancel
                 </button>
