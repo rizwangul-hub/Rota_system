@@ -84,20 +84,35 @@ async function recalculateEmployeeLedger(employeeId) {
   if (!employeeId) return { transactions: [], totalEarned: 0, totalPaid: 0, currentBalance: 0 };
 
   try {
-    // Delete any obsolete transactions before system baseline 11 October 2026
-    await LedgerTransaction.deleteMany({
-      employee: employeeId,
-      date: { $lt: SYSTEM_START_DATE }
-    });
-    // Delete any wage increase transactions on baseline date 11 October 2026 or earlier
-    await LedgerTransaction.deleteMany({
-      employee: employeeId,
-      transactionType: 'WAGE_INCREASE',
-      date: { $lte: new Date('2026-10-11T23:59:59.999Z') }
-    });
-
     const EmployeeModel = require('../models/Employee');
-    const emp = await EmployeeModel.findById(employeeId).select('wageHistory').lean();
+    const emp = await EmployeeModel.findById(employeeId).select('wageHistory openingBalance openingBalanceDate openingBalanceNote').lean();
+
+    // Auto-sync opening balance if present
+    if (emp && emp.openingBalance && Number(emp.openingBalance) !== 0) {
+      const balance = Number(emp.openingBalance);
+      const obDate = new Date(SYSTEM_START_DATE);
+      await LedgerTransaction.findOneAndUpdate(
+        {
+          employee: employeeId,
+          transactionType: 'OPENING_BALANCE'
+        },
+        {
+          employee: employeeId,
+          date: obDate,
+          transactionType: 'OPENING_BALANCE',
+          description: emp.openingBalanceNote && emp.openingBalanceNote.trim()
+            ? `Opening Balance: ${emp.openingBalanceNote.trim()}`
+            : 'Opening Balance brought forward',
+          referenceType: 'OpeningBalance',
+          referenceId: employeeId,
+          amountEarned: balance >= 0 ? balance : 0,
+          amountPaid: balance < 0 ? Math.abs(balance) : 0
+        },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+      );
+    }
+
+    // Auto-sync wage increases
     if (emp && emp.wageHistory && emp.wageHistory.length > 1) {
       const sorted = [...emp.wageHistory].sort((a, b) => new Date(a.effectiveDate || a.createdAt || 0) - new Date(b.effectiveDate || b.createdAt || 0));
       for (let i = 1; i < sorted.length; i++) {
@@ -142,11 +157,12 @@ async function recalculateEmployeeLedger(employeeId) {
                 reason: curr.reason || ''
               }
             },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
           );
         }
       }
     }
+
     // Auto-sync approved bonuses / commissions into ledger
     const BonusModel = require('../models/Bonus');
     const bonuses = await BonusModel.find({ employee: employeeId, status: { $ne: 'DRAFT' } }).lean();
@@ -181,18 +197,94 @@ async function recalculateEmployeeLedger(employeeId) {
               notes: b.notes || ''
             }
           },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
       }
     }
+
+    // Auto-sync all SalaryPayment records into ledger
+    const SalaryPaymentModel = require('../models/SalaryPayment');
+    const payments = await SalaryPaymentModel.find({ employee: employeeId }).lean();
+    for (const p of payments) {
+      let txDate = p.paymentDate ? new Date(p.paymentDate) : (p.createdAt ? new Date(p.createdAt) : new Date());
+      if (isNaN(txDate.getTime()) || txDate < SYSTEM_START_DATE) {
+        txDate = new Date(SYSTEM_START_DATE);
+        await SalaryPaymentModel.updateOne({ _id: p._id }, { $set: { paymentDate: txDate } });
+      }
+      const method = p.paymentMethod || 'Cash';
+      const weekLabel = p.weekLabel || 'Current';
+      const desc = `Payment via ${method} for week ${weekLabel}${p.notes ? ` - ${p.notes.trim()}` : ''}`;
+      await LedgerTransaction.findOneAndUpdate(
+        {
+          employee: employeeId,
+          referenceId: p._id,
+          referenceType: 'SalaryPayment'
+        },
+        {
+          employee: employeeId,
+          date: txDate,
+          transactionType: 'SALARY_PAYMENT',
+          description: desc,
+          referenceType: 'SalaryPayment',
+          referenceId: p._id,
+          amountEarned: 0,
+          amountPaid: Number(p.amount) || 0,
+          ...(p.paidBy ? { createdBy: p.paidBy } : {})
+        },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+      );
+    }
+
+    // Clean up any deleted salary payments from the ledger
+    const activePaymentIds = payments.map(p => p._id);
+    await LedgerTransaction.deleteMany({
+      employee: employeeId,
+      transactionType: 'SALARY_PAYMENT',
+      referenceId: { $nin: activePaymentIds }
+    });
+
+    // Delete any obsolete transactions before system baseline 11 October 2026 (excluding legitimate opening balances & payments)
+    await LedgerTransaction.deleteMany({
+      employee: employeeId,
+      transactionType: { $nin: ['OPENING_BALANCE', 'SALARY_PAYMENT'] },
+      date: { $lt: SYSTEM_START_DATE }
+    });
+    // Delete any wage increase transactions on baseline date 11 October 2026 or earlier
+    await LedgerTransaction.deleteMany({
+      employee: employeeId,
+      transactionType: 'WAGE_INCREASE',
+      date: { $lte: new Date('2026-10-11T23:59:59.999Z') }
+    });
   } catch (err) {
-    console.error('Error auto-syncing wage history or bonuses into ledger:', err.message);
+    console.error('Error auto-syncing ledger components:', err.message);
   }
 
   const transactions = await LedgerTransaction.find({
     employee: employeeId,
-    date: { $gte: SYSTEM_START_DATE }
-  }).sort({ date: 1, createdAt: 1 });
+    $or: [
+      { date: { $gte: SYSTEM_START_DATE } },
+      { transactionType: { $in: ['OPENING_BALANCE', 'SALARY_PAYMENT'] } }
+    ]
+  });
+
+  // Strict chronological sort with priority for same-date entries
+  const typeOrder = {
+    'OPENING_BALANCE': 1,
+    'WAGE_INCREASE': 2,
+    'BONUS_CREDIT': 3,
+    'SALARY_EARNED': 4,
+    'WEEKLY_SALARY': 4,
+    'SALARY_PAYMENT': 5
+  };
+  transactions.sort((a, b) => {
+    const da = new Date(a.date).getTime();
+    const db = new Date(b.date).getTime();
+    if (da !== db) return da - db;
+    const pa = typeOrder[a.transactionType] || 10;
+    const pb = typeOrder[b.transactionType] || 10;
+    if (pa !== pb) return pa - pb;
+    return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+  });
 
   let running = 0;
   let totalEarned = 0;
@@ -226,11 +318,7 @@ async function syncEmployeeOpeningBalance(employee, openingBalance, openingBalan
   const balance = Number(openingBalance) || 0;
 
   if (balance !== 0) {
-    let txDate = openingBalanceDate ? new Date(openingBalanceDate) : (employee.startDate ? new Date(employee.startDate) : new Date());
-    if (isNaN(txDate.getTime()) || txDate < SYSTEM_START_DATE) {
-      txDate = new Date(SYSTEM_START_DATE);
-    }
-    txDate.setHours(0, 0, 0, 0);
+    let txDate = new Date(SYSTEM_START_DATE);
 
     const amountEarned = balance >= 0 ? balance : 0;
     const amountPaid = balance < 0 ? Math.abs(balance) : 0;

@@ -128,7 +128,8 @@ export default function SalaryDistributor() {
     const totalPaid = Number(salary.totalPaid || 0);
     const outstanding = Number(salary.balanceRemaining > 0 ? salary.balanceRemaining : Math.max(0, totalPayable - totalPaid));
     setPayAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
-    setPaymentDate(new Date().toISOString().split('T')[0]);
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    setPaymentDate(todayStr >= '2026-10-11' ? todayStr : '2026-10-11');
     setPaymentMethod('Cash');
     setPayNotes(`Cash handed over to ${salary.employeeName} at ${salary.shopName}`);
   };
@@ -175,7 +176,28 @@ export default function SalaryDistributor() {
           status: Math.max(0, (payModalSalary.balanceRemaining || 0) - amount) === 0 ? 'PAID' : 'PARTIALLY_PAID'
         });
         setPayModalSalary(null);
-        fetchDistributorData();
+        await fetchDistributorData();
+
+        // Refresh details modal if open for this worker
+        if (detailModalSalary) {
+          const currentEmpId = payModalSalary.employee?._id || payModalSalary.employee;
+          const modalEmpId = detailModalSalary.employee?._id || detailModalSalary.employee;
+          if (currentEmpId === modalEmpId || String(currentEmpId) === String(modalEmpId)) {
+            const [resDetails, resLedger] = await Promise.allSettled([
+              axios.get(`${API_BASE_URL}/salaries/${payModalSalary._id}`),
+              axios.get(`${API_BASE_URL}/salaries/ledger/employee/${currentEmpId}`)
+            ]);
+            if (resDetails.status === 'fulfilled' && resDetails.value.data?.success) {
+              setSalaryDetails(resDetails.value.data);
+              if (resDetails.value.data.salary) {
+                setDetailModalSalary(resDetails.value.data.salary);
+              }
+            }
+            if (resLedger.status === 'fulfilled' && resLedger.value.data?.success) {
+              setEmployeeLedger(resLedger.value.data);
+            }
+          }
+        }
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Payment recording failed');
@@ -187,11 +209,13 @@ export default function SalaryDistributor() {
   const openEditPaymentModal = (payment, salaryContext = null) => {
     const parentSalary = salaryContext || detailModalSalary || salaries.find(s => s._id === (payment.weeklySalary?._id || payment.weeklySalary));
     let rawDate = payment.paymentDate;
-    let formattedDate = new Date().toISOString().split('T')[0];
+    let formattedDate = new Date().toLocaleDateString('en-CA');
+    if (formattedDate < '2026-10-11') formattedDate = '2026-10-11';
     if (rawDate) {
       const d = new Date(rawDate);
       if (!isNaN(d.getTime())) {
-        formattedDate = d.toISOString().split('T')[0];
+        const dStr = d.toISOString().split('T')[0];
+        formattedDate = dStr >= '2026-10-11' ? dStr : '2026-10-11';
       }
     }
     const paymentId = payment._id || payment.paymentId;
@@ -1087,6 +1111,7 @@ export default function SalaryDistributor() {
                     type="date"
                     className="form-input"
                     style={{ fontSize: '14px' }}
+                    min="2026-10-11"
                     value={paymentDate}
                     onChange={(e) => setPaymentDate(e.target.value)}
                     required
@@ -1787,6 +1812,7 @@ export default function SalaryDistributor() {
                   <input
                     type="date"
                     className="form-input"
+                    min="2026-10-11"
                     value={editPaymentDate}
                     onChange={(e) => setEditPaymentDate(e.target.value)}
                     required

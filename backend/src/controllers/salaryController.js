@@ -1016,6 +1016,9 @@ exports.recordSalaryPayment = async (req, res) => {
           pDate = parsed;
         }
       }
+      if (pDate < new Date('2026-10-11T00:00:00.000Z')) {
+        pDate = new Date('2026-10-11T00:00:00.000Z');
+      }
 
       const paymentPayload = {
         weeklySalary: salary._id,
@@ -1073,6 +1076,9 @@ exports.recordSalaryPayment = async (req, res) => {
         ...(outcome.payment ? { payment: outcome.payment } : {})
       });
     }
+
+    // Fully recalculate running balances and sync ledger statement
+    await recalculateEmployeeLedger(salary.employee);
 
     await logAction({
       user: req.user._id,
@@ -1234,7 +1240,7 @@ exports.updateSalaryPayment = async (req, res) => {
     if (paymentDate) {
       const pDate = new Date(paymentDate);
       if (!isNaN(pDate.getTime())) {
-        payment.paymentDate = pDate;
+        payment.paymentDate = pDate < new Date('2026-10-11T00:00:00.000Z') ? new Date('2026-10-11T00:00:00.000Z') : pDate;
       }
     }
     payment.paymentMethod = normalizedMethod;
