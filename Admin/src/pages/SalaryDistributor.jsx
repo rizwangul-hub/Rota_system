@@ -24,7 +24,8 @@ import {
   Edit2,
   Trash2,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 
 export default function SalaryDistributor() {
