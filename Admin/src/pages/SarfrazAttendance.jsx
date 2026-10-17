@@ -552,7 +552,7 @@ export default function SarfrazAttendance() {
                 return (a.employeeName || '').localeCompare(b.employeeName || '');
               }).map(r => {
                 const isChecked = ['Checked', 'Finalized'].includes(r.approvalStatus);
-                const canEdit = !isChecked || isAdmin;
+                const canEdit = true; // Both Admin and Sarfraz (Checker) have full access to edit attendance times
 
                 return (
                   <tr key={r._id} style={{ background: isChecked ? '#fafafa' : r.status === 'Absent' ? '#fffafb' : '#ffffff' }}>
@@ -688,26 +688,15 @@ export default function SarfrazAttendance() {
                           <Eye size={13} />
                         </button>
 
-                        {/* Edit Button */}
-                        {canEdit ? (
-                          <button
-                            className="btn btn-outline btn-sm"
-                            style={{ padding: '4px 8px' }}
-                            onClick={() => setEditModalRecord({ ...r })}
-                            title="Edit times and status"
-                          >
-                            <Edit size={13} />
-                          </button>
-                        ) : (
-                          <button
-                            className="btn btn-outline btn-sm"
-                            style={{ padding: '4px 8px', opacity: 0.5, cursor: 'not-allowed' }}
-                            disabled
-                            title="Locked: Checked records cannot be edited by Checker"
-                          >
-                            <Lock size={13} />
-                          </button>
-                        )}
+                        {/* Edit Button: available to both Admin and Sarfraz */}
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                          onClick={() => setEditModalRecord({ ...r })}
+                          title="Edit attendance times and status"
+                        >
+                          <Edit size={13} /> Edit
+                        </button>
 
                         {/* Check / Approve Button */}
                         {!isChecked && (
@@ -755,40 +744,72 @@ export default function SarfrazAttendance() {
               </button>
             </div>
             <div className="modal-body">
+              {confirmModal.type === 'single' && confirmModal.recordId && (() => {
+                const targetRec = records.find(r => r._id === confirmModal.recordId);
+                if (!targetRec) return null;
+                return (
+                  <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px', fontSize: '13px' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px', marginBottom: '2px' }}>{targetRec.employeeName}</div>
+                    <div style={{ color: '#64748b', fontSize: '11px', marginBottom: '8px' }}>{targetRec.shopName} • {targetRec.dateString}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px' }}>
+                      <div>Shift: <strong>{targetRec.status === 'Absent' ? '—' : `${formatTime12Hour(targetRec.shiftStart)} - ${formatTime12Hour(targetRec.shiftEnd)}`}</strong></div>
+                      <div>Actual: <strong>{targetRec.status === 'Absent' ? 'Absent / Off' : `${formatTime12Hour(targetRec.timeReached)} - ${formatTime12Hour(targetRec.workerEndTime)}`}</strong></div>
+                      <div>Status: <span className={`badge badge-${(targetRec.status || 'present').toLowerCase()}`}>{targetRec.status}</span></div>
+                      <div>Lateness: <strong style={{ color: targetRec.lateMinutes > 0 ? '#d97706' : '#16a34a' }}>{targetRec.lateMinutes ? `+${targetRec.lateMinutes} min` : 'On-time'}</strong></div>
+                    </div>
+                  </div>
+                );
+              })()}
               <p style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, margin: 0 }}>
                 Are you sure this attendance record is correct and ready to be checked?
               </p>
               <div style={{
                 marginTop: '12px',
                 padding: '12px',
-                background: '#fffbeb',
-                border: '1px solid #fef3c7',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
                 borderRadius: '8px',
                 fontSize: '12px',
-                color: '#b45309',
+                color: '#1e40af',
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'flex-start'
               }}>
-                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span>
-                  <strong>Strict Locking Notice:</strong> Once checked, {confirmModal.count > 1 ? `these ${confirmModal.count} records` : 'this record'} will be locked from further edits by Usman and Sarfraz. Only an Administrator can modify checked records.
+                  <strong>Checker & Admin Verification:</strong> Both Administrator and Sarfraz (Attendance Checker) have permission to edit attendance times and notes at any time.
                 </span>
               </div>
             </div>
-            <div className="modal-footer" style={{ justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                className="btn btn-outline"
-                onClick={() => setConfirmModal({ open: false, type: 'single', recordId: null, count: 0 })}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={executeCheckAttendance}
-              >
-                <CheckCheck size={16} /> Yes, Confirm & Lock
-              </button>
+            <div className="modal-footer" style={{ justifyContent: 'space-between', gap: '8px' }}>
+              {confirmModal.type === 'single' && confirmModal.recordId ? (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  onClick={() => {
+                    const rec = records.find(r => r._id === confirmModal.recordId);
+                    setConfirmModal({ open: false, type: 'single', recordId: null, count: 0 });
+                    if (rec) setEditModalRecord({ ...rec });
+                  }}
+                >
+                  <Edit size={14} /> Edit Time / Details
+                </button>
+              ) : <div></div>}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setConfirmModal({ open: false, type: 'single', recordId: null, count: 0 })}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-success"
+                  onClick={executeCheckAttendance}
+                >
+                  <CheckCheck size={16} /> Yes, Confirm & Check
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -820,7 +841,7 @@ export default function SarfrazAttendance() {
                       className="form-input"
                       value={editModalRecord.shiftStart || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, shiftStart: e.target.value })}
-                      required
+                      required={editModalRecord.status !== 'Absent'}
                     />
                   </div>
                   <div className="form-group">
@@ -831,7 +852,7 @@ export default function SarfrazAttendance() {
                       className="form-input"
                       value={editModalRecord.shiftEnd || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, shiftEnd: e.target.value })}
-                      required
+                      required={editModalRecord.status !== 'Absent'}
                     />
                   </div>
                 </div>
@@ -845,7 +866,7 @@ export default function SarfrazAttendance() {
                       className="form-input"
                       value={editModalRecord.timeReached || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, timeReached: e.target.value })}
-                      required
+                      required={editModalRecord.status !== 'Absent'}
                     />
                   </div>
                   <div className="form-group">
@@ -856,7 +877,7 @@ export default function SarfrazAttendance() {
                       className="form-input"
                       value={editModalRecord.workerEndTime || ''}
                       onChange={(e) => setEditModalRecord({ ...editModalRecord, workerEndTime: e.target.value })}
-                      required
+                      required={editModalRecord.status !== 'Absent'}
                     />
                   </div>
                 </div>

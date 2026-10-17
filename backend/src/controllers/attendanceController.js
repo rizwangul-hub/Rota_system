@@ -417,28 +417,20 @@ exports.updateAttendanceRecord = async (req, res) => {
     const record = await Attendance.findById(id);
     if (!record) return res.status(404).json({ success: false, message: 'Attendance record not found.' });
 
-    // Strict locking rule for Finalized
-    if (record.approvalStatus === 'Finalized' && req.user.role !== 'ADMIN') {
-      return res.status(403).json({ success: false, message: 'Finalized attendance records cannot be modified.' });
-    }
-
-    // Strict locking rule for Checked records: only ADMIN can modify
-    if (record.approvalStatus === 'Checked' && req.user.role !== 'ADMIN') {
+    // Operator cannot edit Checked or Finalized records
+    if (['Checked', 'Finalized'].includes(record.approvalStatus) && req.user.role === 'ATTENDANCE_OPERATOR') {
       return res.status(403).json({
         success: false,
-        message: 'This attendance record has already been checked and locked. Only an Administrator can modify checked records.'
+        message: `Attendance is ${record.approvalStatus} and is locked from operator modification.`
       });
     }
     if (req.user.role === 'ATTENDANCE_OPERATOR' && record.approvalStatus !== 'Pending Review' && record.approvalStatus !== 'Draft') {
       return res.status(403).json({ success: false, message: 'Only pending attendance can be edited by an operator.' });
     }
 
-    // Strict locking rule for Operator
-    if (['Checked', 'Finalized'].includes(record.approvalStatus) && req.user.role === 'ATTENDANCE_OPERATOR') {
-      return res.status(403).json({
-        success: false,
-        message: `Attendance is ${record.approvalStatus} by Checker/Admin and is locked from operator modification.`
-      });
+    // Both Admin and Attendance Checker (Sarfraz) have permission to edit attendance times and details
+    if (!['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to edit attendance.' });
     }
 
     const {
