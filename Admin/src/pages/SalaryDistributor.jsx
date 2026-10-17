@@ -1270,6 +1270,7 @@ export default function SalaryDistributor() {
                               <th style={{ textAlign: 'right' }}>Amount Paid</th>
                               <th>Paid By</th>
                               <th>Notes / Handover Details</th>
+                              <th style={{ textAlign: 'right' }}>Action</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1293,6 +1294,28 @@ export default function SalaryDistributor() {
                                 </td>
                                 <td style={{ fontWeight: 500 }}>{p.paidByName}</td>
                                 <td style={{ color: '#64748b' }}>{p.notes || '—'}</td>
+                                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline btn-xs"
+                                      onClick={() => openEditPaymentModal(p, detailModalSalary)}
+                                      title="Edit payout date, amount, method, or notes"
+                                      style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#2563eb', borderColor: '#bfdbfe' }}
+                                    >
+                                      <Edit2 size={12} /> Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline btn-xs"
+                                      onClick={() => handleReversePayment(p._id, p.amount, detailModalSalary?.employeeName)}
+                                      title="Reverse / delete this payment and restore balance"
+                                      style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', borderColor: '#fecaca' }}
+                                    >
+                                      <RotateCcw size={12} /> Reverse
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1475,14 +1498,133 @@ export default function SalaryDistributor() {
                 </div>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => window.print()}>
-                Print Receipt
-              </button>
-              <button className="btn btn-primary" onClick={() => setPaymentReceipt(null)}>
-                Done / Close
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {paymentReceipt.paymentId && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => openEditPaymentModal(paymentReceipt)}
+                      style={{ color: '#2563eb', borderColor: '#bfdbfe', background: '#eff6ff', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                    >
+                      <Edit2 size={13} /> Edit Payout
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleReversePayment(paymentReceipt.paymentId, paymentReceipt.paymentAmount, paymentReceipt.employeeName)}
+                      style={{ color: '#dc2626', borderColor: '#fecaca', background: '#fef2f2', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                    >
+                      <RotateCcw size={13} /> Reverse / Undo
+                    </button>
+                  </>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
+                  Print Receipt
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={() => setPaymentReceipt(null)}>
+                  Done / Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Modal */}
+      {editPaymentModal && (
+        <div className="modal-overlay" style={{ zIndex: 10005 }}>
+          <div className="modal-card" style={{ maxWidth: '480px' }}>
+            <div className="modal-header" style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit2 size={18} color="#2563eb" /> Edit Salary Payout: {editPaymentModal.employeeName}
+              </h2>
+              <button
+                onClick={() => setEditPaymentModal(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
               </button>
             </div>
+            <form onSubmit={handleUpdatePayment}>
+              <div className="modal-body">
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '12.5px', color: '#1e40af' }}>
+                  Modify the payment date, amount, method, or notes. The salary balance and worker ledger will automatically recalculate.
+                </div>
+
+                {/* Payment Date */}
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={15} color="#2563eb" /> Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={editPaymentDate}
+                    onChange={(e) => setEditPaymentDate(e.target.value)}
+                    required
+                  />
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    Correct the date this payout took place.
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Amount Paid (£)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    className="form-input"
+                    style={{ fontSize: '16px', fontWeight: 700, color: '#059669' }}
+                    value={editPayAmount}
+                    onChange={(e) => setEditPayAmount(e.target.value)}
+                    required
+                  />
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    Adjust the cash or bank amount given.
+                  </div>
+                </div>
+
+                {/* Payment Method */}
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Payment Method</label>
+                  <select
+                    className="form-select"
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value)}
+                  >
+                    <option value="Cash">Cash Handover</option>
+                    <option value="Bank">Bank Transfer</option>
+                  </select>
+                </div>
+
+                {/* Notes */}
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600 }}>Notes / Remarks (Optional)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Corrected cash amount from £50 to £100"
+                    value={editPayNotes}
+                    onChange={(e) => setEditPayNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setEditPaymentModal(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={isUpdatingPayment} style={{ fontWeight: 700 }}>
+                  {isUpdatingPayment ? 'Saving...' : 'Save & Update Payout'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
