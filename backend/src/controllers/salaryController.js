@@ -1047,8 +1047,10 @@ exports.recordSalaryPayment = async (req, res) => {
       payment,
       salary,
       receipt: {
+        paymentId: payment._id,
         employeeName: salary.employeeName,
         employeeId: salary.employeeId,
+        shopName: salary.shopName,
         weekLabel: salary.weekLabel,
         weeklySalary: salary.finalSalary,
         openingBalance: openingBal,
@@ -1057,6 +1059,7 @@ exports.recordSalaryPayment = async (req, res) => {
         paymentAmount: payAmount,
         paymentDate: payment.paymentDate,
         paymentMethod: normalizedMethod,
+        notes: payment.notes,
         previousPaid,
         newTotalPaid: totalPaid,
         remainingOutstanding: balanceRemaining,
@@ -1123,5 +1126,204 @@ exports.getEmployeeLedger = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to fetch employee ledger.');
+  }
+};
+
+/**
+ * Edit an existing salary payment (amount, date, method, notes)
+ */
+exports.updateSalaryPayment = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { amount, paymentDate, paymentMethod, notes } = req.body;
+
+    const numAmount = Number(amount);
+    if (!amount || isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid payment amount is required.' });
+    }
+
+    let normalizedMethod = 'Cash';
+    if (/^bank$/i.test(paymentMethod)) normalizedMethod = 'Bank';
+    else if (/^cash$/i.test(paymentMethod)) normalizedMethod = 'Cash';
+    else {
+      return res.status(400).json({ success: false, message: 'Payment method must be Cash or Bank.' });
+    }
+
+    const payment = await SalaryPayment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment record not found.' });
+    }
+
+    const salary = await WeeklySalary.findById(payment.weeklySalary);
+    if (!salary) {
+      return res.status(404).json({ success: false, message: 'Associated salary record not found.' });
+    }
+
+    const emp = await Employee.findById(salary.employee);
+    const openingBal = Number(emp?.openingBalance || 0);
+
+    const empBonuses = await Bonus.find({ employee: salary.employee, status: { $ne: 'DRAFT' } });
+    const standaloneBonus = empBonuses
+      .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === salary._id.toString())
+      .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
+    const commissionBonus = Number(((salary.bonus || 0) > 0 ? salary.bonus : standaloneBonus).toFixed(2));
+
+    const totalPayable = Number(((salary.finalSalary || 0) + openingBal + commissionBonus).toFixed(2));
+
+    // Calculate other payments excluding this one
+    const otherPayments = await SalaryPayment.find({ weeklySalary: salary._id, _id: { $ne: payment._id } });
+    const otherPaymentsTotal = Number(otherPayments.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
+
+    const maxAllowed = Number((totalPayable - otherPaymentsTotal).toFixed(2));
+    if (numAmount > maxAllowed) {
+      return res.status(400).json({
+        success: false,
+        message: `Amount cannot exceed the total payable balance (£${maxAllowed.toFixed(2)}).`
+      });
+    }
+
+    const oldAmount = payment.amount;
+    const oldDate = payment.paymentDate;
+    const oldMethod = payment.paymentMethod;
+
+    payment.amount = Number(numAmount.toFixed(2));
+    if (paymentDate) {
+      const pDate = new Date(paymentDate);
+      if (!isNaN(pDate.getTime())) {
+        payment.paymentDate = pDate;
+      }
+    }
+    payment.paymentMethod = normalizedMethod;
+    if (notes !== undefined) payment.notes = notes ? notes.trim() : '';
+    payment.paidBy = req.user._id;
+    payment.paidByName = req.user.name || 'Salary Distributor';
+    await payment.save();
+
+    // Recalculate salary
+    const newTotalPaid = Number((otherPaymentsTotal + payment.amount).toFixed(2));
+    const newBalanceRemaining = Number(Math.max(0, totalPayable - newTotalPaid).toFixed(2));
+    salary.totalPaid = newTotalPaid;
+    salary.balanceRemaining = newBalanceRemaining;
+    salary.status = newBalanceRemaining === 0 ? 'PAID' : (newTotalPaid > 0 ? 'PARTIALLY_PAID' : 'FINALIZED');
+    await salary.save();
+
+    // Update corresponding LedgerTransaction
+    const tx = await LedgerTransaction.findOne({
+      referenceId: payment._id,
+      referenceType: 'SalaryPayment'
+    });
+    if (tx) {
+      tx.date = payment.paymentDate;
+      tx.amountPaid = payment.amount;
+      tx.description = `Payment via ${normalizedMethod} for week ${salary.weekLabel}${payment.notes ? ` - ${payment.notes}` : ''}`;
+      await tx.save();
+    } else {
+      await LedgerTransaction.create({
+        employee: salary.employee,
+        date: payment.paymentDate,
+        transactionType: 'SALARY_PAYMENT',
+        description: `Payment via ${normalizedMethod} for week ${salary.weekLabel}${payment.notes ? ` - ${payment.notes}` : ''}`,
+        referenceType: 'SalaryPayment',
+        referenceId: payment._id,
+        amountEarned: 0,
+        amountPaid: payment.amount,
+        runningBalance: 0,
+        createdBy: req.user._id
+      });
+    }
+
+    // Recalculate employee ledger running balances
+    await recalculateEmployeeLedger(salary.employee);
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: 'SALARY_PAYMENT_UPDATED',
+      recordType: 'SalaryPayment',
+      recordId: payment._id,
+      details: `Updated payment for ${salary.employeeName}: £${oldAmount} -> £${payment.amount}, date: ${oldDate} -> ${payment.paymentDate}, method: ${oldMethod} -> ${normalizedMethod}`,
+      req
+    });
+
+    return res.json({
+      success: true,
+      message: 'Payment updated successfully.',
+      payment,
+      salary
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to update payment.');
+  }
+};
+
+/**
+ * Reverse / Delete a salary payment and restore the worker's remaining balance
+ */
+exports.reverseSalaryPayment = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+
+    const payment = await SalaryPayment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment record not found.' });
+    }
+
+    const salary = await WeeklySalary.findById(payment.weeklySalary);
+    if (!salary) {
+      return res.status(404).json({ success: false, message: 'Associated salary record not found.' });
+    }
+
+    const emp = await Employee.findById(salary.employee);
+    const openingBal = Number(emp?.openingBalance || 0);
+
+    const empBonuses = await Bonus.find({ employee: salary.employee, status: { $ne: 'DRAFT' } });
+    const standaloneBonus = empBonuses
+      .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === salary._id.toString())
+      .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
+    const commissionBonus = Number(((salary.bonus || 0) > 0 ? salary.bonus : standaloneBonus).toFixed(2));
+
+    const totalPayable = Number(((salary.finalSalary || 0) + openingBal + commissionBonus).toFixed(2));
+
+    // Calculate remaining payments excluding this one
+    const otherPayments = await SalaryPayment.find({ weeklySalary: salary._id, _id: { $ne: payment._id } });
+    const newTotalPaid = Number(otherPayments.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
+    const newBalanceRemaining = Number(Math.max(0, totalPayable - newTotalPaid).toFixed(2));
+
+    salary.totalPaid = newTotalPaid;
+    salary.balanceRemaining = newBalanceRemaining;
+    salary.status = newTotalPaid === 0 ? 'FINALIZED' : (newBalanceRemaining === 0 ? 'PAID' : 'PARTIALLY_PAID');
+    await salary.save();
+
+    // Delete associated LedgerTransaction
+    await LedgerTransaction.deleteMany({
+      referenceId: payment._id,
+      referenceType: 'SalaryPayment'
+    });
+
+    // Delete the SalaryPayment record
+    await SalaryPayment.findByIdAndDelete(payment._id);
+
+    // Recalculate employee ledger running balances
+    await recalculateEmployeeLedger(salary.employee);
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: 'SALARY_PAYMENT_REVERSED',
+      recordType: 'SalaryPayment',
+      recordId: payment._id,
+      details: `Reversed payment of £${payment.amount} via ${payment.paymentMethod} to ${salary.employeeName} for week ${salary.weekLabel}. Balance restored to £${newBalanceRemaining}.`,
+      req
+    });
+
+    return res.json({
+      success: true,
+      message: `Payment of £${payment.amount.toFixed(2)} reversed successfully. Worker's remaining balance restored.`,
+      salary
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to reverse payment.');
   }
 };

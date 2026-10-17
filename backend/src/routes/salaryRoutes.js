@@ -26,7 +26,9 @@ router.put('/:id/deduction', authenticate, authorize('ADMIN'), salaryController.
 router.post('/finalize-all', authenticate, authorize('ADMIN'), salaryController.finalizeAllWeeklySalaries);
 router.post('/:id/finalize', authenticate, authorize('ADMIN'), salaryController.finalizeWeeklySalary);
 
-// Salary Distributor or Admin records payment
+// Salary Distributor or Admin records, edits, or reverses payment
 router.post('/:id/pay', authenticate, authorize('SALARY_DISTRIBUTOR', 'ADMIN'), salaryController.recordSalaryPayment);
+router.put('/payments/:paymentId', authenticate, authorize('SALARY_DISTRIBUTOR', 'ADMIN'), salaryController.updateSalaryPayment);
+router.delete('/payments/:paymentId', authenticate, authorize('SALARY_DISTRIBUTOR', 'ADMIN'), salaryController.reverseSalaryPayment);
 
 module.exports = router;

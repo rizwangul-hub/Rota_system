@@ -20,7 +20,11 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Edit2,
+  Trash2,
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function SalaryDistributor() {
@@ -48,6 +52,14 @@ export default function SalaryDistributor() {
   const [employeeLedger, setEmployeeLedger] = useState(null);
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState('ledger'); // 'ledger' or 'breakdown'
+
+  // Edit Payment Modal state
+  const [editPaymentModal, setEditPaymentModal] = useState(null);
+  const [editPayAmount, setEditPayAmount] = useState('');
+  const [editPaymentDate, setEditPaymentDate] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState('Cash');
+  const [editPayNotes, setEditPayNotes] = useState('');
+  const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
 
   // Receipt Modal state
   const [paymentReceipt, setPaymentReceipt] = useState(null);
@@ -139,7 +151,9 @@ export default function SalaryDistributor() {
         const weeklySalary = Number(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0);
         const bonus = Number(payModalSalary.bonus || 0);
         const totalPayable = Number(payModalSalary.totalPayable || (weeklySalary + openingBal + bonus));
+        const createdPaymentId = res.data.payment?._id || res.data.receipt?.paymentId;
         setPaymentReceipt(res.data.receipt || {
+          paymentId: createdPaymentId,
           employeeName: payModalSalary.employeeName,
           weekLabel: payModalSalary.weekLabel,
           weeklySalary,
@@ -149,6 +163,7 @@ export default function SalaryDistributor() {
           paymentAmount: amount,
           paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
           paymentMethod,
+          notes: payNotes,
           previousPaid: payModalSalary.totalPaid,
           newTotalPaid: (payModalSalary.totalPaid || 0) + amount,
           remainingOutstanding: Math.max(0, (payModalSalary.balanceRemaining || 0) - amount),
@@ -162,6 +177,132 @@ export default function SalaryDistributor() {
       alert(err.response?.data?.message || 'Payment recording failed');
     } finally {
       setIsPaying(false);
+    }
+  };
+
+  const openEditPaymentModal = (payment, salaryContext = null) => {
+    const parentSalary = salaryContext || detailModalSalary || salaries.find(s => s._id === (payment.weeklySalary?._id || payment.weeklySalary));
+    let rawDate = payment.paymentDate;
+    let formattedDate = new Date().toISOString().split('T')[0];
+    if (rawDate) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        formattedDate = d.toISOString().split('T')[0];
+      }
+    }
+    const paymentId = payment._id || payment.paymentId;
+    setEditPaymentModal({
+      paymentId,
+      weeklySalaryId: payment.weeklySalary || parentSalary?._id,
+      employeeName: payment.employeeName || parentSalary?.employeeName,
+      weekLabel: payment.weekLabel || parentSalary?.weekLabel,
+      shopName: payment.shopName || parentSalary?.shopName,
+      amount: payment.amount || payment.paymentAmount,
+      paymentMethod: payment.paymentMethod || 'Cash',
+      paymentDate: formattedDate,
+      notes: payment.notes || ''
+    });
+    setEditPayAmount(String(payment.amount || payment.paymentAmount || ''));
+    setEditPaymentDate(formattedDate);
+    setEditPaymentMethod(payment.paymentMethod || 'Cash');
+    setEditPayNotes(payment.notes || '');
+  };
+
+  const handleUpdatePayment = async (e) => {
+    e.preventDefault();
+    if (!editPaymentModal) return;
+    const amount = Number(editPayAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Enter a valid payment amount greater than £0.');
+      return;
+    }
+    setIsUpdatingPayment(true);
+    try {
+      const res = await axios.put(`${API_BASE_URL}/salaries/payments/${editPaymentModal.paymentId}`, {
+        amount,
+        paymentDate: editPaymentDate,
+        paymentMethod: editPaymentMethod,
+        notes: editPayNotes
+      });
+      if (res.data.success) {
+        alert('Payment updated successfully!');
+        const updatedPaymentId = editPaymentModal.paymentId;
+        setEditPaymentModal(null);
+
+        // If paymentReceipt was open for this payment, update it
+        if (paymentReceipt && (paymentReceipt.paymentId === updatedPaymentId)) {
+          setPaymentReceipt(prev => ({
+            ...prev,
+            paymentAmount: amount,
+            paymentDate: editPaymentDate ? new Date(editPaymentDate) : new Date(),
+            paymentMethod: editPaymentMethod,
+            notes: editPayNotes,
+            remainingOutstanding: res.data.salary?.balanceRemaining,
+            status: res.data.salary?.status
+          }));
+        }
+
+        await fetchDistributorData();
+
+        // Refresh details modal if open
+        if (detailModalSalary) {
+          const empId = detailModalSalary.employee?._id || detailModalSalary.employee;
+          const [resDetails, resLedger] = await Promise.allSettled([
+            axios.get(`${API_BASE_URL}/salaries/${detailModalSalary._id}`),
+            axios.get(`${API_BASE_URL}/salaries/ledger/employee/${empId}`)
+          ]);
+          if (resDetails.status === 'fulfilled' && resDetails.value.data?.success) {
+            setSalaryDetails(resDetails.value.data);
+            if (resDetails.value.data.salary) {
+              setDetailModalSalary(resDetails.value.data.salary);
+            }
+          }
+          if (resLedger.status === 'fulfilled' && resLedger.value.data?.success) {
+            setEmployeeLedger(resLedger.value.data);
+          }
+        }
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update payment');
+    } finally {
+      setIsUpdatingPayment(false);
+    }
+  };
+
+  const handleReversePayment = async (paymentId, amount, empName) => {
+    if (!paymentId) return;
+    const confirmMsg = `Are you sure you want to reverse / cancel this payout of £${Number(amount || 0).toFixed(2)} for ${empName || 'this worker'}?\n\nThis will remove the payment and restore £${Number(amount || 0).toFixed(2)} back to the worker's remaining balance.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const res = await axios.delete(`${API_BASE_URL}/salaries/payments/${paymentId}`);
+      if (res.data.success) {
+        alert(res.data.message || 'Payment reversed successfully.');
+        if (paymentReceipt && (paymentReceipt.paymentId === paymentId)) {
+          setPaymentReceipt(null);
+        }
+        await fetchDistributorData();
+
+        // Refresh details modal if open
+        if (detailModalSalary) {
+          const empId = detailModalSalary.employee?._id || detailModalSalary.employee;
+          const [resDetails, resLedger] = await Promise.allSettled([
+            axios.get(`${API_BASE_URL}/salaries/${detailModalSalary._id}`),
+            axios.get(`${API_BASE_URL}/salaries/ledger/employee/${empId}`)
+          ]);
+          if (resDetails.status === 'fulfilled' && resDetails.value.data?.success) {
+            setSalaryDetails(resDetails.value.data);
+            if (resDetails.value.data.salary) {
+              setDetailModalSalary(resDetails.value.data.salary);
+            }
+          }
+          if (resLedger.status === 'fulfilled' && resLedger.value.data?.success) {
+            setEmployeeLedger(resLedger.value.data);
+          }
+        }
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reverse payment');
     }
   };
 
