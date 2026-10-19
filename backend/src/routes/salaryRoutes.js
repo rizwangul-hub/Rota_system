@@ -22,9 +22,10 @@ router.put('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), salar
 router.delete('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), salaryController.removeAdjustment);
 router.put('/:id/deduction', authenticate, authorize('ADMIN'), salaryController.updateSalaryDeduction);
 
-// Admin finalizes weekly salary
+// Admin finalizes / unfinalizes weekly salary
 router.post('/finalize-all', authenticate, authorize('ADMIN'), salaryController.finalizeAllWeeklySalaries);
 router.post('/:id/finalize', authenticate, authorize('ADMIN'), salaryController.finalizeWeeklySalary);
+router.post('/:id/unfinalize', authenticate, authorize('ADMIN'), salaryController.unfinalizeWeeklySalary);
 
 // Salary Distributor or Admin records, edits, or reverses payment
 router.post('/:id/pay', authenticate, authorize('SALARY_DISTRIBUTOR', 'ADMIN'), salaryController.recordSalaryPayment);

@@ -16,8 +16,9 @@ const { recalculateEmployeeLedger } = require('../utils/ledgerHelper');
 /**
  * Recompute a single WeeklySalary document's numbers and sync with adjustments and bonus
  */
-async function recalculateWeeklySalary(salaryDoc) {
-  if (['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'].includes(salaryDoc.status)) {
+async function recalculateWeeklySalary(salaryDoc, allowFinalized = false) {
+  const isFinalizedStatus = ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'].includes(salaryDoc.status);
+  if (isFinalizedStatus && !allowFinalized) {
     throw new Error('Finalized salary calculations are locked.');
   }
   // Sum adjustments
@@ -43,13 +44,56 @@ async function recalculateWeeklySalary(salaryDoc) {
   salaryDoc.totalPaid = Number(totalPaid.toFixed(2));
   salaryDoc.balanceRemaining = Number(Math.max(0, salaryDoc.finalSalary - salaryDoc.totalPaid).toFixed(2));
 
-  if (['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salaryDoc.status)) {
+  if (isFinalizedStatus) {
     if (salaryDoc.balanceRemaining <= 0 && salaryDoc.totalPaid > 0) {
       salaryDoc.status = 'PAID';
     } else if (salaryDoc.totalPaid > 0) {
       salaryDoc.status = 'PARTIALLY_PAID';
     } else {
       salaryDoc.status = 'FINALIZED';
+    }
+
+    // Update finalization snapshot with corrected figures
+    if (salaryDoc.finalizationSnapshot) {
+      salaryDoc.finalizationSnapshot.netAttendancePay = salaryDoc.netAttendancePay;
+      salaryDoc.finalizationSnapshot.travelAllowance = salaryDoc.travelAllowance;
+      salaryDoc.finalizationSnapshot.otherAllowances = salaryDoc.otherAllowances;
+      salaryDoc.finalizationSnapshot.bonus = salaryDoc.bonus;
+      salaryDoc.finalizationSnapshot.manualDeductions = salaryDoc.manualDeductions;
+      salaryDoc.finalizationSnapshot.finalSalary = salaryDoc.finalSalary;
+      salaryDoc.finalizationSnapshot.updatedAt = new Date();
+      if (typeof salaryDoc.markModified === 'function') {
+        salaryDoc.markModified('finalizationSnapshot');
+      }
+    }
+
+    // Sync corresponding LedgerTransaction for SALARY_EARNED
+    try {
+      await LedgerTransaction.findOneAndUpdate(
+        {
+          employee: salaryDoc.employee,
+          transactionType: 'SALARY_EARNED',
+          referenceId: salaryDoc._id
+        },
+        {
+          employee: salaryDoc.employee,
+          date: salaryDoc.weekEndDate,
+          description: `Weekly Salary for week ${salaryDoc.weekLabel} (${salaryDoc.shopName})`,
+          referenceType: 'WeeklySalary',
+          referenceId: salaryDoc._id,
+          attendancePay: salaryDoc.netAttendancePay,
+          lateDeduction: salaryDoc.lateDeductions,
+          allowance: (salaryDoc.travelAllowance || 0) + (salaryDoc.otherAllowances || 0),
+          bonus: salaryDoc.bonus || 0,
+          otherDeduction: salaryDoc.manualDeductions || 0,
+          amountEarned: salaryDoc.finalSalary,
+          amountPaid: 0
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      await recalculateEmployeeLedger(salaryDoc.employee);
+    } catch (ledgerErr) {
+      console.warn('Ledger sync warning during salary recalculation:', ledgerErr?.message);
     }
   }
 
@@ -508,8 +552,9 @@ exports.addAdjustment = async (req, res) => {
     const salary = await WeeklySalary.findById(id);
     if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
 
-    if (['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status)) {
-      return res.status(403).json({ success: false, message: 'Cannot add adjustments to finalized salary.' });
+    const isFinalized = ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status);
+    if (isFinalized && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Cannot add adjustments to finalized salary without Admin privileges.' });
     }
 
     const numAmount = Number(amount);
@@ -530,16 +575,16 @@ exports.addAdjustment = async (req, res) => {
       addedByName: req.user.name
     });
 
-    await recalculateWeeklySalary(salary);
+    await recalculateWeeklySalary(salary, isFinalized && req.user?.role === 'ADMIN');
 
     await logAction({
       user: req.user._id,
       username: req.user.name,
       role: req.user.role,
-      action: 'SALARY_ADJUSTMENT_ADDED',
+      action: isFinalized ? 'FINALIZED_SALARY_ADJUSTMENT_ADDED' : 'SALARY_ADJUSTMENT_ADDED',
       recordType: 'SalaryAdjustment',
       recordId: adjustment._id,
-      details: `Added ${type} of £${numAmount.toFixed(2)} (${reason}) to ${salary.employeeName} for week ${salary.weekLabel}`,
+      details: `Added ${type} of £${numAmount.toFixed(2)} (${reason}) to ${salary.employeeName} for week ${salary.weekLabel}${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
       req
     });
 
@@ -563,8 +608,9 @@ exports.updateAdjustment = async (req, res) => {
     const salary = await WeeklySalary.findById(adjustment.weeklySalary);
     if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
 
-    if (['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status)) {
-      return res.status(403).json({ success: false, message: 'Cannot edit adjustments on finalized salary.' });
+    const isFinalized = ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status);
+    if (isFinalized && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Cannot edit adjustments on finalized salary without Admin privileges.' });
     }
 
     if (type) adjustment.type = type;
@@ -583,16 +629,16 @@ exports.updateAdjustment = async (req, res) => {
     }
 
     await adjustment.save();
-    await recalculateWeeklySalary(salary);
+    await recalculateWeeklySalary(salary, isFinalized && req.user?.role === 'ADMIN');
 
     await logAction({
       user: req.user._id,
       username: req.user.name,
       role: req.user.role,
-      action: 'SALARY_ADJUSTMENT_UPDATED',
+      action: isFinalized ? 'FINALIZED_SALARY_ADJUSTMENT_UPDATED' : 'SALARY_ADJUSTMENT_UPDATED',
       recordType: 'SalaryAdjustment',
       recordId: adjustment._id,
-      details: `Updated adjustment to ${adjustment.type} £${adjustment.amount.toFixed(2)} (${adjustment.reason}) for ${salary.employeeName}`,
+      details: `Updated adjustment to ${adjustment.type} £${adjustment.amount.toFixed(2)} (${adjustment.reason}) for ${salary.employeeName}${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
       req
     });
 
@@ -612,24 +658,25 @@ exports.removeAdjustment = async (req, res) => {
     if (!adjustment) return res.status(404).json({ success: false, message: 'Adjustment not found.' });
 
     const salary = await WeeklySalary.findById(adjustment.weeklySalary);
-    if (salary && ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status)) {
-      return res.status(403).json({ success: false, message: 'Cannot remove adjustments from finalized salary.' });
+    const isFinalized = salary && ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status);
+    if (isFinalized && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Cannot remove adjustments from finalized salary without Admin privileges.' });
     }
 
     await SalaryAdjustment.findByIdAndDelete(adjustmentId);
 
     if (salary) {
-      await recalculateWeeklySalary(salary);
+      await recalculateWeeklySalary(salary, isFinalized && req.user?.role === 'ADMIN');
     }
 
     await logAction({
       user: req.user._id,
       username: req.user.name,
       role: req.user.role,
-      action: 'SALARY_ADJUSTMENT_REMOVED',
+      action: isFinalized ? 'FINALIZED_SALARY_ADJUSTMENT_REMOVED' : 'SALARY_ADJUSTMENT_REMOVED',
       recordType: 'SalaryAdjustment',
       recordId: adjustment._id,
-      details: `Removed ${adjustment.type} adjustment of £${adjustment.amount.toFixed(2)} (${adjustment.reason}) from ${salary ? salary.employeeName : 'salary'}`,
+      details: `Removed ${adjustment.type} adjustment of £${adjustment.amount.toFixed(2)} (${adjustment.reason}) from ${salary ? salary.employeeName : 'salary'}${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
       req
     });
 
@@ -640,7 +687,7 @@ exports.removeAdjustment = async (req, res) => {
 };
 
 /**
- * Admin directly updates/edits deduction on a weekly salary record
+ * Admin directly updates/edits deduction and base weekly salary on a weekly salary record
  */
 exports.updateSalaryDeduction = async (req, res) => {
   try {
@@ -650,8 +697,9 @@ exports.updateSalaryDeduction = async (req, res) => {
     const salary = await WeeklySalary.findById(id);
     if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
 
-    if (['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status)) {
-      return res.status(403).json({ success: false, message: 'Cannot edit deduction on finalized salary.' });
+    const isFinalized = ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status);
+    if (isFinalized && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Cannot edit salary or deduction on finalized salary without Admin privileges.' });
     }
 
     const numAmount = Number(deductionAmount);
@@ -668,7 +716,7 @@ exports.updateSalaryDeduction = async (req, res) => {
       salary.weeklySalaryOverride = salaryOverrideAmount;
     }
 
-    const adjReason = (reason && reason.trim()) ? reason.trim() : 'Manual deduction adjustment';
+    const adjReason = (reason && reason.trim()) ? reason.trim() : (isFinalized ? 'Admin correction on finalized salary' : 'Manual deduction adjustment');
 
     // Find any existing MANUAL_DEDUCTION or OTHER_DEDUCTION adjustment for this weekly salary
     let manualAdj = await SalaryAdjustment.findOne({
@@ -701,24 +749,24 @@ exports.updateSalaryDeduction = async (req, res) => {
       });
     }
 
-    await recalculateWeeklySalary(salary);
+    await recalculateWeeklySalary(salary, isFinalized && req.user?.role === 'ADMIN');
 
     await logAction({
       user: req.user._id,
       username: req.user.name,
       role: req.user.role,
-      action: 'SALARY_DEDUCTION_UPDATED',
+      action: isFinalized ? 'FINALIZED_SALARY_DEDUCTION_UPDATED' : 'SALARY_DEDUCTION_UPDATED',
       recordType: 'WeeklySalary',
       recordId: salary._id,
-      details: `Updated weekly salary${salaryOverrideAmount === undefined ? '' : ` to £${salaryOverrideAmount.toFixed(2)}`} and deduction to £${numAmount.toFixed(2)} (${adjReason}) for ${salary.employeeName} for week ${salary.weekLabel}`,
+      details: `Updated weekly salary${salaryOverrideAmount === undefined ? '' : ` to £${salaryOverrideAmount.toFixed(2)}`} and deduction to £${numAmount.toFixed(2)} (${adjReason}) for ${salary.employeeName} for week ${salary.weekLabel}${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
       req
     });
 
     res.json({
       success: true,
       message: salaryOverrideAmount === undefined
-        ? `Deduction updated to £${numAmount.toFixed(2)} for ${salary.employeeName}.`
-        : `Weekly salary updated to £${salaryOverrideAmount.toFixed(2)} and deduction to £${numAmount.toFixed(2)} for ${salary.employeeName}.`,
+        ? `Deduction updated to £${numAmount.toFixed(2)} for ${salary.employeeName}.${isFinalized ? ' Finalized salary and ledger synchronized.' : ''}`
+        : `Weekly salary updated to £${salaryOverrideAmount.toFixed(2)} and deduction to £${numAmount.toFixed(2)} for ${salary.employeeName}.${isFinalized ? ' Finalized salary and ledger synchronized.' : ''}`,
       salary
     });
   } catch (error) {
@@ -895,6 +943,73 @@ exports.finalizeAllWeeklySalaries = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to bulk finalize weekly salaries.');
+  }
+};
+
+/**
+ * Admin unfinalizes a weekly salary if no payments have been disbursed
+ */
+exports.unfinalizeWeeklySalary = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const salary = await WeeklySalary.findById(id);
+    if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
+
+    const isFinalized = ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status);
+    if (!isFinalized) {
+      return res.status(400).json({ success: false, message: 'Salary is not finalized.' });
+    }
+
+    // Check if payments were made
+    const payments = await SalaryPayment.find({ weeklySalary: salary._id });
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    if (totalPaid > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot unfinalize salary because £${totalPaid.toFixed(2)} has already been paid. Please reverse payments in Distributor dashboard first, or use "Edit Salary" directly to adjust amounts.`
+      });
+    }
+
+    salary.status = 'Generated';
+    salary.finalizedBy = null;
+    salary.finalizedAt = null;
+    salary.finalizationSnapshot = null;
+
+    // Unlock corresponding attendance records back to 'Checked'
+    await Attendance.updateMany(
+      { weeklySalary: salary._id },
+      { $set: { approvalStatus: 'Checked' } }
+    );
+
+    // Remove SALARY_EARNED ledger transaction
+    await LedgerTransaction.deleteMany({
+      employee: salary.employee,
+      transactionType: 'SALARY_EARNED',
+      referenceId: salary._id
+    });
+
+    await salary.save();
+    await recalculateEmployeeLedger(salary.employee);
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: 'SALARY_UNFINALIZED',
+      recordType: 'WeeklySalary',
+      recordId: salary._id,
+      details: `Admin unfinalized weekly salary for ${salary.employeeName} (${salary.weekLabel})`,
+      req
+    });
+
+    res.json({
+      success: true,
+      message: `Salary for ${salary.employeeName} unfinalized successfully. Record is unlocked and can be regenerated or edited.`,
+      salary
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to unfinalize weekly salary.');
   }
 };
 

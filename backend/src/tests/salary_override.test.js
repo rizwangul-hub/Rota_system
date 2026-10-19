@@ -67,6 +67,84 @@ async function run() {
     assert.equal(salary.finalSalary, 360);
     assert.equal(salary.balanceRemaining, 360);
     console.log('PASS weekly salary override persists and recalculates salary with zero deduction');
+
+    // Test 2: Admin editing finalized salary
+    salary.status = 'FINALIZED';
+    salary.finalizationSnapshot = {
+      finalSalary: 360,
+      netAttendancePay: 350
+    };
+    salary.markModified = () => {};
+
+    const LedgerTransaction = require('../models/LedgerTransaction');
+    replaceMethod(LedgerTransaction, 'findOneAndUpdate', async () => ({}));
+    replaceMethod(LedgerTransaction, 'find', async () => []);
+    replaceMethod(SalaryAdjustment, 'create', async (data) => data);
+    replaceMethod(SalaryAdjustment, 'find', async () => [
+      { type: 'TRAVEL_ALLOWANCE', amount: 10 },
+      { type: 'MANUAL_DEDUCTION', amount: 20 }
+    ]);
+
+    const ledgerHelper = require('../utils/ledgerHelper');
+    replaceMethod(ledgerHelper, 'recalculateEmployeeLedger', async () => ({}));
+
+    const response2 = {
+      statusCode: 200,
+      status(code) { this.statusCode = code; return this; },
+      json(data) { this.data = data; return this; }
+    };
+
+    await salaryController.updateSalaryDeduction({
+      params: { id: salary._id },
+      body: { weeklySalaryAmount: 400, deductionAmount: 20 },
+      user: { _id: 'admin-1', name: 'Admin', role: 'ADMIN' }
+    }, response2);
+
+    assert.equal(response2.statusCode, 200);
+    assert.equal(response2.data.success, true);
+    assert.equal(salary.weeklySalaryOverride, 400);
+    assert.equal(salary.netAttendancePay, 400);
+    assert.equal(salary.manualDeductions, 20);
+    // 400 attendance + 10 travel - 20 deduction = 390
+    assert.equal(salary.finalSalary, 390);
+    assert.equal(salary.status, 'FINALIZED');
+    assert.equal(salary.finalizationSnapshot.finalSalary, 390);
+    console.log('PASS Admin can edit finalized salary and correctly updates snapshot and ledger');
+
+    // Test 3: Non-admin editing finalized salary is blocked
+    const response3 = {
+      statusCode: 200,
+      status(code) { this.statusCode = code; return this; },
+      json(data) { this.data = data; return this; }
+    };
+    await salaryController.updateSalaryDeduction({
+      params: { id: salary._id },
+      body: { weeklySalaryAmount: 420, deductionAmount: 0 },
+      user: { _id: 'user-2', name: 'Distributor', role: 'SALARY_DISTRIBUTOR' }
+    }, response3);
+    assert.equal(response3.statusCode, 403);
+    console.log('PASS Non-admin cannot edit finalized salary');
+
+    // Test 4: Admin unfinalize salary when totalPaid === 0
+    const Attendance = require('../models/Attendance');
+    replaceMethod(Attendance, 'updateMany', async () => ({ modifiedCount: 1 }));
+    replaceMethod(LedgerTransaction, 'deleteMany', async () => ({ deletedCount: 1 }));
+
+    const response4 = {
+      statusCode: 200,
+      status(code) { this.statusCode = code; return this; },
+      json(data) { this.data = data; return this; }
+    };
+    await salaryController.unfinalizeWeeklySalary({
+      params: { id: salary._id },
+      user: { _id: 'admin-1', name: 'Admin', role: 'ADMIN' }
+    }, response4);
+    assert.equal(response4.statusCode, 200);
+    assert.equal(response4.data.success, true);
+    assert.equal(salary.status, 'Generated');
+    assert.equal(salary.finalizationSnapshot, null);
+    console.log('PASS Admin can unfinalize salary with zero payments');
+
   } finally {
     for (const restore of restores.reverse()) restore();
   }

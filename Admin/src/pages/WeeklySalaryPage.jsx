@@ -21,6 +21,7 @@ import {
   Trash2,
   Edit2,
   Lock,
+  Unlock,
   BadgeDollarSign,
   TrendingUp,
   TrendingDown,
@@ -101,6 +102,7 @@ export default function WeeklySalaryPage() {
 
   // Finalize state
   const [finalizing, setFinalizing] = useState(false);
+  const [unfinalizing, setUnfinalizing] = useState(false);
 
   // Ledger state
   const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
@@ -352,6 +354,24 @@ export default function WeeklySalaryPage() {
       showNotification(err.response?.data?.message || 'Failed to finalize salary.', true);
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  const handleUnfinalizeSalary = async () => {
+    if (!detailSalary) return;
+    if (!window.confirm(`Unlock and unfinalize salary for ${detailSalary.employeeName}? This will reset status back to Generated so you can edit attendance or recalculate.`)) return;
+    setUnfinalizing(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/salaries/${detailSalary._id}/unfinalize`);
+      if (res.data.success) {
+        showNotification(res.data.message || `Salary for ${detailSalary.employeeName} unfinalized.`);
+        await handleViewDetail({ ...detailSalary, _id: detailSalary._id });
+        fetchWeekInfoAndSalaries();
+      }
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to unfinalize salary.', true);
+    } finally {
+      setUnfinalizing(false);
     }
   };
 
@@ -740,12 +760,21 @@ export default function WeeklySalaryPage() {
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                         <button
                           className="btn btn-outline btn-sm"
-                          style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', borderColor: '#fca5a5' }}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            color: isFinalized(s) ? '#b45309' : '#dc2626',
+                            borderColor: isFinalized(s) ? '#fde68a' : '#fca5a5',
+                            background: isFinalized(s) ? '#fffbeb' : 'transparent',
+                            fontWeight: 600
+                          }}
                           onClick={() => openEditDeductionModal(s)}
-                          disabled={isFinalized(s)}
-                          title="Edit Employee Deduction"
+                          title={isFinalized(s) ? "Edit Finalized Salary (Admin Override)" : "Edit Employee Salary & Deduction"}
                         >
-                          <Edit2 size={12} /> Edit Salary
+                          <Edit2 size={12} /> {isFinalized(s) ? 'Edit Finalized' : 'Edit Salary'}
                         </button>
                         <button
                           className="btn btn-outline btn-sm"
@@ -882,11 +911,9 @@ export default function WeeklySalaryPage() {
                       <div style={{ fontWeight: 700, fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>
                         Salary Adjustments
                       </div>
-                      {!isFinalized(activeSalary) && (
-                        <button className="btn btn-primary btn-sm" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={openAddAdjustment}>
-                          <Plus size={13} /> Add Adjustment
-                        </button>
-                      )}
+                      <button className="btn btn-primary btn-sm" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={openAddAdjustment}>
+                        <Plus size={13} /> Add Adjustment
+                      </button>
                     </div>
 
                     {detailData?.adjustments?.length > 0 ? (
@@ -897,7 +924,7 @@ export default function WeeklySalaryPage() {
                             <th>Amount</th>
                             <th>Reason</th>
                             <th>Added By</th>
-                            {!isFinalized(activeSalary) && <th style={{ textAlign: 'right' }}>Actions</th>}
+                            <th style={{ textAlign: 'right' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -912,26 +939,26 @@ export default function WeeklySalaryPage() {
                               </td>
                               <td style={{ color: '#334155' }}>{adj.reason}</td>
                               <td style={{ color: '#64748b' }}>{adj.addedByName || adj.addedBy?.name || '—'}</td>
-                              {!isFinalized(activeSalary) && (
-                                <td style={{ textAlign: 'right' }}>
-                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                                    <button
-                                      className="btn btn-outline btn-sm"
-                                      style={{ padding: '3px 8px', fontSize: '11px' }}
-                                      onClick={() => openEditAdjustment(adj)}
-                                    >
-                                      <Edit2 size={11} />
-                                    </button>
-                                    <button
-                                      className="btn btn-sm"
-                                      style={{ padding: '3px 8px', fontSize: '11px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}
-                                      onClick={() => handleDeleteAdjustment(adj._id)}
-                                    >
-                                      <Trash2 size={11} />
-                                    </button>
-                                  </div>
-                                </td>
-                              )}
+                              <td style={{ textAlign: 'right' }}>
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                  <button
+                                    className="btn btn-outline btn-sm"
+                                    style={{ padding: '3px 8px', fontSize: '11px' }}
+                                    onClick={() => openEditAdjustment(adj)}
+                                    title="Edit Adjustment"
+                                  >
+                                    <Edit2 size={11} />
+                                  </button>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ padding: '3px 8px', fontSize: '11px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}
+                                    onClick={() => handleDeleteAdjustment(adj._id)}
+                                    title="Remove Adjustment"
+                                  >
+                                    <Trash2 size={11} />
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -969,15 +996,20 @@ export default function WeeklySalaryPage() {
                       <div style={{ fontWeight: 700, fontSize: '12px', color: '#475569', textTransform: 'uppercase' }}>
                         Final Salary Calculation
                       </div>
-                      {!isFinalized(activeSalary) && (
-                        <button
-                          className="btn btn-outline btn-sm"
-                          style={{ fontSize: '11px', padding: '3px 10px', color: '#dc2626', borderColor: '#fca5a5' }}
-                          onClick={() => openEditDeductionModal(activeSalary)}
-                        >
-                          <Edit2 size={12} /> Edit Salary Deduction
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-outline btn-sm"
+                        style={{
+                          fontSize: '11px',
+                          padding: '3px 10px',
+                          color: isFinalized(activeSalary) ? '#b45309' : '#dc2626',
+                          borderColor: isFinalized(activeSalary) ? '#fde68a' : '#fca5a5',
+                          background: isFinalized(activeSalary) ? '#fffbeb' : 'transparent',
+                          fontWeight: 600
+                        }}
+                        onClick={() => openEditDeductionModal(activeSalary)}
+                      >
+                        <Edit2 size={12} /> {isFinalized(activeSalary) ? 'Edit Finalized Salary' : 'Edit Salary Deduction'}
+                      </button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1133,20 +1165,61 @@ export default function WeeklySalaryPage() {
               )}
             </div>
 
-            <div className="modal-footer">
-              {!isFinalized(activeSalary) && !detailLoading && (
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                {isFinalized(activeSalary) && !detailLoading && (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    style={{
+                      color: (activeSalary?.totalPaid || 0) > 0 ? '#94a3b8' : '#d97706',
+                      borderColor: (activeSalary?.totalPaid || 0) > 0 ? '#e2e8f0' : '#fde68a',
+                      background: (activeSalary?.totalPaid || 0) > 0 ? '#f8fafc' : '#fffbeb',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600
+                    }}
+                    onClick={handleUnfinalizeSalary}
+                    disabled={unfinalizing || (activeSalary?.totalPaid || 0) > 0}
+                    title={(activeSalary?.totalPaid || 0) > 0 ? "Cannot unfinalize because payments were already disbursed. Use 'Edit Salary' to adjust." : "Unlock this salary back to draft so it can be regenerated or recalculated"}
+                  >
+                    <Unlock size={14} /> {unfinalizing ? 'Unlocking...' : 'Unlock / Unfinalize Salary'}
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button
-                  className="btn btn-primary"
-                  style={{ background: '#0f172a', borderColor: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  onClick={handleFinalizeSalary}
-                  disabled={finalizing}
+                  className="btn btn-outline btn-sm"
+                  style={{
+                    color: isFinalized(activeSalary) ? '#b45309' : '#dc2626',
+                    borderColor: isFinalized(activeSalary) ? '#fde68a' : '#fca5a5',
+                    background: isFinalized(activeSalary) ? '#fffbeb' : 'transparent',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '12px',
+                    fontWeight: 600
+                  }}
+                  onClick={() => openEditDeductionModal(activeSalary)}
                 >
-                  <Lock size={14} /> {finalizing ? 'Finalizing...' : 'Finalize Salary'}
+                  <Edit2 size={12} /> {isFinalized(activeSalary) ? 'Edit Finalized Salary' : 'Edit Salary'}
                 </button>
-              )}
-              <button className="btn btn-outline" onClick={closeDetail}>
-                Close
-              </button>
+
+                {!isFinalized(activeSalary) && !detailLoading && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ background: '#0f172a', borderColor: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    onClick={handleFinalizeSalary}
+                    disabled={finalizing}
+                  >
+                    <Lock size={14} /> {finalizing ? 'Finalizing...' : 'Finalize Salary'}
+                  </button>
+                )}
+                <button className="btn btn-outline btn-sm" onClick={closeDetail}>
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1338,6 +1411,32 @@ export default function WeeklySalaryPage() {
 
             <form onSubmit={handleSaveDeduction}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Finalized Salary Notice Banner */}
+                {isFinalized(deductionTargetSalary) && (
+                  <div style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    color: '#92400e',
+                    fontSize: '12px',
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'flex-start'
+                  }}>
+                    <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <strong>Admin Finalized Salary Override:</strong> This salary was finalized.
+                      Saving will immediately update the final salary, recalculate the remaining balance, and update the employee ledger.
+                      {(deductionTargetSalary.totalPaid || 0) > 0 && (
+                        <div style={{ marginTop: '4px', fontWeight: 600, color: '#b45309' }}>
+                          Payments already disbursed: £{deductionTargetSalary.totalPaid.toFixed(2)}.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary calculation pill */}
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -1350,6 +1449,12 @@ export default function WeeklySalaryPage() {
                       +£{((deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0)).toFixed(2)}
                     </span>
                   </div>
+                  {(deductionTargetSalary.totalPaid || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #e2e8f0' }}>
+                      <span style={{ color: '#64748b' }}>Already Paid:</span>
+                      <span style={{ fontWeight: 700, color: '#059669' }}>£{deductionTargetSalary.totalPaid.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -1411,16 +1516,28 @@ export default function WeeklySalaryPage() {
                   const allow = (deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0);
                   const ded = Number(deductionAmountInput) || 0;
                   const newFinal = Math.max(0, att + allow - ded);
+                  const paid = deductionTargetSalary.totalPaid || 0;
+                  const newRemaining = Math.max(0, newFinal - paid);
 
                   return (
-                    <div style={{ background: '#ecfdf5', padding: '12px 14px', borderRadius: '8px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>New Final Weekly Salary</div>
-                        <div style={{ fontSize: '11px', color: '#047857' }}>Calculated dynamically after deduction</div>
+                    <div style={{ background: '#ecfdf5', padding: '12px 14px', borderRadius: '8px', border: '1px solid #a7f3d0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>New Final Weekly Salary</div>
+                          <div style={{ fontSize: '11px', color: '#047857' }}>Calculated dynamically after deduction</div>
+                        </div>
+                        <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>
+                          £{newFinal.toFixed(2)}
+                        </div>
                       </div>
-                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>
-                        £{newFinal.toFixed(2)}
-                      </div>
+                      {paid > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #a7f3d0', fontSize: '12px' }}>
+                          <span style={{ color: '#065f46' }}>New Balance Outstanding:</span>
+                          <span style={{ fontWeight: 700, color: newRemaining > 0 ? '#d97706' : '#059669' }}>
+                            £{newRemaining.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -1429,7 +1546,7 @@ export default function WeeklySalaryPage() {
               <div className="modal-footer">
                 <button type="button" className="btn btn-outline" onClick={() => setDeductionModalOpen(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" style={{ background: '#dc2626', borderColor: '#dc2626' }} disabled={deductionSaving}>
-                  {deductionSaving ? 'Saving...' : 'Save Weekly Salary'}
+                  {deductionSaving ? 'Saving...' : (isFinalized(deductionTargetSalary) ? 'Save & Update Finalized Salary' : 'Save Weekly Salary')}
                 </button>
               </div>
             </form>
