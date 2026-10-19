@@ -889,7 +889,7 @@ function drawPdfBanner(doc, title, subtitle, periodText, isLandscape = true) {
   const margin = 25;
   const contentWidth = width - margin * 2;
 
-  doc.rect(margin, 20, contentWidth, 42).fillAndStroke('#f8fafc', '#cbd5e1');
+  doc.rect(margin, 20, contentWidth, 42).fillAndStroke('#ffffff', '#cbd5e1');
 
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14).text('PIXX ROTA', margin + 12, 28);
   doc.fillColor('#64748b').font('Helvetica').fontSize(9).text('PixxTechnologies UK • Bicycle Retail & Payroll System', margin + 12, 45);
@@ -996,7 +996,7 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
   kpiX += cardW + gap;
   drawKpiCard(doc, kpiX, kpiY, cardW, 'ACTIVE SHOPS', `${activeShopsCount} ${activeShopsCount === 1 ? 'Location' : 'Locations'}`, '#7c3aed');
   kpiX += cardW + gap;
-  drawKpiCard(doc, kpiX, kpiY, cardW, 'SHIFTS BREAKDOWN', `P:${totalPresent} • L:${totalLate} • H:${totalHalf} • A:${totalAbsent}`, '#d97706');
+  drawKpiCard(doc, kpiX, kpiY, cardW, 'SHIFTS BREAKDOWN', `${totalPresent} Pres • ${totalLate} Late • ${totalAbsent} Off`, '#d97706');
 
   // 3. Main Attendance Table Column Layout (Total Width = 790)
   // # (18) | WORKER NAME & ID (124) | SHOP(S) WORKED (116) | 7 Days (7 * 58 = 406) | WORK DAYS (54) | TOTAL HOURS (72)
@@ -1015,8 +1015,8 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
   const rowHeight = 20;
 
   const drawTableHeader = () => {
-    doc.rect(margin, y, contentWidth, tableHeaderH).fill('#1e293b');
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.5);
+    doc.rect(margin, y, contentWidth, tableHeaderH).fillAndStroke('#f1f5f9', '#cbd5e1');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5);
     doc.text('#', colX.idx, y + 6, { width: 18, align: 'center', lineBreak: false });
     doc.text('WORKER NAME & ID', colX.name + 4, y + 6, { width: 120, lineBreak: false });
     doc.text('SHOP(S) WORKED', colX.shop + 4, y + 6, { width: 112, lineBreak: false });
@@ -1109,21 +1109,21 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
     doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
     y = 30;
   }
-  doc.rect(margin, y, contentWidth, rowHeight).fill('#1e293b');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.5);
+  doc.rect(margin, y, contentWidth, rowHeight).fillAndStroke('#f8fafc', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5);
   doc.text(`TOTALS (${totalEmployees} Staff)`, colX.idx + 4, y + 6.5, { width: 136, lineBreak: false });
-  doc.fillColor('#94a3b8').font('Helvetica').fontSize(6.8);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(6.8);
   doc.text('All Shops', colX.shop + 4, y + 6.5, { width: 110, lineBreak: false });
 
   days.forEach((day, index) => {
     const dx = colX.daysStart + index * colX.dayWidth;
-    doc.fillColor('#cbd5e1').font('Helvetica-Bold').fontSize(7)
+    doc.fillColor('#475569').font('Helvetica-Bold').fontSize(7)
        .text(`${dailyStaffCount[day]} on duty`, dx, y + 6.5, { width: colX.dayWidth, align: 'center', lineBreak: false });
   });
 
-  doc.fillColor('#34d399').font('Helvetica-Bold').fontSize(8)
+  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8)
      .text(`${totalWorkingDays}d`, colX.workDays, y + 6, { width: 54, align: 'center', lineBreak: false });
-  doc.fillColor('#60a5fa').font('Helvetica-Bold').fontSize(8)
+  doc.fillColor('#2563eb').font('Helvetica-Bold').fontSize(8)
      .text(`${totalWorkedHours.toFixed(1)}h`, colX.hours, y + 6, { width: 68, align: 'right', lineBreak: false });
   y += rowHeight;
 
@@ -1150,8 +1150,8 @@ async function buildWeeklyAttendancePDF(res, records, weekLabel, summary = {}, g
       share: 90
     };
 
-    doc.rect(margin, y, contentWidth, 16).fill('#334155');
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.5);
+    doc.rect(margin, y, contentWidth, 16).fillAndStroke('#f1f5f9', '#cbd5e1');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5);
     doc.text('SHOP / LOCATION NAME', margin + 8, y + 4.5, { width: sColW.name, lineBreak: false });
     doc.text('STAFF ON DUTY', margin + sColW.name, y + 4.5, { width: sColW.staff, align: 'center', lineBreak: false });
     doc.text('TOTAL DAYS WORKED', margin + sColW.name + sColW.staff, y + 4.5, { width: sColW.days, align: 'center', lineBreak: false });
@@ -2114,8 +2114,8 @@ async function buildDistributorSalaryPDF(res, data = {}, generatedBy = 'Arsalan'
   const totalH = 18;
 
   const drawHeader = () => {
-    doc.rect(margin, y, contentWidth, tableHeaderH).fill('#1e293b');
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7);
+    doc.rect(margin, y, contentWidth, tableHeaderH).fillAndStroke('#f1f5f9', '#cbd5e1');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7);
     doc.text('#', margin + 3, y + 5.5, { width: 16, align: 'center', lineBreak: false });
     doc.text('WORKER NAME & ID', margin + 22, y + 5.5, { width: 116, lineBreak: false });
     doc.text('SHOP LOCATION', margin + 140, y + 5.5, { width: 85, lineBreak: false });

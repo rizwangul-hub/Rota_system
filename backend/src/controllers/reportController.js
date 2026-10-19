@@ -354,7 +354,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     let curY = 16;
 
     // ── HEADER BANNER ──────────────────────────────────────────
-    doc.rect(MARGIN_LEFT, curY, PAGE_W, 48).fillAndStroke('#f8fafc', '#cbd5e1');
+    doc.rect(MARGIN_LEFT, curY, PAGE_W, 48).fillAndStroke('#ffffff', '#cbd5e1');
 
     doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(16)
        .text('PIXX ROTA', MARGIN_LEFT + 14, curY + 10, { lineBreak: false });
@@ -381,7 +381,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 
     kpis.forEach((kpi, idx) => {
       const kx = MARGIN_LEFT + idx * (kpiW + kpiGap);
-      doc.roundedRect(kx, curY, kpiW, 40, 4).fillAndStroke('#f8fafc', LIGHT_BORDER);
+      doc.roundedRect(kx, curY, kpiW, 40, 4).fillAndStroke('#ffffff', LIGHT_BORDER);
 
       doc.fillColor(kpi.color).font('Helvetica-Bold').fontSize(15)
          .text(String(kpi.value), kx, curY + 6, { width: kpiW, align: 'center', lineBreak: false });
@@ -392,7 +392,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     curY += 48;
 
     const drawContinuationBanner = () => {
-      doc.rect(MARGIN_LEFT, 16, PAGE_W, 26).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.rect(MARGIN_LEFT, 16, PAGE_W, 26).fillAndStroke('#ffffff', '#cbd5e1');
       doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
          .text('PIXX ROTA  •  DAILY ATTENDANCE (CONTINUED)', MARGIN_LEFT + 12, 24, { lineBreak: false });
       doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(9)
