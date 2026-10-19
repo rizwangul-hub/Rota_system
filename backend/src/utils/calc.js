@@ -228,9 +228,23 @@ function getDayOfWeekUK(dateInput = new Date()) {
 
 /**
  * Default shift hours for UK bicycle shops by day of week (0=Sunday, 1=Monday ... 6=Saturday)
+ * Edgware: Sunday 11:00 AM – 6:30 PM, Monday–Saturday 9:30 AM – 6:30 PM.
+ * Other shops: Sunday 11:00 AM – 5:00 PM, Saturday 9:00 AM – 6:00 PM, Monday–Friday 9:00 AM – 7:00 PM.
  */
-function getDefaultShiftTimesForDate(dateObj = new Date()) {
+function getDefaultShiftTimesForDate(dateObj = new Date(), shopName = '') {
   const day = getDayOfWeekUK(dateObj);
+  const isEdgware = typeof shopName === 'string' && /edgware/i.test(shopName);
+
+  if (isEdgware) {
+    if (day === 0) {
+      // Edgware Sunday: 11:00 AM - 6:30 PM (7.5 hours)
+      return { shiftStart: '11:00', shiftEnd: '18:30' };
+    } else {
+      // Edgware Monday - Saturday: 9:30 AM - 6:30 PM (9 hours)
+      return { shiftStart: '09:30', shiftEnd: '18:30' };
+    }
+  }
+
   if (day === 0) {
     // Sunday: 11:00 AM - 5:00 PM (6 hours)
     return { shiftStart: '11:00', shiftEnd: '17:00' };

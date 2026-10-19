@@ -214,7 +214,9 @@ exports.getDefaultShiftForDate = async (req, res) => {
     const dayOfWeek = getDayOfWeekUK(d);
 
     let schedule = null;
+    let shopDoc = null;
     if (shopId) {
+      shopDoc = await Shop.findById(shopId);
       schedule = await ShopSchedule.findOne({ shop: shopId, dayOfWeek, isActive: true });
     }
     if (!schedule) {
@@ -230,7 +232,7 @@ exports.getDefaultShiftForDate = async (req, res) => {
       });
     }
 
-    const fallback = getDefaultShiftTimesForDate(d);
+    const fallback = getDefaultShiftTimesForDate(d, shopDoc?.name);
     res.json({
       success: true,
       shiftStart: fallback.shiftStart,
