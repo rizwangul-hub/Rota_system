@@ -206,6 +206,12 @@ export default function SarfrazAttendance() {
 
   // Edit attendance handler
   const openEditModal = (r) => {
+    const isCheckedRecord = ['Checked', 'Finalized'].includes(r.approvalStatus);
+    if (isCheckedRecord && !isAdmin) {
+      showNotification('Checked attendance is locked and can only be edited by an Admin.', true);
+      return;
+    }
+
     // 1. Resolve current shop ID to a clean string
     let currentShopId = '';
     const rawShop = (r.shop && typeof r.shop === 'object' ? r.shop._id : r.shop) || r.shopId;
@@ -248,6 +254,12 @@ export default function SarfrazAttendance() {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editModalRecord) return;
+
+    if (!isAdmin && ['Checked', 'Finalized'].includes(editModalRecord.approvalStatus)) {
+      showNotification('Checked attendance is locked and can only be edited by an Admin.', true);
+      setEditModalRecord(null);
+      return;
+    }
 
     try {
       const isAbsent = editModalRecord.status === 'Absent';
@@ -319,16 +331,6 @@ export default function SarfrazAttendance() {
         { responseType: 'blob' }
       );
       const file = new File([response.data], fileName, { type: mimeType });
-      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-        try {
-          await navigator.share({ files: [file], title: fileName });
-          return;
-        } catch (shareError) {
-          if (shareError.name === 'AbortError') return;
-          console.warn('Sharing attendance report failed; downloading it instead:', shareError.name);
-        }
-      }
-
       const objectUrl = URL.createObjectURL(file);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -606,7 +608,7 @@ export default function SarfrazAttendance() {
                 return (a.employeeName || '').localeCompare(b.employeeName || '');
               }).map(r => {
                 const isChecked = ['Checked', 'Finalized'].includes(r.approvalStatus);
-                const canEdit = true; // Both Admin and Sarfraz (Checker) have full access to edit attendance times
+                const canEdit = !isChecked || isAdmin; // Once checked, locked for Checker; only Admin can edit
 
                 return (
                   <tr key={r._id} style={{ background: isChecked ? '#fafafa' : r.status === 'Absent' ? '#fffafb' : '#ffffff' }}>
@@ -742,15 +744,17 @@ export default function SarfrazAttendance() {
                           <Eye size={13} />
                         </button>
 
-                        {/* Edit Button: available to both Admin and Sarfraz */}
-                        <button
-                          className="btn btn-outline btn-sm"
-                          style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                          onClick={() => openEditModal(r)}
-                          title="Edit attendance times and status"
-                        >
-                          <Edit size={13} /> Edit
-                        </button>
+                        {/* Edit Button: available before check for Sarfraz, or always for Admin */}
+                        {canEdit && (
+                          <button
+                            className="btn btn-outline btn-sm"
+                            style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                            onClick={() => openEditModal(r)}
+                            title={isChecked ? "Edit attendance times (Admin override)" : "Edit attendance times and status"}
+                          >
+                            <Edit size={13} /> Edit
+                          </button>
+                        )}
 
                         {/* Check / Approve Button */}
                         {!isChecked && (

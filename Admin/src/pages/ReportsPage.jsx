@@ -665,6 +665,7 @@ export default function ReportsPage() {
                 <thead>
                   <tr>
                     <th>Employee Name</th>
+                    <th>Shop(s) Worked</th>
                     <th>Sun</th>
                     <th>Mon</th>
                     <th>Tue</th>
@@ -679,7 +680,15 @@ export default function ReportsPage() {
                 <tbody>
                   {weeklyAttendanceData.records?.map((r, idx) => (
                     <tr key={idx}>
-                      <td style={{ fontWeight: 500 }}>{r.employeeName}</td>
+                      <td style={{ fontWeight: 500 }}>
+                        <div>{r.employeeName}</div>
+                        {r.employeeId && <div style={{ fontSize: '11px', color: '#64748b' }}>{r.employeeId}</div>}
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#0f766e', fontSize: '12px' }}>
+                          {r.shopName || (r.shopsList && r.shopsList.length ? r.shopsList.join(' / ') : '—')}
+                        </span>
+                      </td>
                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => {
                         const val = r.dailySchedule?.[day] || 'Off';
                         const isOff = val === 'Off';
@@ -701,13 +710,13 @@ export default function ReportsPage() {
                           </td>
                         );
                       })}
-                      <td style={{ fontWeight: 600 }}>{r.workingDays}</td>
+                      <td style={{ fontWeight: 600, color: '#059669' }}>{r.workingDays}d</td>
                       <td style={{ fontWeight: 600, color: '#2563eb' }}>{r.actualHours}h</td>
                     </tr>
                   ))}
                   {(!weeklyAttendanceData.records || weeklyAttendanceData.records.length === 0) && (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                         No weekly attendance records found for this period.
                       </td>
                     </tr>
@@ -716,6 +725,50 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
+
+          {weeklyAttendanceData.summary?.shopSummaries?.length > 0 && (
+            <div className="card" style={{ marginTop: '20px' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                  Shop-Wise Attendance & Labor Hours Breakdown
+                </h4>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  {weeklyAttendanceData.summary.shopSummaries.length} Locations Active
+                </span>
+              </div>
+              <div className="table-responsive">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Shop / Location</th>
+                      <th style={{ textAlign: 'center' }}>Staff on Duty</th>
+                      <th style={{ textAlign: 'center' }}>Total Days Worked</th>
+                      <th style={{ textAlign: 'center' }}>Total Hours Worked</th>
+                      <th style={{ textAlign: 'center' }}>Avg Hours / Shift</th>
+                      <th style={{ textAlign: 'right' }}>Share of Labor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeklyAttendanceData.summary.shopSummaries.map((s, idx) => {
+                      const totalHrs = weeklyAttendanceData.summary?.totalWorkedHours || 1;
+                      const share = ((s.totalHours / totalHrs) * 100).toFixed(1);
+                      const avgShift = s.totalDays > 0 ? (s.totalHours / s.totalDays).toFixed(1) : '0.0';
+                      return (
+                        <tr key={idx}>
+                          <td style={{ fontWeight: 600, color: '#0f172a' }}>• {s.shopName}</td>
+                          <td style={{ textAlign: 'center' }}>{s.staffCount} Staff</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#059669' }}>{s.totalDays} Days</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#2563eb' }}>{s.totalHours} hrs</td>
+                          <td style={{ textAlign: 'center', color: '#64748b' }}>{avgShift} hrs/day</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{share}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

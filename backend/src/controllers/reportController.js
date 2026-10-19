@@ -613,11 +613,11 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     // Anchor signatures to bottom of page when fitting on single page
     const sigY = Math.max(curY + 10, doc.page.height - 16 - sigBoxH);
 
-    // Box 1: Usman (Operator)
+    // Box 1: Usman (Attendance Taker)
     doc.roundedRect(MARGIN_LEFT, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
     doc.rect(MARGIN_LEFT, sigY, sigBoxW, 16).fill('#f1f5f9');
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8)
-       .text('SUBMITTED BY (ATTENDANCE OPERATOR)', MARGIN_LEFT + 10, sigY + 4, { lineBreak: false });
+       .text('SUBMITTED BY (ATTENDANCE TAKER)', MARGIN_LEFT + 10, sigY + 4, { lineBreak: false });
 
     if (usmanSign) {
       try { doc.image(usmanSign, MARGIN_LEFT + 10, sigY + 20, { fit: [95, 28] }); } catch (e) {}
@@ -625,9 +625,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9.5)
        .text('Usman Salahuddin', MARGIN_LEFT + 115, sigY + 22, { lineBreak: false });
     doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
-       .text('Attendance Operator  •  PixxTechnologies UK', MARGIN_LEFT + 115, sigY + 38, { lineBreak: false });
+       .text('Attendance Taker  •  PixxTechnologies UK', MARGIN_LEFT + 115, sigY + 38, { lineBreak: false });
 
-    // Box 2: Sarfraz (Checker)
+    // Box 2: Sarfraz Khan (Attendance Checker)
     const rightX = MARGIN_LEFT + sigBoxW + 14;
     doc.roundedRect(rightX, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
     doc.rect(rightX, sigY, sigBoxW, 16).fill('#f1f5f9');
@@ -679,6 +679,7 @@ exports.exportDailyAttendancePDF = async (req, res) => {
 function buildWeeklyAttendanceData(attendances) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const empMap = {};
+  const shopAggMap = {};
 
   (attendances || []).forEach(a => {
     if (!a) return;
@@ -689,13 +690,17 @@ function buildWeeklyAttendanceData(attendances) {
 
     const empName = a.employeeName || (empObj && empObj.name) || 'Worker';
     const sName = a.shopName || (a.shop && a.shop.name) || 'Shop';
+    const empCode = a.employeeId || (empObj && empObj.employeeId) || '';
 
     if (!empMap[empKey]) {
       empMap[empKey] = {
         employee: empObj ? (empObj._id || empObj) : null,
         employeeName: empName,
+        employeeId: empCode,
         shopId: a.shop ? (a.shop._id || a.shop) : null,
         shopName: sName,
+        shopsList: [],
+        shopBreakdown: {},
         dailySchedule: { Sun: 'Off', Mon: 'Off', Tue: 'Off', Wed: 'Off', Thu: 'Off', Fri: 'Off', Sat: 'Off' },
         workingDays: 0,
         presentDays: 0,
@@ -709,6 +714,8 @@ function buildWeeklyAttendanceData(attendances) {
     }
 
     const rec = empMap[empKey];
+    if (!rec.employeeId && empCode) rec.employeeId = empCode;
+
     const dateVal = a.dateString || a.date;
     const dayIdx = getDayOfWeekUK(dateVal);
     const dayName = dayNames[dayIdx];
@@ -720,15 +727,34 @@ function buildWeeklyAttendanceData(attendances) {
       }
     }
 
-    if (a.status !== 'Absent') rec.workingDays += 1;
+    const sched = Number(a.scheduledHours) || 0;
+    const act = Number(a.actualHours) || 0;
+    const lMin = Number(a.lateMinutes) || 0;
+
+    if (a.status !== 'Absent') {
+      rec.workingDays += 1;
+      if (sName && sName !== 'Absent') {
+        if (!rec.shopsList.includes(sName)) {
+          rec.shopsList.push(sName);
+        }
+        if (!rec.shopBreakdown[sName]) {
+          rec.shopBreakdown[sName] = { days: 0, hours: 0 };
+        }
+        rec.shopBreakdown[sName].days += 1;
+        rec.shopBreakdown[sName].hours = Number((rec.shopBreakdown[sName].hours + act).toFixed(2));
+
+        if (!shopAggMap[sName]) {
+          shopAggMap[sName] = { shopName: sName, totalDays: 0, totalHours: 0, staffKeys: new Set() };
+        }
+        shopAggMap[sName].totalDays += 1;
+        shopAggMap[sName].totalHours = Number((shopAggMap[sName].totalHours + act).toFixed(2));
+        shopAggMap[sName].staffKeys.add(empKey);
+      }
+    }
     if (a.status === 'Present' || a.status === 'Late') rec.presentDays += 1;
     if (a.status === 'Late') rec.lateDays += 1;
     else if (a.status === 'Half') rec.halfDays += 1;
     else if (a.status === 'Absent') rec.absentDays += 1;
-
-    const sched = Number(a.scheduledHours) || 0;
-    const act = Number(a.actualHours) || 0;
-    const lMin = Number(a.lateMinutes) || 0;
 
     rec.scheduledHours = Number((Number(rec.scheduledHours || 0) + sched).toFixed(2));
     rec.actualHours = Number((Number(rec.actualHours || 0) + act).toFixed(2));
@@ -736,6 +762,19 @@ function buildWeeklyAttendanceData(attendances) {
   });
 
   const records = Object.values(empMap);
+  records.forEach(r => {
+    if (r.shopsList && r.shopsList.length > 0) {
+      r.shopName = r.shopsList.join(' / ');
+    }
+  });
+
+  const shopSummaries = Object.values(shopAggMap).map(s => ({
+    shopName: s.shopName,
+    totalDays: s.totalDays,
+    totalHours: Number(s.totalHours.toFixed(2)),
+    staffCount: s.staffKeys.size
+  })).sort((a, b) => b.totalHours - a.totalHours);
+
   const summary = {
     totalEmployees: records.length,
     totalWorkingDays: records.reduce((sum, r) => sum + (Number(r.workingDays) || 0), 0),
@@ -745,7 +784,8 @@ function buildWeeklyAttendanceData(attendances) {
     totalAbsent: records.reduce((sum, r) => sum + (Number(r.absentDays) || 0), 0),
     totalScheduledHours: Number(records.reduce((sum, r) => sum + (Number(r.scheduledHours) || 0), 0).toFixed(2)),
     totalWorkedHours: Number(records.reduce((sum, r) => sum + (Number(r.actualHours) || 0), 0).toFixed(2)),
-    totalLateMinutes: records.reduce((sum, r) => sum + (Number(r.lateMinutes) || 0), 0)
+    totalLateMinutes: records.reduce((sum, r) => sum + (Number(r.lateMinutes) || 0), 0),
+    shopSummaries
   };
 
   return { records, summary };
