@@ -392,7 +392,7 @@ export default function SarfrazAttendance() {
               alignItems: 'center',
               gap: '4px'
             }}>
-              <ShieldCheck size={12} /> Sarfraz Review
+              <ShieldCheck size={12} /> {user?.name ? `${user.name} Review` : 'Attendance Review'}
             </span>
           </div>
           <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px', margin: 0 }}>
@@ -835,7 +835,7 @@ export default function SarfrazAttendance() {
               }}>
                 <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span>
-                  <strong>Checker & Admin Verification:</strong> Both Administrator and Sarfraz (Attendance Checker) have permission to edit attendance times and notes at any time.
+                  <strong>Checker & Admin Verification:</strong> Both Administrator and Attendance Checkers ({user?.name || 'Sarfraz Khan / Adeel Ahmed'}) have permission to edit attendance times and notes at any time.
                 </span>
               </div>
             </div>

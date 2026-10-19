@@ -105,13 +105,13 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
           </>
         )}
 
-        {/* SARFRAZ KHAN (ATTENDANCE_CHECKER) Navigation */}
-        {role === 'ATTENDANCE_CHECKER' && (
+        {/* ATTENDANCE CHECKER & OPERATOR Navigation (Sarfraz Khan, Adeel Ahmed, Usman) */}
+        {(role === 'ATTENDANCE_CHECKER' || role === 'ATTENDANCE_OPERATOR') && (
           <>
             <li className="nav-section-title">Attendance Review</li>
             <li className="nav-item">
               <NavLink to="/attendance-checker" onClick={() => setMobileOpen(false)}>
-                <CheckSquare size={18} /> Pending Attendance
+                <CheckSquare size={18} /> Daily Attendance
               </NavLink>
             </li>
             <li className="nav-section-title">Reports</li>

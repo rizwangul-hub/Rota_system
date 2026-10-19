@@ -7,8 +7,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.post('/', authenticate, authorize('ATTENDANCE_OPERATOR', 'ADMIN'), attendanceController.saveAttendance);
 router.post('/batch', authenticate, authorize('ATTENDANCE_OPERATOR', 'ADMIN'), attendanceController.saveAttendanceBatch);
 
-// Sarfraz or Admin views pending attendance
-router.get('/pending', authenticate, authorize('ATTENDANCE_CHECKER', 'ADMIN'), attendanceController.getPendingAttendance);
+// Sarfraz, Adeel, Usman or Admin views pending attendance
+router.get('/pending', authenticate, authorize('ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'ADMIN'), attendanceController.getPendingAttendance);
 
 // General attendance list/history
 router.get('/', authenticate, attendanceController.getAllAttendance);

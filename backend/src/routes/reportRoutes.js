@@ -7,7 +7,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 // 1. ATTENDANCE REPORTS
 // ============================================================
 
-// Daily Attendance Report (Admin, Sarfraz, Usman)
+// Daily Attendance Report (Admin, Sarfraz, Usman, Adeel)
 router.get(
   '/daily-attendance',
   authenticate,
@@ -17,33 +17,33 @@ router.get(
 router.get(
   '/daily-attendance/excel',
   authenticate,
-  authorize('ADMIN', 'ATTENDANCE_CHECKER'),
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR'),
   reportController.exportDailyAttendanceExcel
 );
 router.get(
   '/daily-attendance/pdf',
   authenticate,
-  authorize('ADMIN', 'ATTENDANCE_CHECKER'),
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR'),
   reportController.exportDailyAttendancePDF
 );
 
-// Weekly Attendance Report (Admin & Sarfraz)
+// Weekly Attendance Report (Admin, Sarfraz, Usman, Adeel)
 router.get(
   '/weekly-attendance',
   authenticate,
-  authorize('ADMIN', 'ATTENDANCE_CHECKER'),
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR'),
   reportController.getWeeklyAttendanceReport
 );
 router.get(
   '/weekly-attendance/excel',
   authenticate,
-  authorize('ADMIN', 'ATTENDANCE_CHECKER'),
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR'),
   reportController.exportWeeklyAttendanceExcel
 );
 router.get(
   '/weekly-attendance/pdf',
   authenticate,
-  authorize('ADMIN', 'ATTENDANCE_CHECKER'),
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR'),
   reportController.exportWeeklyAttendancePDF
 );
 

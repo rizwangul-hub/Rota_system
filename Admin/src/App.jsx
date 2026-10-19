@@ -36,7 +36,7 @@ function ProtectedLayout({ children, allowedRoles }) {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect to permitted landing screen
-    if (user.role === 'ATTENDANCE_CHECKER') {
+    if (user.role === 'ATTENDANCE_CHECKER' || user.role === 'ATTENDANCE_OPERATOR') {
       return <Navigate to="/attendance-checker" replace />;
     } else if (user.role === 'SALARY_DISTRIBUTOR') {
       return <Navigate to="/distributor" replace />;
@@ -65,7 +65,7 @@ function RoleDefaultRedirect() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === 'ATTENDANCE_CHECKER') return <Navigate to="/attendance-checker" replace />;
+  if (user.role === 'ATTENDANCE_CHECKER' || user.role === 'ATTENDANCE_OPERATOR') return <Navigate to="/attendance-checker" replace />;
   if (user.role === 'SALARY_DISTRIBUTOR') return <Navigate to="/distributor" replace />;
   return <Navigate to="/dashboard" replace />;
 }
@@ -97,11 +97,11 @@ export default function App() {
             }
           />
 
-          {/* Attendance Checker (Sarfraz Khan & Admin) */}
+          {/* Attendance Checker & Review */}
           <Route
             path="/attendance-checker"
             element={
-              <ProtectedLayout allowedRoles={['ATTENDANCE_CHECKER', 'ADMIN']}>
+              <ProtectedLayout allowedRoles={['ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'ADMIN']}>
                 <SarfrazAttendance />
               </ProtectedLayout>
             }
@@ -155,11 +155,11 @@ export default function App() {
             }
           />
 
-          {/* Reports & Exports (Admin & Sarfraz) */}
+          {/* Reports & Exports (Admin, Sarfraz, Adeel, Usman) */}
           <Route
             path="/reports"
             element={
-              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER']}>
+              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR']}>
                 <ReportsPage />
               </ProtectedLayout>
             }

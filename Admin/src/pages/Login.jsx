@@ -104,7 +104,7 @@ export default function Login() {
     try {
       const loggedUser = await login(username, password);
       // Route by role
-      if (loggedUser.role === 'ATTENDANCE_CHECKER') {
+      if (loggedUser.role === 'ATTENDANCE_CHECKER' || loggedUser.role === 'ATTENDANCE_OPERATOR') {
         navigate('/attendance-checker');
       } else if (loggedUser.role === 'SALARY_DISTRIBUTOR') {
         navigate('/distributor');

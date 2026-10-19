@@ -287,6 +287,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
         path.join(__dirname, '../assets', filename),
         path.join(process.cwd(), 'backend/src/assets', filename),
         path.join(process.cwd(), 'src/assets', filename),
+        path.join(process.cwd(), 'Admin/src/assets', filename),
+        path.join(process.cwd(), '../Admin/src/assets', filename),
+        path.join(__dirname, '../../Admin/src/assets', filename),
         path.join(__dirname, 'assets', filename)
       ];
       for (const p of candidates) {
@@ -296,8 +299,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       }
       return null;
     };
-    const usmanSign = findAsset('usmansign.png');
+    const usmanSign = findAsset('usmansign.png') || findAsset('usmansign.jpeg');
     const sarfrazSign = findAsset('sarfrazsign.png');
+    const adeelSign = findAsset('adeel.png') || findAsset('adeelsign.png');
 
     // Sort records: real shops first, absent records at the bottom
     const sortedRecords = sortDailyAttendanceRecords(records);
@@ -613,19 +617,40 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     // Anchor signatures to bottom of page when fitting on single page
     const sigY = Math.max(curY + 10, doc.page.height - 16 - sigBoxH);
 
-    // Box 1: Usman (Attendance Taker)
-    doc.roundedRect(MARGIN_LEFT, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
-    doc.rect(MARGIN_LEFT, sigY, sigBoxW, 16).fill('#f1f5f9');
-    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8)
-       .text('SUBMITTED BY (ATTENDANCE TAKER)', MARGIN_LEFT + 10, sigY + 4, { lineBreak: false });
+    // Determine whether the report is exported by Adeel Ahmed or Usman / Admin / Sarfraz
+    const reqUsername = String(req.user?.username || req.query.username || req.query.user || '').trim().toLowerCase();
+    const reqFullName = String(req.user?.name || req.query.name || req.query.checker || req.query.taker || '').trim().toLowerCase();
+    const isAdeel = reqUsername.includes('adeel') || reqUsername.includes('adel') || reqFullName.includes('adeel') || reqFullName.includes('adel');
 
-    if (usmanSign) {
-      try { doc.image(usmanSign, MARGIN_LEFT + 10, sigY + 20, { fit: [95, 28] }); } catch (e) {}
+    if (isAdeel) {
+      // Box 1: Adeel Ahmed (Attendance Checker) in place of Usman
+      doc.roundedRect(MARGIN_LEFT, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
+      doc.rect(MARGIN_LEFT, sigY, sigBoxW, 16).fill('#f1f5f9');
+      doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8)
+         .text('VERIFIED BY (ATTENDANCE CHECKER)', MARGIN_LEFT + 10, sigY + 4, { lineBreak: false });
+
+      if (adeelSign) {
+        try { doc.image(adeelSign, MARGIN_LEFT + 10, sigY + 20, { fit: [95, 28] }); } catch (e) {}
+      }
+      doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9.5)
+         .text('Adeel Ahmed', MARGIN_LEFT + 115, sigY + 22, { lineBreak: false });
+      doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
+         .text('Attendance Checker  •  PixxTechnologies UK', MARGIN_LEFT + 115, sigY + 38, { lineBreak: false });
+    } else {
+      // Box 1: Usman Salahuddin (Attendance Taker)
+      doc.roundedRect(MARGIN_LEFT, sigY, sigBoxW, sigBoxH, 4).fillAndStroke('#ffffff', '#cbd5e1');
+      doc.rect(MARGIN_LEFT, sigY, sigBoxW, 16).fill('#f1f5f9');
+      doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8)
+         .text('SUBMITTED BY (ATTENDANCE TAKER)', MARGIN_LEFT + 10, sigY + 4, { lineBreak: false });
+
+      if (usmanSign) {
+        try { doc.image(usmanSign, MARGIN_LEFT + 10, sigY + 20, { fit: [95, 28] }); } catch (e) {}
+      }
+      doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9.5)
+         .text('Usman Salahuddin', MARGIN_LEFT + 115, sigY + 22, { lineBreak: false });
+      doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
+         .text('Attendance Taker  •  PixxTechnologies UK', MARGIN_LEFT + 115, sigY + 38, { lineBreak: false });
     }
-    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9.5)
-       .text('Usman Salahuddin', MARGIN_LEFT + 115, sigY + 22, { lineBreak: false });
-    doc.fillColor(SLATE).font('Helvetica').fontSize(7.5)
-       .text('Attendance Taker  •  PixxTechnologies UK', MARGIN_LEFT + 115, sigY + 38, { lineBreak: false });
 
     // Box 2: Sarfraz Khan (Attendance Checker)
     const rightX = MARGIN_LEFT + sigBoxW + 14;
