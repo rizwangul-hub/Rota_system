@@ -137,6 +137,13 @@ const seedData = async () => {
       role: 'ADMIN'
     });
 
+    const kamranUser = await User.create({
+      name: 'Kamran Ijaz',
+      username: 'kamran',
+      password: seedPassword,
+      role: 'ADMIN'
+    });
+
     const sarfrazUser = await User.create({
       name: 'Sarfraz Khan',
       username: 'sarfraz',
