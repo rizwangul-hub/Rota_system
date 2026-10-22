@@ -227,13 +227,38 @@ function getDayOfWeekUK(dateInput = new Date()) {
 }
 
 /**
+ * Check if worker is Arsalan (Arslan Bhai / Arsalan)
+ */
+function isArsalanWorker(workerName = '') {
+  return typeof workerName === 'string' && /ars[al]*an/i.test(workerName);
+}
+
+/**
  * Default shift hours for UK bicycle shops by day of week (0=Sunday, 1=Monday ... 6=Saturday)
+ * Arsalan: Saturday 9:00 AM, Sunday 11:00 AM, Monday–Friday 10:00 AM.
  * Edgware: Sunday 11:00 AM – 6:30 PM, Monday–Saturday 9:30 AM – 6:30 PM.
  * Other shops: Sunday 11:00 AM – 5:00 PM, Saturday 9:00 AM – 6:00 PM, Monday–Friday 9:00 AM – 7:00 PM.
  */
-function getDefaultShiftTimesForDate(dateObj = new Date(), shopName = '') {
+function getDefaultShiftTimesForDate(dateObj = new Date(), shopName = '', workerName = '') {
   const day = getDayOfWeekUK(dateObj);
+  const isArsalan = isArsalanWorker(workerName);
   const isEdgware = typeof shopName === 'string' && /edgware/i.test(shopName);
+
+  if (isArsalan) {
+    const shiftEnd = isEdgware
+      ? '18:30'
+      : (day === 0 ? '17:00' : (day === 6 ? '18:00' : '19:00'));
+    if (day === 6) {
+      // Arsalan Saturday: 9:00 AM
+      return { shiftStart: '09:00', shiftEnd };
+    } else if (day === 0) {
+      // Arsalan Sunday: 11:00 AM
+      return { shiftStart: '11:00', shiftEnd };
+    } else {
+      // Arsalan Monday - Friday: 10:00 AM
+      return { shiftStart: '10:00', shiftEnd };
+    }
+  }
 
   if (isEdgware) {
     if (day === 0) {
@@ -444,5 +469,6 @@ module.exports = {
   getWeekRange,
   calculateFinalWeeklySalary,
   calculateWeeklySalaryComponents,
-  resolveDailyWage
+  resolveDailyWage,
+  isArsalanWorker
 };

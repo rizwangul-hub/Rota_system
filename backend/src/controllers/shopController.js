@@ -1,8 +1,9 @@
 const Shop = require('../models/Shop');
+const Employee = require('../models/Employee');
 const { sendServerError } = require('../utils/httpErrors');
 const ShopSchedule = require('../models/ShopSchedule');
 const { logAction } = require('../utils/audit');
-const { getDefaultShiftTimesForDate, calculateScheduledHours, timeToMinutes, getDayOfWeekUK } = require('../utils/calc');
+const { getDefaultShiftTimesForDate, calculateScheduledHours, timeToMinutes, getDayOfWeekUK, isArsalanWorker } = require('../utils/calc');
 
 exports.getAllShops = async (req, res) => {
   try {
@@ -209,9 +210,17 @@ exports.updateSchedule = async (req, res) => {
 
 exports.getDefaultShiftForDate = async (req, res) => {
   try {
-    const { date, shopId } = req.query;
+    const { date, shopId, employeeId, employeeName } = req.query;
     const d = date ? (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T12:00:00Z`) : new Date(date)) : new Date();
     const dayOfWeek = getDayOfWeekUK(d);
+
+    let workerName = employeeName || '';
+    if (!workerName && employeeId) {
+      const emp = await Employee.findById(employeeId).select('name');
+      if (emp) workerName = emp.name;
+    }
+
+    const isArsalan = isArsalanWorker(workerName);
 
     let schedule = null;
     let shopDoc = null;
@@ -223,6 +232,17 @@ exports.getDefaultShiftForDate = async (req, res) => {
       schedule = await ShopSchedule.findOne({ shop: null, dayOfWeek, isActive: true });
     }
 
+    if (isArsalan) {
+      const arsalanTimes = getDefaultShiftTimesForDate(d, shopDoc?.name, workerName);
+      const shiftEnd = schedule ? schedule.closingTime : arsalanTimes.shiftEnd;
+      return res.json({
+        success: true,
+        shiftStart: arsalanTimes.shiftStart,
+        shiftEnd,
+        defaultHours: calculateScheduledHours(arsalanTimes.shiftStart, shiftEnd)
+      });
+    }
+
     if (schedule) {
       return res.json({
         success: true,
@@ -232,7 +252,7 @@ exports.getDefaultShiftForDate = async (req, res) => {
       });
     }
 
-    const fallback = getDefaultShiftTimesForDate(d, shopDoc?.name);
+    const fallback = getDefaultShiftTimesForDate(d, shopDoc?.name, workerName);
     res.json({
       success: true,
       shiftStart: fallback.shiftStart,

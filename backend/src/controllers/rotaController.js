@@ -30,9 +30,10 @@ function formatTime12Hour(value) {
   return `${displayHours}:${minutes} ${period}`;
 }
 
-function getShopShiftTimes(shopId, dateKey, allShopSchedules) {
+function getShopShiftTimes(shopId, dateKey, allShopSchedules, employeeName = '') {
   const d = new Date(`${dateKey}T12:00:00Z`);
   const dayOfWeek = getDayOfWeekUK(d);
+  const isArsalan = typeof employeeName === 'string' && /ars[al]*an/i.test(employeeName);
 
   let sched = null;
   if (shopId && Array.isArray(allShopSchedules)) {
@@ -42,6 +43,15 @@ function getShopShiftTimes(shopId, dateKey, allShopSchedules) {
     }
   }
 
+  const fallback = getDefaultShiftTimesForDate(d, '', employeeName);
+
+  if (isArsalan) {
+    return {
+      startTime: fallback.shiftStart,
+      endTime: sched && sched.closingTime ? sched.closingTime : fallback.shiftEnd
+    };
+  }
+
   if (sched && sched.openingTime && sched.closingTime) {
     return {
       startTime: sched.openingTime,
@@ -49,7 +59,6 @@ function getShopShiftTimes(shopId, dateKey, allShopSchedules) {
     };
   }
 
-  const fallback = getDefaultShiftTimesForDate(d);
   return {
     startTime: fallback.shiftStart,
     endTime: fallback.shiftEnd
@@ -344,7 +353,8 @@ async function persistDraft(req, res, input, generationMethod = input.generation
   rota.assignments = input.assignments.map(assignment => {
     const previous = previousByDay.get(makeKey(assignment));
     const targetShopId = getActualShopId(assignment);
-    const definedTimes = getShopShiftTimes(targetShopId, assignment.dateKey, allShopSchedules);
+    const empName = assignment.employeeName || assignment.employee?.name || '';
+    const definedTimes = getShopShiftTimes(targetShopId, assignment.dateKey, allShopSchedules, empName);
     let startTime = assignment.startTime;
     let endTime = assignment.endTime;
     if (assignment.status !== 'CUSTOM' || (startTime === '09:00' && endTime === '17:00') || !startTime || !endTime) {
@@ -1686,7 +1696,7 @@ exports.exportPdf = async (req, res) => {
                   let status = 'AVAILABLE';
                   if (workingShopIds.includes(shopId)) {
                     const dayAssignment = schedule.working.get(shopId)[0];
-                    const definedTimes = getShopShiftTimes(shopId, dateKey, allShopSchedules);
+                    const definedTimes = getShopShiftTimes(shopId, dateKey, allShopSchedules, employee.name);
                     let sStart = dayAssignment.startTime;
                     let sEnd = dayAssignment.endTime;
                     if (dayAssignment.status !== 'CUSTOM' || (sStart === '09:00' && sEnd === '17:00') || !sStart || !sEnd) {

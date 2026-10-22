@@ -55,10 +55,16 @@ function getWeekDates(sundayStr) {
   return dates;
 }
 
-function getDefaultTimesForDateKey(dateKey) {
+function getDefaultTimesForDateKey(dateKey, workerName = '') {
   if (!dateKey) return { startTime: '09:00', endTime: '19:00' };
   const d = new Date(`${dateKey}T12:00:00.000Z`);
   const day = d.getUTCDay();
+  const isArsalan = typeof workerName === 'string' && /ars[al]*an/i.test(workerName);
+  if (isArsalan) {
+    if (day === 0) return { startTime: '11:00', endTime: '17:00' };
+    if (day === 6) return { startTime: '09:00', endTime: '18:00' };
+    return { startTime: '10:00', endTime: '19:00' };
+  }
   if (day === 0) return { startTime: '11:00', endTime: '17:00' }; // Sunday
   if (day === 6) return { startTime: '09:00', endTime: '18:00' }; // Saturday
   return { startTime: '09:00', endTime: '19:00' }; // Monday to Friday
@@ -229,14 +235,15 @@ export default function WeeklyRotaPlanner() {
         const dKey = String(a.dateKey).slice(0, 10);
         const isLoaned = a.status === 'LOANED' || rawHomeId !== rawShopId;
         const cellKey = `${rawHomeId}:${eId}:${dKey}`;
-        const defTimes = getDefaultTimesForDateKey(dKey);
+        const empObj = (employees || []).find(e => String(e._id) === eId);
+        const defTimes = getDefaultTimesForDateKey(dKey, empObj?.name || a.employeeName);
         newCells[cellKey] = {
           status: a.status || 'AVAILABLE',
           targetShopId: isLoaned ? rawShopId : null,
           targetShopName: a.targetShopName || '',
           note: a.note || '',
-          startTime: (a.startTime && a.startTime !== '09:00') ? a.startTime : (a.status === 'CUSTOM' ? a.startTime : defTimes.startTime),
-          endTime: (a.endTime && a.endTime !== '17:00') ? a.endTime : (a.status === 'CUSTOM' ? a.endTime : defTimes.endTime)
+          startTime: a.startTime || defTimes.startTime,
+          endTime: a.endTime || defTimes.endTime
         };
       });
 
@@ -752,8 +759,8 @@ export default function WeeklyRotaPlanner() {
     if (!activeCell) return;
     const { shopId, employeeId, dateKey } = activeCell;
     const cellKey = `${shopId}:${employeeId}:${dateKey}`;
-
-    const defTimes = getDefaultTimesForDateKey(dateKey);
+    const empObj = employees.find(e => String(e._id) === String(employeeId));
+    const defTimes = getDefaultTimesForDateKey(dateKey, empObj?.name);
     const nextCell = {
       status,
       targetShopId: extra.targetShopId || null,
@@ -871,14 +878,15 @@ export default function WeeklyRotaPlanner() {
           const isLoaned = a.status === 'LOANED' || rawHomeId !== rawShopId;
           // Key by homeShopId so cell appears under the correct home shop row
           const cellKey = `${rawHomeId}:${eId}:${targetDateKey}`;
-          const defTimes = getDefaultTimesForDateKey(targetDateKey);
+          const empObj = employees.find(e => String(e._id) === eId);
+          const defTimes = getDefaultTimesForDateKey(targetDateKey, empObj?.name || a.employeeName);
           newCells[cellKey] = {
             status: a.status || 'AVAILABLE',
             targetShopId: isLoaned ? rawShopId : null,
             targetShopName: '',
             note: a.note || '',
-            startTime: (a.startTime && a.startTime !== '09:00') ? a.startTime : (a.status === 'CUSTOM' ? a.startTime : defTimes.startTime),
-            endTime: (a.endTime && a.endTime !== '17:00') ? a.endTime : (a.status === 'CUSTOM' ? a.endTime : defTimes.endTime)
+            startTime: a.startTime || defTimes.startTime,
+            endTime: a.endTime || defTimes.endTime
           };
           // Add to home shop roster (not target shop)
           if (newRosters[rawHomeId] && !newRosters[rawHomeId].includes(eId)) {
@@ -906,18 +914,19 @@ export default function WeeklyRotaPlanner() {
       shopRosterPayload.push({ shopId: shop._id, employeeIds: workerIds });
 
       workerIds.forEach(empId => {
+        const empObj = employees.find(e => String(e._id) === String(empId));
         weekDays.forEach(day => {
           const cell = cells[`${shop._id}:${empId}:${day.dateKey}`];
           if (!cell) return;
-          const defTimes = getDefaultTimesForDateKey(day.dateKey);
+          const defTimes = getDefaultTimesForDateKey(day.dateKey, empObj?.name);
 
           if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') {
             assignments.push({
               employeeId: empId,
               shopId: shop._id,
               dateKey: day.dateKey,
-              startTime: (cell.startTime && cell.startTime !== '09:00') ? cell.startTime : (cell.status === 'CUSTOM' ? cell.startTime : defTimes.startTime),
-              endTime: (cell.endTime && cell.endTime !== '17:00') ? cell.endTime : (cell.status === 'CUSTOM' ? cell.endTime : defTimes.endTime),
+              startTime: cell.startTime || defTimes.startTime,
+              endTime: cell.endTime || defTimes.endTime,
               status: cell.status,
               note: cell.note || '',
               homeShopId: shop._id

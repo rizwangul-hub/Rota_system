@@ -4,7 +4,7 @@ const { sendServerError } = require('../utils/httpErrors');
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const SystemSetting = require('../models/SystemSetting');
-const { calculateAttendanceRecord, formatUKDate, getUKDateString, resolveDailyWage } = require('../utils/calc');
+const { calculateAttendanceRecord, formatUKDate, getUKDateString, resolveDailyWage, getDefaultShiftTimesForDate, isArsalanWorker } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { attendanceOperatorRecord, attendanceCheckerRecord } = require('../utils/attendanceViews');
 
@@ -82,8 +82,9 @@ exports.saveAttendance = async (req, res) => {
     const dailyWage = resolveDailyWage(existing?.dailyWage, employee?.dailyWage);
     const gracePeriod = await getGracePeriod();
 
-    const start = isAbsent ? '' : (shiftStart || '09:00');
-    const end = isAbsent ? '' : (shiftEnd || '19:00');
+    const defaultShift = getDefaultShiftTimesForDate(attendanceDate, shop?.name, employee.name);
+    const start = isAbsent ? '' : (shiftStart || defaultShift.shiftStart);
+    const end = isAbsent ? '' : (shiftEnd || defaultShift.shiftEnd);
     const reached = isAbsent ? '' : (timeReached || start);
     const left = isAbsent ? '' : (workerEndTime || end);
 
@@ -227,8 +228,9 @@ exports.saveAttendanceBatch = async (req, res) => {
       const isAbsent = item.status === 'Absent';
       // Preserve historical daily wage if existing; snapshot current employee wage if new
       const dailyWage = resolveDailyWage(existing?.dailyWage, employee?.dailyWage);
-      const start = isAbsent ? '' : (item.shiftStart || '09:00');
-      const end = isAbsent ? '' : (item.shiftEnd || '19:00');
+      const defaultShift = getDefaultShiftTimesForDate(attendanceDate, shop?.name, employee.name);
+      const start = isAbsent ? '' : (item.shiftStart || defaultShift.shiftStart);
+      const end = isAbsent ? '' : (item.shiftEnd || defaultShift.shiftEnd);
       const reached = isAbsent ? '' : (item.timeReached || start);
       const left = isAbsent ? '' : (item.workerEndTime || end);
 
@@ -479,8 +481,12 @@ exports.updateAttendanceRecord = async (req, res) => {
       }
     }
 
-    const finalShiftStart = isAbsent ? '' : (shiftStart || '09:00');
-    const finalShiftEnd = isAbsent ? '' : (shiftEnd || '19:00');
+    const empName = employee?.name || record.employeeName || '';
+    const recDate = record.date ? new Date(record.date) : (record.dateString ? new Date(`${record.dateString}T12:00:00Z`) : new Date());
+    const defaultShift = getDefaultShiftTimesForDate(recDate, record.shopName, empName);
+
+    const finalShiftStart = isAbsent ? '' : (shiftStart || defaultShift.shiftStart);
+    const finalShiftEnd = isAbsent ? '' : (shiftEnd || defaultShift.shiftEnd);
     const finalTimeReached = isAbsent ? '' : (timeReached || finalShiftStart);
     const finalWorkerEndTime = isAbsent ? '' : (workerEndTime || finalShiftEnd);
 

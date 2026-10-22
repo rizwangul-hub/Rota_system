@@ -58,6 +58,31 @@ async function getAttendanceExportErrorMessage(error, format) {
   return responseData?.message || fallback;
 }
 
+function getWorkerDefaultShift(dateStr, empName, shopName) {
+  const d = dateStr ? new Date(`${dateStr}T12:00:00Z`) : new Date();
+  const day = d.getDay(); // 0 = Sun, 6 = Sat
+  const isArsalan = typeof empName === 'string' && /ars[al]*an/i.test(empName);
+  const isEdgware = typeof shopName === 'string' && /edgware/i.test(shopName);
+
+  if (isArsalan) {
+    const shiftEnd = isEdgware ? '18:30' : (day === 0 ? '17:00' : (day === 6 ? '18:00' : '19:00'));
+    if (day === 6) return { shiftStart: '09:00', shiftEnd };
+    if (day === 0) return { shiftStart: '11:00', shiftEnd };
+    return { shiftStart: '10:00', shiftEnd };
+  }
+
+  if (isEdgware) {
+    return {
+      shiftStart: day === 0 ? '11:00' : '09:30',
+      shiftEnd: '18:30'
+    };
+  }
+
+  if (day === 0) return { shiftStart: '11:00', shiftEnd: '17:00' };
+  if (day === 6) return { shiftStart: '09:00', shiftEnd: '18:00' };
+  return { shiftStart: '09:00', shiftEnd: '19:00' };
+}
+
 export default function SarfrazAttendance() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -238,16 +263,18 @@ export default function SarfrazAttendance() {
 
     const isAbsent = r.status === 'Absent';
     const foundShop = shops.find(s => String(s._id) === String(currentShopId));
+    const empName = r.employeeName || (r.employee && typeof r.employee === 'object' ? r.employee.name : '');
+    const defTimes = getWorkerDefaultShift(r.dateString, empName, foundShop ? foundShop.name : r.shopName);
 
     setEditModalRecord({
       ...r,
       shop: isAbsent ? '' : currentShopId,
       shopId: isAbsent ? '' : currentShopId,
       shopName: isAbsent ? 'Absent' : (foundShop ? foundShop.name : (r.shopName || '')),
-      shiftStart: r.shiftStart || '09:00',
-      shiftEnd: r.shiftEnd || '19:00',
-      timeReached: r.timeReached || r.shiftStart || '09:00',
-      workerEndTime: r.workerEndTime || r.shiftEnd || '19:00'
+      shiftStart: r.shiftStart || defTimes.shiftStart,
+      shiftEnd: r.shiftEnd || defTimes.shiftEnd,
+      timeReached: r.timeReached || r.shiftStart || defTimes.shiftStart,
+      workerEndTime: r.workerEndTime || r.shiftEnd || defTimes.shiftEnd
     });
   };
 
@@ -917,16 +944,17 @@ export default function SarfrazAttendance() {
                         const foundShop = shops.find(s => String(s._id) === String(selectedShopId));
                         setEditModalRecord(prev => {
                           const isSwitchingFromAbsent = prev.status === 'Absent' && Boolean(selectedShopId);
+                          const defTimes = getWorkerDefaultShift(prev.dateString, prev.employeeName, foundShop ? foundShop.name : prev.shopName);
                           return {
                             ...prev,
                             shop: selectedShopId,
                             shopId: selectedShopId,
                             shopName: foundShop ? foundShop.name : prev.shopName,
                             status: isSwitchingFromAbsent ? 'Present' : prev.status,
-                            shiftStart: isSwitchingFromAbsent ? (prev.shiftStart && prev.shiftStart !== 'Absent' ? prev.shiftStart : '09:00') : prev.shiftStart,
-                            shiftEnd: isSwitchingFromAbsent ? (prev.shiftEnd && prev.shiftEnd !== 'Absent' ? prev.shiftEnd : '19:00') : prev.shiftEnd,
-                            timeReached: isSwitchingFromAbsent ? (prev.timeReached || '09:00') : prev.timeReached,
-                            workerEndTime: isSwitchingFromAbsent ? (prev.workerEndTime || '19:00') : prev.workerEndTime
+                            shiftStart: isSwitchingFromAbsent ? defTimes.shiftStart : prev.shiftStart,
+                            shiftEnd: isSwitchingFromAbsent ? defTimes.shiftEnd : prev.shiftEnd,
+                            timeReached: isSwitchingFromAbsent ? defTimes.shiftStart : prev.timeReached,
+                            workerEndTime: isSwitchingFromAbsent ? defTimes.shiftEnd : prev.workerEndTime
                           };
                         });
                       }}
@@ -957,16 +985,19 @@ export default function SarfrazAttendance() {
                             : '') ||
                           (shops[0]?._id || '');
 
-                        setEditModalRecord(prev => ({
-                          ...prev,
-                          status: newStatus,
-                          shop: isNowAbsent ? '' : (prev.shop || prev.shopId || fallbackShopId),
-                          shopId: isNowAbsent ? '' : (prev.shop || prev.shopId || fallbackShopId),
-                          shiftStart: isNowAbsent ? '' : (prev.shiftStart && prev.shiftStart !== 'Absent' ? prev.shiftStart : '09:00'),
-                          shiftEnd: isNowAbsent ? '' : (prev.shiftEnd && prev.shiftEnd !== 'Absent' ? prev.shiftEnd : '19:00'),
-                          timeReached: isNowAbsent ? '' : (prev.timeReached || prev.shiftStart || '09:00'),
-                          workerEndTime: isNowAbsent ? '' : (prev.workerEndTime || prev.shiftEnd || '19:00')
-                        }));
+                        setEditModalRecord(prev => {
+                          const defTimes = getWorkerDefaultShift(prev.dateString, prev.employeeName, prev.shopName);
+                          return {
+                            ...prev,
+                            status: newStatus,
+                            shop: isNowAbsent ? '' : (prev.shop || prev.shopId || fallbackShopId),
+                            shopId: isNowAbsent ? '' : (prev.shop || prev.shopId || fallbackShopId),
+                            shiftStart: isNowAbsent ? '' : (prev.shiftStart && prev.shiftStart !== 'Absent' ? prev.shiftStart : defTimes.shiftStart),
+                            shiftEnd: isNowAbsent ? '' : (prev.shiftEnd && prev.shiftEnd !== 'Absent' ? prev.shiftEnd : defTimes.shiftEnd),
+                            timeReached: isNowAbsent ? '' : (prev.timeReached || prev.shiftStart || defTimes.shiftStart),
+                            workerEndTime: isNowAbsent ? '' : (prev.workerEndTime || prev.shiftEnd || defTimes.shiftEnd)
+                          };
+                        });
                       }}
                     >
                       <option value="Present">Present</option>
