@@ -694,9 +694,10 @@ export default function SalaryDistributor() {
               const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
               const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
               const openingBal = Number(s.openingBalance || 0);
-              const weeklySalary = Number(s.weeklySalary || s.finalSalary || 0);
+              const weeklySalary = Number(s.attendanceSalary ?? (s.weeklySalaryOverride ?? s.netAttendancePay ?? s.weeklySalary ?? s.finalSalary ?? 0));
+              const allowance = Number(s.allowance ?? ((s.travelAllowance || 0) + (s.otherAllowances || 0)));
               const bonus = Number(s.bonus || 0);
-              const totalPayable = Number(s.totalPayable || (weeklySalary + openingBal + bonus));
+              const totalPayable = Number(s.totalPayable || (weeklySalary + allowance + openingBal + bonus));
               const totalPaid = Number(s.totalPaid || 0);
               const balanceRemaining = Number(s.balanceRemaining || 0);
 
@@ -760,9 +761,15 @@ export default function SalaryDistributor() {
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748b' }}>Weekly Salary:</span>
+                      <span style={{ color: '#64748b' }}>Attendance Wages:</span>
                       <strong style={{ color: '#0f172a' }}>£{weeklySalary.toFixed(2)}</strong>
                     </div>
+                    {allowance > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Allowance:</span>
+                        <strong style={{ color: '#0284c7' }}>+£{allowance.toFixed(2)}</strong>
+                      </div>
+                    )}
                     {openingBal > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
@@ -1130,9 +1137,15 @@ export default function SalaryDistributor() {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                    <span style={{ color: '#64748b' }}>Weekly Salary:</span>
-                    <strong style={{ color: '#0f172a' }}>£{(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0).toFixed(2)}</strong>
+                    <span style={{ color: '#64748b' }}>Attendance Wages:</span>
+                    <strong style={{ color: '#0f172a' }}>£{(payModalSalary.attendanceSalary ?? (payModalSalary.weeklySalary || payModalSalary.finalSalary || 0)).toFixed(2)}</strong>
                   </div>
+                  {(payModalSalary.allowance || ((payModalSalary.travelAllowance || 0) + (payModalSalary.otherAllowances || 0))) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
+                      <span style={{ color: '#64748b' }}>Allowance:</span>
+                      <strong style={{ color: '#0284c7' }}>+£{(payModalSalary.allowance || ((payModalSalary.travelAllowance || 0) + (payModalSalary.otherAllowances || 0))).toFixed(2)}</strong>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
                     <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
                     <strong style={{ color: '#7c3aed' }}>+£{(payModalSalary.openingBalance || 0).toFixed(2)}</strong>
