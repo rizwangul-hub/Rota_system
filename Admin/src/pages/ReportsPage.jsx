@@ -374,6 +374,15 @@ export default function ReportsPage() {
             <FileText size={14} /> Salary Ledger
           </button>
         )}
+        {isAdmin && (
+          <button
+            className={`btn ${activeTab === 'database_backup' ? 'btn-primary' : 'btn-outline'} btn-sm`}
+            onClick={() => handleTabChange('database_backup')}
+            style={activeTab === 'database_backup' ? { background: '#0f172a', borderColor: '#0f172a' } : { borderColor: '#0f172a', color: '#0f172a' }}
+          >
+            <Database size={14} /> Database Backup (PDF)
+          </button>
+        )}
       </div>
 
       {/* Common Filter Controls Bar */}
@@ -419,8 +428,8 @@ export default function ReportsPage() {
             </>
           )}
 
-          {/* Month / Year Pickers (Monthly, Yearly, Bonus) */}
-          {(activeTab === 'employee_monthly' || activeTab === 'bonus') && (
+          {/* Month / Year Pickers (Monthly, Yearly, Bonus, Database Backup) */}
+          {(activeTab === 'employee_monthly' || activeTab === 'bonus' || activeTab === 'database_backup') && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Month:</label>
               <select
@@ -434,7 +443,7 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {(activeTab === 'employee_monthly' || activeTab === 'employee_yearly' || activeTab === 'bonus') && (
+          {(activeTab === 'employee_monthly' || activeTab === 'employee_yearly' || activeTab === 'bonus' || activeTab === 'database_backup') && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Year:</label>
               <select
