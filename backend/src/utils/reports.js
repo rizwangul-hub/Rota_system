@@ -2351,6 +2351,607 @@ async function buildLedgerPDF(res, employee, transactions, summary = {}, generat
   return await sendPdfOrBuffer(res, doc, `Ledger_${employee.name.replace(/\s+/g, '_')}.pdf`);
 }
 
+/**
+ * Generate PDF for Complete System Database Backup & Month-End Archive
+ */
+async function buildSystemBackupPDF(res, backupData = {}, generatedBy = 'Fahad Rasheed') {
+  const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
+  const margin = 25;
+  const contentWidth = 791.89;
+
+  const {
+    period = {},
+    summary = {},
+    shops = [],
+    employees = [],
+    attendanceByWorker = [],
+    salaries = [],
+    payments = [],
+    ledgerBalances = []
+  } = backupData;
+
+  const periodLabel = period.monthLabel || 'All Data';
+  const subtitle = period.scope === 'all'
+    ? 'Lifetime Complete System Database Archive'
+    : `Monthly Database Archive: ${period.startStr || ''} to ${period.endStr || ''}`;
+
+  const drawSectionBanner = (title, countText, curY) => {
+    doc.roundedRect(margin, curY, contentWidth, 20, 3).fillAndStroke('#0f172a', '#1e293b');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5).text(title, margin + 10, curY + 5.5, { lineBreak: false });
+    if (countText) {
+      doc.fillColor('#94a3b8').font('Helvetica').fontSize(8).text(countText, margin + contentWidth - 210, curY + 6, { width: 200, align: 'right', lineBreak: false });
+    }
+    return curY + 20;
+  };
+
+  const drawFooter = () => {
+    doc.fillColor('#94a3b8').font('Helvetica').fontSize(7).text(
+      `PIXXTECHNOLOGIES UK • OFFICIAL SYSTEM DATABASE BACKUP ARCHIVE • Confidential & Legally Binding Financial Record • Period: ${periodLabel}`,
+      margin, 570, { align: 'center', width: contentWidth }
+    );
+  };
+
+  // --- PAGE 1: COVER & MASTER DATA DIRECTORIES ---
+  drawPdfBanner(doc, 'System Database Backup', subtitle, `Period: ${periodLabel}`, true);
+
+  const kpiY = 75;
+  const cardW = 126;
+  const gap = 7;
+  drawKpiCard(doc, margin, kpiY, cardW, 'TOTAL WORKERS', `${summary.totalEmployees || 0} Staff (${summary.activeEmployees || 0} Active)`, '#0f172a');
+  drawKpiCard(doc, margin + (cardW + gap) * 1, kpiY, cardW, 'REGISTERED SHOPS', `${summary.totalShops || 0} Locations`, '#2563eb');
+  drawKpiCard(doc, margin + (cardW + gap) * 2, kpiY, cardW, 'ATTENDANCE LOGS', `${summary.totalAttendanceRecords || 0} Records`, '#0284c7');
+  drawKpiCard(doc, margin + (cardW + gap) * 3, kpiY, cardW, 'WAGES EARNED', `£${(summary.totalWagesEarned || 0).toFixed(2)}`, '#059669');
+  drawKpiCard(doc, margin + (cardW + gap) * 4, kpiY, cardW, 'DISBURSED PAYMENTS', `£${(summary.totalPaid || 0).toFixed(2)}`, '#d97706');
+  drawKpiCard(doc, margin + (cardW + gap) * 5, kpiY, cardW, 'OUTSTANDING LIABILITY', `£${(summary.totalRemaining || 0).toFixed(2)}`, (summary.totalRemaining || 0) > 0 ? '#dc2626' : '#059669');
+
+  let y = 130;
+
+  // SECTION 1: SHOPS MASTER DIRECTORY
+  y = drawSectionBanner('1. SHOPS & STORE MASTER LOCATIONS', `${shops.length} SHOPS`, y);
+
+  doc.rect(margin, y, contentWidth, 16).fill('#e2e8f0');
+  doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(7.5);
+  doc.text('SHOP NAME', margin + 8, y + 4, { width: 150, lineBreak: false });
+  doc.text('STORE ADDRESS / LOCATION', margin + 165, y + 4, { width: 330, lineBreak: false });
+  doc.text('CONTACT PHONE', margin + 505, y + 4, { width: 110, lineBreak: false });
+  doc.text('STATUS', margin + 625, y + 4, { width: 70, align: 'center', lineBreak: false });
+  doc.text('ASSIGNED STAFF', margin + 705, y + 4, { width: 75, align: 'center', lineBreak: false });
+  y += 16;
+
+  shops.forEach((s, idx) => {
+    doc.rect(margin, y, contentWidth, 15).fill(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text(s.name || '', margin + 8, y + 3.5, { width: 150, lineBreak: false });
+    doc.font('Helvetica').fontSize(7).fillColor('#334155').text(s.address || '—', margin + 165, y + 3.5, { width: 330, lineBreak: false });
+    doc.text(s.phone || '—', margin + 505, y + 3.5, { width: 110, lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor(s.status === 'Active' ? '#059669' : '#dc2626').text(s.status || 'Active', margin + 625, y + 3.5, { width: 70, align: 'center', lineBreak: false });
+    doc.font('Helvetica').fillColor('#0f172a').text(String(s.staffCount || 0), margin + 705, y + 3.5, { width: 75, align: 'center', lineBreak: false });
+    y += 15;
+  });
+
+  y += 12;
+
+  // SECTION 2: EMPLOYEES MASTER DIRECTORY
+  y = drawSectionBanner('2. STAFF & EMPLOYEES MASTER DIRECTORY', `${employees.length} EMPLOYEES`, y);
+
+  const drawEmpHeader = () => {
+    doc.rect(margin, y, contentWidth, 16).fill('#e2e8f0');
+    doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(7.5);
+    doc.text('ID', margin + 8, y + 4, { width: 60, lineBreak: false });
+    doc.text('EMPLOYEE NAME', margin + 75, y + 4, { width: 160, lineBreak: false });
+    doc.text('PRIMARY SHOP', margin + 245, y + 4, { width: 110, lineBreak: false });
+    doc.text('ROLE', margin + 365, y + 4, { width: 110, lineBreak: false });
+    doc.text('DAILY RATE', margin + 485, y + 4, { width: 70, align: 'right', lineBreak: false });
+    doc.text('STATUS', margin + 565, y + 4, { width: 65, align: 'center', lineBreak: false });
+    doc.text('OPENING BAL', margin + 640, y + 4, { width: 70, align: 'right', lineBreak: false });
+    doc.text('LEDGER BAL', margin + 715, y + 4, { width: 65, align: 'right', lineBreak: false });
+    y += 16;
+  };
+  drawEmpHeader();
+
+  employees.forEach((emp, idx) => {
+    if (y + 15 > 550) {
+      drawFooter();
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      drawPdfBanner(doc, 'System Database Backup', subtitle, `Staff Directory (Cont.)`, true);
+      y = 75;
+      drawEmpHeader();
+    }
+    doc.rect(margin, y, contentWidth, 15).fill(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#64748b').font('Helvetica').fontSize(7).text(emp.employeeId || '', margin + 8, y + 3.5, { width: 60, lineBreak: false });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text(emp.name || '', margin + 75, y + 3.5, { width: 160, lineBreak: false });
+    doc.font('Helvetica').fontSize(7).fillColor('#334155').text(emp.shopName || '—', margin + 245, y + 3.5, { width: 110, lineBreak: false });
+    doc.text(emp.role || 'WORKER', margin + 365, y + 3.5, { width: 110, lineBreak: false });
+    doc.text(`£${(emp.dailyWage || 0).toFixed(2)}`, margin + 485, y + 3.5, { width: 70, align: 'right', lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor(emp.status === 'Active' ? '#059669' : '#dc2626').text(emp.status || 'Active', margin + 565, y + 3.5, { width: 65, align: 'center', lineBreak: false });
+    doc.font('Helvetica').fillColor('#64748b').text(`£${(emp.openingBalance || 0).toFixed(2)}`, margin + 640, y + 3.5, { width: 70, align: 'right', lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor(emp.currentBalance > 0 ? '#dc2626' : '#059669').text(`£${(emp.currentBalance || 0).toFixed(2)}`, margin + 715, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    y += 15;
+  });
+  drawFooter();
+
+  // --- PAGE 2: MONTHLY ATTENDANCE SUMMARY ---
+  doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+  drawPdfBanner(doc, 'System Database Backup', subtitle, `Attendance & Hours (${periodLabel})`, true);
+  y = 75;
+
+  y = drawSectionBanner(`3. MONTHLY ATTENDANCE & HOURS SUMMARY (${periodLabel})`, `${attendanceByWorker.length} WORKERS`, y);
+
+  const drawAttHeader = () => {
+    doc.rect(margin, y, contentWidth, 16).fill('#e2e8f0');
+    doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(7.5);
+    doc.text('WORKER NAME', margin + 8, y + 4, { width: 170, lineBreak: false });
+    doc.text('PRIMARY SHOP', margin + 185, y + 4, { width: 120, lineBreak: false });
+    doc.text('SHIFTS', margin + 315, y + 4, { width: 45, align: 'center', lineBreak: false });
+    doc.text('PRESENT', margin + 365, y + 4, { width: 50, align: 'center', lineBreak: false });
+    doc.text('LATE', margin + 420, y + 4, { width: 45, align: 'center', lineBreak: false });
+    doc.text('HALF', margin + 470, y + 4, { width: 45, align: 'center', lineBreak: false });
+    doc.text('OFF', margin + 520, y + 4, { width: 45, align: 'center', lineBreak: false });
+    doc.text('WORKED HRS', margin + 575, y + 4, { width: 65, align: 'right', lineBreak: false });
+    doc.text('DEDUCT (£)', margin + 650, y + 4, { width: 60, align: 'right', lineBreak: false });
+    doc.text('ATTENDANCE PAY', margin + 720, y + 4, { width: 65, align: 'right', lineBreak: false });
+    y += 16;
+  };
+  drawAttHeader();
+
+  let attTotals = { shifts: 0, present: 0, late: 0, half: 0, absent: 0, hours: 0, deduct: 0, pay: 0 };
+
+  attendanceByWorker.forEach((row, idx) => {
+    if (y + 16 > 530) {
+      drawFooter();
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      drawPdfBanner(doc, 'System Database Backup', subtitle, `Attendance & Hours (Cont.)`, true);
+      y = 75;
+      drawAttHeader();
+    }
+    attTotals.shifts += row.shiftsCount || 0;
+    attTotals.present += row.present || 0;
+    attTotals.late += row.late || 0;
+    attTotals.half += row.half || 0;
+    attTotals.absent += row.absent || 0;
+    attTotals.hours += row.hours || 0;
+    attTotals.deduct += row.lateDeductions || 0;
+    attTotals.pay += row.attendancePay || 0;
+
+    doc.rect(margin, y, contentWidth, 15).fill(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text(row.employeeName || '', margin + 8, y + 3.5, { width: 170, lineBreak: false });
+    doc.font('Helvetica').fontSize(7).fillColor('#334155').text(row.shopName || '—', margin + 185, y + 3.5, { width: 120, lineBreak: false });
+    doc.text(String(row.shiftsCount || 0), margin + 315, y + 3.5, { width: 45, align: 'center', lineBreak: false });
+    doc.fillColor('#059669').text(String(row.present || 0), margin + 365, y + 3.5, { width: 50, align: 'center', lineBreak: false });
+    doc.fillColor('#d97706').text(String(row.late || 0), margin + 420, y + 3.5, { width: 45, align: 'center', lineBreak: false });
+    doc.fillColor('#0284c7').text(String(row.half || 0), margin + 470, y + 3.5, { width: 45, align: 'center', lineBreak: false });
+    doc.fillColor('#dc2626').text(String(row.absent || 0), margin + 520, y + 3.5, { width: 45, align: 'center', lineBreak: false });
+    doc.fillColor('#0f172a').text(`${(row.hours || 0).toFixed(1)}h`, margin + 575, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    doc.fillColor('#dc2626').text(`£${(row.lateDeductions || 0).toFixed(2)}`, margin + 650, y + 3.5, { width: 60, align: 'right', lineBreak: false });
+    doc.fillColor('#059669').font('Helvetica-Bold').text(`£${(row.attendancePay || 0).toFixed(2)}`, margin + 720, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    y += 15;
+  });
+
+  // Attendance Totals Row
+  doc.rect(margin, y, contentWidth, 18).fill('#1e293b');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.5);
+  doc.text('MONTH ATTENDANCE TOTALS', margin + 8, y + 5, { width: 280, lineBreak: false });
+  doc.text(String(attTotals.shifts), margin + 315, y + 5, { width: 45, align: 'center', lineBreak: false });
+  doc.text(String(attTotals.present), margin + 365, y + 5, { width: 50, align: 'center', lineBreak: false });
+  doc.text(String(attTotals.late), margin + 420, y + 5, { width: 45, align: 'center', lineBreak: false });
+  doc.text(String(attTotals.half), margin + 470, y + 5, { width: 45, align: 'center', lineBreak: false });
+  doc.text(String(attTotals.absent), margin + 520, y + 5, { width: 45, align: 'center', lineBreak: false });
+  doc.text(`${attTotals.hours.toFixed(1)}h`, margin + 575, y + 5, { width: 65, align: 'right', lineBreak: false });
+  doc.text(`£${attTotals.deduct.toFixed(2)}`, margin + 650, y + 5, { width: 60, align: 'right', lineBreak: false });
+  doc.text(`£${attTotals.pay.toFixed(2)}`, margin + 720, y + 5, { width: 65, align: 'right', lineBreak: false });
+  y += 18;
+  drawFooter();
+
+  // --- PAGE 3: WEEKLY PAYROLL & SALARIES ---
+  doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+  drawPdfBanner(doc, 'System Database Backup', subtitle, `Weekly Payroll Sheets (${periodLabel})`, true);
+  y = 75;
+
+  y = drawSectionBanner(`4. WEEKLY SALARY SHEETS & PAYROLL (${periodLabel})`, `${salaries.length} RECORDS`, y);
+
+  const drawSalHeader = () => {
+    doc.rect(margin, y, contentWidth, 16).fill('#e2e8f0');
+    doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(7);
+    doc.text('WEEK PERIOD', margin + 6, y + 4, { width: 105, lineBreak: false });
+    doc.text('WORKER NAME', margin + 115, y + 4, { width: 120, lineBreak: false });
+    doc.text('SHOP', margin + 240, y + 4, { width: 80, lineBreak: false });
+    doc.text('DAYS', margin + 325, y + 4, { width: 30, align: 'center', lineBreak: false });
+    doc.text('WAGE (£)', margin + 360, y + 4, { width: 45, align: 'right', lineBreak: false });
+    doc.text('DEDUCT', margin + 410, y + 4, { width: 45, align: 'right', lineBreak: false });
+    doc.text('ALLOW', margin + 460, y + 4, { width: 45, align: 'right', lineBreak: false });
+    doc.text('OPENING', margin + 510, y + 4, { width: 45, align: 'right', lineBreak: false });
+    doc.text('BONUS', margin + 560, y + 4, { width: 40, align: 'right', lineBreak: false });
+    doc.text('PAYABLE', margin + 605, y + 4, { width: 50, align: 'right', lineBreak: false });
+    doc.text('PAID (£)', margin + 660, y + 4, { width: 45, align: 'right', lineBreak: false });
+    doc.text('REMAINING', margin + 710, y + 4, { width: 45, align: 'right', lineBreak: false });
+    doc.text('STATUS', margin + 760, y + 4, { width: 30, align: 'center', lineBreak: false });
+    y += 16;
+  };
+  drawSalHeader();
+
+  let salTotals = { wage: 0, deduct: 0, allow: 0, opening: 0, bonus: 0, payable: 0, paid: 0, remaining: 0 };
+
+  salaries.forEach((sal, idx) => {
+    if (y + 15 > 530) {
+      drawFooter();
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      drawPdfBanner(doc, 'System Database Backup', subtitle, `Weekly Payroll (Cont.)`, true);
+      y = 75;
+      drawSalHeader();
+    }
+    const wage = Number(sal.attendanceSalary || sal.netAttendancePay || 0);
+    const deduct = Number(sal.deductions || sal.manualDeductions || 0);
+    const allow = Number(sal.allowances || (sal.travelAllowance || 0) + (sal.otherAllowances || 0));
+    const opening = Number(sal.openingBalance || 0);
+    const bonus = Number(sal.bonus || 0);
+    const payable = Number(sal.totalPayable || (wage + allow + opening + bonus - deduct));
+    const paid = Number(sal.totalPaid || 0);
+    const remaining = Number(sal.balanceRemaining || 0);
+
+    salTotals.wage += wage;
+    salTotals.deduct += deduct;
+    salTotals.allow += allow;
+    salTotals.opening += opening;
+    salTotals.bonus += bonus;
+    salTotals.payable += payable;
+    salTotals.paid += paid;
+    salTotals.remaining += remaining;
+
+    doc.rect(margin, y, contentWidth, 14).fill(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#64748b').font('Helvetica').fontSize(6.5).text((sal.weekLabel || '').slice(0, 22), margin + 6, y + 3.5, { width: 105, lineBreak: false });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7).text(sal.employeeName || '', margin + 115, y + 3.5, { width: 120, lineBreak: false });
+    doc.font('Helvetica').fontSize(6.5).fillColor('#334155').text(sal.shopName || '', margin + 240, y + 3.5, { width: 80, lineBreak: false });
+    doc.text(String(sal.workingDays || 0), margin + 325, y + 3.5, { width: 30, align: 'center', lineBreak: false });
+    doc.text(`£${wage.toFixed(2)}`, margin + 360, y + 3.5, { width: 45, align: 'right', lineBreak: false });
+    doc.fillColor(deduct > 0 ? '#dc2626' : '#64748b').text(`£${deduct.toFixed(2)}`, margin + 410, y + 3.5, { width: 45, align: 'right', lineBreak: false });
+    doc.fillColor('#0f172a').text(`£${allow.toFixed(2)}`, margin + 460, y + 3.5, { width: 45, align: 'right', lineBreak: false });
+    doc.fillColor('#64748b').text(`£${opening.toFixed(2)}`, margin + 510, y + 3.5, { width: 45, align: 'right', lineBreak: false });
+    doc.fillColor('#0f172a').text(`£${bonus.toFixed(2)}`, margin + 560, y + 3.5, { width: 40, align: 'right', lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor('#2563eb').text(`£${payable.toFixed(2)}`, margin + 605, y + 3.5, { width: 50, align: 'right', lineBreak: false });
+    doc.fillColor('#059669').text(`£${paid.toFixed(2)}`, margin + 660, y + 3.5, { width: 45, align: 'right', lineBreak: false });
+    doc.fillColor(remaining > 0 ? '#dc2626' : '#059669').text(`£${remaining.toFixed(2)}`, margin + 710, y + 3.5, { width: 45, align: 'right', lineBreak: false });
+    doc.font('Helvetica').fillColor('#64748b').text(sal.status === 'PAID' ? 'PAID' : (remaining === 0 ? 'PAID' : 'PART'), margin + 760, y + 3.5, { width: 30, align: 'center', lineBreak: false });
+    y += 14;
+  });
+
+  // Payroll Totals Row
+  doc.rect(margin, y, contentWidth, 18).fill('#1e293b');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7);
+  doc.text('TOTALS', margin + 6, y + 5, { width: 300, lineBreak: false });
+  doc.text(`£${salTotals.wage.toFixed(2)}`, margin + 360, y + 5, { width: 45, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.deduct.toFixed(2)}`, margin + 410, y + 5, { width: 45, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.allow.toFixed(2)}`, margin + 460, y + 5, { width: 45, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.opening.toFixed(2)}`, margin + 510, y + 5, { width: 45, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.bonus.toFixed(2)}`, margin + 560, y + 5, { width: 40, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.payable.toFixed(2)}`, margin + 605, y + 5, { width: 50, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.paid.toFixed(2)}`, margin + 660, y + 5, { width: 45, align: 'right', lineBreak: false });
+  doc.text(`£${salTotals.remaining.toFixed(2)}`, margin + 710, y + 5, { width: 45, align: 'right', lineBreak: false });
+  y += 18;
+  drawFooter();
+
+  // --- PAGE 4: PAYMENTS & DISBURSEMENTS REGISTER ---
+  doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+  drawPdfBanner(doc, 'System Database Backup', subtitle, `Disbursements Register (${periodLabel})`, true);
+  y = 75;
+
+  y = drawSectionBanner(`5. SALARY PAYMENTS & DISBURSEMENTS REGISTER (${periodLabel})`, `${payments.length} PAYMENTS`, y);
+
+  const drawPayHeader = () => {
+    doc.rect(margin, y, contentWidth, 16).fill('#e2e8f0');
+    doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(7.5);
+    doc.text('PAYMENT DATE', margin + 8, y + 4, { width: 85, lineBreak: false });
+    doc.text('RECEIPT ID', margin + 100, y + 4, { width: 110, lineBreak: false });
+    doc.text('WORKER NAME', margin + 215, y + 4, { width: 160, lineBreak: false });
+    doc.text('SHOP', margin + 380, y + 4, { width: 110, lineBreak: false });
+    doc.text('METHOD', margin + 495, y + 4, { width: 65, align: 'center', lineBreak: false });
+    doc.text('AMOUNT PAID', margin + 565, y + 4, { width: 75, align: 'right', lineBreak: false });
+    doc.text('ADJUSTMENT', margin + 645, y + 4, { width: 65, align: 'right', lineBreak: false });
+    doc.text('STATUS', margin + 715, y + 4, { width: 65, align: 'center', lineBreak: false });
+    y += 16;
+  };
+  drawPayHeader();
+
+  let payTotals = { cash: 0, bank: 0, total: 0, adjustments: 0 };
+
+  payments.forEach((p, idx) => {
+    if (y + 15 > 530) {
+      drawFooter();
+      doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+      drawPdfBanner(doc, 'System Database Backup', subtitle, `Disbursements Register (Cont.)`, true);
+      y = 75;
+      drawPayHeader();
+    }
+    const amt = Number(p.amount || 0);
+    const adj = Number(p.deductionAmount || 0);
+    payTotals.total += amt;
+    payTotals.adjustments += adj;
+    if (String(p.paymentMethod).toLowerCase() === 'cash') payTotals.cash += amt;
+    else payTotals.bank += amt;
+
+    doc.rect(margin, y, contentWidth, 15).fill(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#64748b').font('Helvetica').fontSize(7).text(p.dateStr || '', margin + 8, y + 3.5, { width: 85, lineBreak: false });
+    doc.text(p.receiptId || '—', margin + 100, y + 3.5, { width: 110, lineBreak: false });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text(p.employeeName || '', margin + 215, y + 3.5, { width: 160, lineBreak: false });
+    doc.font('Helvetica').fontSize(7).fillColor('#334155').text(p.shopName || '—', margin + 380, y + 3.5, { width: 110, lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor(p.paymentMethod === 'Bank' ? '#7c3aed' : '#d97706').text(p.paymentMethod || 'Cash', margin + 495, y + 3.5, { width: 65, align: 'center', lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor('#059669').text(`£${amt.toFixed(2)}`, margin + 565, y + 3.5, { width: 75, align: 'right', lineBreak: false });
+    doc.font('Helvetica').fillColor('#dc2626').text(adj > 0 ? `£${adj.toFixed(2)}` : '—', margin + 645, y + 3.5, { width: 65, align: 'right', lineBreak: false });
+    doc.fillColor('#059669').text('COMPLETED', margin + 715, y + 3.5, { width: 65, align: 'center', lineBreak: false });
+    y += 15;
+  });
+
+  // Payments Totals Row
+  doc.rect(margin, y, contentWidth, 18).fill('#1e293b');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.5);
+  doc.text(`TOTALS: CASH £${payTotals.cash.toFixed(2)} | BANK £${payTotals.bank.toFixed(2)}`, margin + 8, y + 5, { width: 500, lineBreak: false });
+  doc.text(`£${payTotals.total.toFixed(2)}`, margin + 565, y + 5, { width: 75, align: 'right', lineBreak: false });
+  doc.text(`£${payTotals.adjustments.toFixed(2)}`, margin + 645, y + 5, { width: 65, align: 'right', lineBreak: false });
+  y += 18;
+  drawFooter();
+
+  // --- PAGE 5: WORKER CLOSING BALANCES & AUDIT SIGN-OFF ---
+  doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
+  drawPdfBanner(doc, 'System Database Backup', subtitle, `Closing Ledger Balances (${periodLabel})`, true);
+  y = 75;
+
+  y = drawSectionBanner(`6. WORKERS CLOSING FINANCIAL LEDGER STATEMENT (${periodLabel})`, `${ledgerBalances.length} ACCOUNTS`, y);
+
+  doc.rect(margin, y, contentWidth, 16).fill('#e2e8f0');
+  doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(7.5);
+  doc.text('EMP ID', margin + 8, y + 4, { width: 70, lineBreak: false });
+  doc.text('WORKER NAME', margin + 85, y + 4, { width: 190, lineBreak: false });
+  doc.text('PRIMARY LOCATION', margin + 285, y + 4, { width: 130, lineBreak: false });
+  doc.text('TOTAL EARNED (£)', margin + 425, y + 4, { width: 110, align: 'right', lineBreak: false });
+  doc.text('TOTAL DISBURSED (£)', margin + 545, y + 4, { width: 110, align: 'right', lineBreak: false });
+  doc.text('CLOSING BALANCE (£)', margin + 665, y + 4, { width: 115, align: 'right', lineBreak: false });
+  y += 16;
+
+  let totalEarnedSum = 0;
+  let totalDisbursedSum = 0;
+  let totalClosingLiability = 0;
+
+  ledgerBalances.forEach((item, idx) => {
+    totalEarnedSum += Number(item.totalEarned || 0);
+    totalDisbursedSum += Number(item.totalPaid || 0);
+    totalClosingLiability += Number(item.currentBalance || 0);
+
+    doc.rect(margin, y, contentWidth, 15).fill(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.fillColor('#64748b').font('Helvetica').fontSize(7).text(item.employeeId || '', margin + 8, y + 3.5, { width: 70, lineBreak: false });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5).text(item.employeeName || '', margin + 85, y + 3.5, { width: 190, lineBreak: false });
+    doc.font('Helvetica').fontSize(7).fillColor('#334155').text(item.shopName || '—', margin + 285, y + 3.5, { width: 130, lineBreak: false });
+    doc.text(`£${(item.totalEarned || 0).toFixed(2)}`, margin + 425, y + 3.5, { width: 110, align: 'right', lineBreak: false });
+    doc.fillColor('#059669').text(`£${(item.totalPaid || 0).toFixed(2)}`, margin + 545, y + 3.5, { width: 110, align: 'right', lineBreak: false });
+    doc.font('Helvetica-Bold').fillColor((item.currentBalance || 0) > 0 ? '#dc2626' : '#059669').text(`£${(item.currentBalance || 0).toFixed(2)}`, margin + 665, y + 3.5, { width: 115, align: 'right', lineBreak: false });
+    y += 15;
+  });
+
+  // Grand Closing Totals Row
+  doc.rect(margin, y, contentWidth, 18).fill('#1e293b');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(7.5);
+  doc.text('TOTAL COMPANY FINANCIAL BALANCES', margin + 8, y + 5, { width: 350, lineBreak: false });
+  doc.text(`£${totalEarnedSum.toFixed(2)}`, margin + 425, y + 5, { width: 110, align: 'right', lineBreak: false });
+  doc.text(`£${totalDisbursedSum.toFixed(2)}`, margin + 545, y + 5, { width: 110, align: 'right', lineBreak: false });
+  doc.text(`£${totalClosingLiability.toFixed(2)}`, margin + 665, y + 5, { width: 115, align: 'right', lineBreak: false });
+  y += 28;
+
+  // OFFICIAL VERIFICATION & AUDIT CERTIFICATION BLOCK
+  const certW = 385;
+  doc.rect(margin, y, certW, 60).fillAndStroke('#f8fafc', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text(generatedBy || 'FAHAD RASHEED', margin + 12, y + 10);
+  doc.fillColor('#475569').font('Helvetica').fontSize(7.5).text('System Administrator & Financial Controller • PixxTechnologies UK', margin + 12, y + 24);
+  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUTHENTICATED SYSTEM DATABASE BACKUP', margin + 12, y + 42);
+
+  const box2X = margin + certW + 20;
+  doc.rect(box2X, y, certW, 60).fillAndStroke('#f8fafc', '#cbd5e1');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('SECURITY & INTEGRITY CERTIFICATE', box2X + 12, y + 10);
+  doc.fillColor('#475569').font('Helvetica').fontSize(7.5).text(`Archived on: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')} UTC`, box2X + 12, y + 24);
+  doc.fillColor('#2563eb').font('Helvetica-Bold').fontSize(8).text('✓ DATA INTEGRITY 100% VERIFIED & SYNCHRONIZED', box2X + 12, y + 42);
+
+  drawFooter();
+  return await sendPdfOrBuffer(res, doc, `Pixx_System_Database_Backup_${periodLabel.replace(/[\/–\s]/g, '_')}.pdf`);
+}
+
+/**
+ * Generate Excel workbook for Complete System Database Backup & Month-End Archive
+ */
+async function buildSystemBackupExcel(backupData = {}) {
+  const workbook = new ExcelJS.Workbook();
+  const {
+    period = {},
+    summary = {},
+    shops = [],
+    employees = [],
+    attendanceByWorker = [],
+    salaries = [],
+    payments = [],
+    ledgerBalances = []
+  } = backupData;
+
+  const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  const headerFont = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+
+  // Sheet 1: Executive Overview
+  const sumSheet = workbook.addWorksheet('System Overview');
+  sumSheet.columns = [{ width: 32 }, { width: 45 }];
+  sumSheet.addRow(['PIXXTECHNOLOGIES UK — SYSTEM DATABASE BACKUP', '']);
+  sumSheet.mergeCells('A1:B1');
+  sumSheet.getCell('A1').font = { name: 'Arial', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+  sumSheet.getCell('A1').fill = headerFill;
+  sumSheet.addRow(['Archive Period', period.monthLabel || 'All Data']);
+  sumSheet.addRow(['Date Range', `${period.startStr || '—'} to ${period.endStr || '—'}`]);
+  sumSheet.addRow(['Backup Scope', period.scope || 'Month']);
+  sumSheet.addRow(['Generated On (UTC)', new Date().toISOString()]);
+  sumSheet.addRow(['Total Employees', `${summary.totalEmployees || 0} (${summary.activeEmployees || 0} Active)`]);
+  sumSheet.addRow(['Total Shops', summary.totalShops || 0]);
+  sumSheet.addRow(['Total Attendance Records', summary.totalAttendanceRecords || 0]);
+  sumSheet.addRow(['Total Weekly Salaries', summary.totalWeeklySalaries || 0]);
+  sumSheet.addRow(['Total Wages Earned (£)', Number((summary.totalWagesEarned || 0).toFixed(2))]);
+  sumSheet.addRow(['Total Allowances (£)', Number((summary.totalAllowances || 0).toFixed(2))]);
+  sumSheet.addRow(['Total Bonuses (£)', Number((summary.totalBonus || 0).toFixed(2))]);
+  sumSheet.addRow(['Total Payable (£)', Number((summary.totalPayable || 0).toFixed(2))]);
+  sumSheet.addRow(['Total Payments Disbursed (£)', Number((summary.totalPaid || 0).toFixed(2))]);
+  sumSheet.addRow(['Cash Disbursed (£)', Number((summary.cashTotal || 0).toFixed(2))]);
+  sumSheet.addRow(['Bank Disbursed (£)', Number((summary.bankTotal || 0).toFixed(2))]);
+  sumSheet.addRow(['Closing Liability (£)', Number((summary.totalRemaining || 0).toFixed(2))]);
+
+  // Sheet 2: Shops
+  const shopSheet = workbook.addWorksheet('Shops');
+  shopSheet.columns = [
+    { header: 'Shop Name', key: 'name', width: 22 },
+    { header: 'Address / Location', key: 'address', width: 40 },
+    { header: 'Contact Phone', key: 'phone', width: 18 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Assigned Staff', key: 'staffCount', width: 15 }
+  ];
+  shopSheet.getRow(1).font = headerFont;
+  shopSheet.getRow(1).fill = headerFill;
+  shops.forEach(s => shopSheet.addRow({
+    name: s.name,
+    address: s.address || '—',
+    phone: s.phone || '—',
+    status: s.status || 'Active',
+    staffCount: s.staffCount || 0
+  }));
+
+  // Sheet 3: Employees
+  const empSheet = workbook.addWorksheet('Employees');
+  empSheet.columns = [
+    { header: 'Employee ID', key: 'employeeId', width: 14 },
+    { header: 'Full Name', key: 'name', width: 24 },
+    { header: 'Primary Shop', key: 'shopName', width: 18 },
+    { header: 'Role', key: 'role', width: 16 },
+    { header: 'Daily Wage (£)', key: 'dailyWage', width: 15 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Opening Balance (£)', key: 'openingBalance', width: 20 },
+    { header: 'Current Balance (£)', key: 'currentBalance', width: 20 }
+  ];
+  empSheet.getRow(1).font = headerFont;
+  empSheet.getRow(1).fill = headerFill;
+  employees.forEach(e => empSheet.addRow({
+    employeeId: e.employeeId,
+    name: e.name,
+    shopName: e.shopName || '—',
+    role: e.role || 'WORKER',
+    dailyWage: Number((e.dailyWage || 0).toFixed(2)),
+    status: e.status || 'Active',
+    openingBalance: Number((e.openingBalance || 0).toFixed(2)),
+    currentBalance: Number((e.currentBalance || 0).toFixed(2))
+  }));
+
+  // Sheet 4: Monthly Attendance
+  const attSheet = workbook.addWorksheet('Monthly Attendance');
+  attSheet.columns = [
+    { header: 'Worker Name', key: 'name', width: 24 },
+    { header: 'Primary Shop', key: 'shop', width: 18 },
+    { header: 'Total Shifts', key: 'shifts', width: 12 },
+    { header: 'Present', key: 'present', width: 10 },
+    { header: 'Late', key: 'late', width: 10 },
+    { header: 'Half Day', key: 'half', width: 10 },
+    { header: 'Absent / Off', key: 'absent', width: 12 },
+    { header: 'Hours Worked', key: 'hours', width: 14 },
+    { header: 'Late Deduct (£)', key: 'deduct', width: 15 },
+    { header: 'Attendance Pay (£)', key: 'pay', width: 18 }
+  ];
+  attSheet.getRow(1).font = headerFont;
+  attSheet.getRow(1).fill = headerFill;
+  attendanceByWorker.forEach(a => attSheet.addRow({
+    name: a.employeeName,
+    shop: a.shopName || '—',
+    shifts: a.shiftsCount || 0,
+    present: a.present || 0,
+    late: a.late || 0,
+    half: a.half || 0,
+    absent: a.absent || 0,
+    hours: Number((a.hours || 0).toFixed(1)),
+    deduct: Number((a.lateDeductions || 0).toFixed(2)),
+    pay: Number((a.attendancePay || 0).toFixed(2))
+  }));
+
+  // Sheet 5: Weekly Salaries
+  const salSheet = workbook.addWorksheet('Weekly Salaries');
+  salSheet.columns = [
+    { header: 'Week Label', key: 'weekLabel', width: 24 },
+    { header: 'Worker Name', key: 'name', width: 22 },
+    { header: 'Shop', key: 'shop', width: 16 },
+    { header: 'Days', key: 'days', width: 8 },
+    { header: 'Attendance Wage (£)', key: 'wage', width: 18 },
+    { header: 'Deductions (£)', key: 'deduct', width: 15 },
+    { header: 'Allowances (£)', key: 'allow', width: 15 },
+    { header: 'Opening Bal (£)', key: 'opening', width: 15 },
+    { header: 'Bonus (£)', key: 'bonus', width: 12 },
+    { header: 'Total Payable (£)', key: 'payable', width: 16 },
+    { header: 'Total Paid (£)', key: 'paid', width: 15 },
+    { header: 'Remaining (£)', key: 'remaining', width: 15 },
+    { header: 'Status', key: 'status', width: 14 }
+  ];
+  salSheet.getRow(1).font = headerFont;
+  salSheet.getRow(1).fill = headerFill;
+  salaries.forEach(s => salSheet.addRow({
+    weekLabel: s.weekLabel,
+    name: s.employeeName,
+    shop: s.shopName,
+    days: s.workingDays || 0,
+    wage: Number((s.attendanceSalary || s.netAttendancePay || 0).toFixed(2)),
+    deduct: Number((s.deductions || s.manualDeductions || 0).toFixed(2)),
+    allow: Number((s.allowances || (s.travelAllowance || 0) + (s.otherAllowances || 0)).toFixed(2)),
+    opening: Number((s.openingBalance || 0).toFixed(2)),
+    bonus: Number((s.bonus || 0).toFixed(2)),
+    payable: Number((s.totalPayable || 0).toFixed(2)),
+    paid: Number((s.totalPaid || 0).toFixed(2)),
+    remaining: Number((s.balanceRemaining || 0).toFixed(2)),
+    status: s.status || 'FINALIZED'
+  }));
+
+  // Sheet 6: Payments
+  const paySheet = workbook.addWorksheet('Disbursements');
+  paySheet.columns = [
+    { header: 'Date', key: 'date', width: 14 },
+    { header: 'Receipt ID', key: 'receiptId', width: 22 },
+    { header: 'Worker Name', key: 'name', width: 22 },
+    { header: 'Shop', key: 'shop', width: 16 },
+    { header: 'Method', key: 'method', width: 12 },
+    { header: 'Amount Paid (£)', key: 'amount', width: 16 },
+    { header: 'Deduction / Write-off (£)', key: 'deduct', width: 22 },
+    { header: 'Disbursed By', key: 'paidBy', width: 18 },
+    { header: 'Notes', key: 'notes', width: 28 }
+  ];
+  paySheet.getRow(1).font = headerFont;
+  paySheet.getRow(1).fill = headerFill;
+  payments.forEach(p => paySheet.addRow({
+    date: p.dateStr,
+    receiptId: p.receiptId,
+    name: p.employeeName,
+    shop: p.shopName || '—',
+    method: p.paymentMethod || 'Cash',
+    amount: Number((p.amount || 0).toFixed(2)),
+    deduct: Number((p.deductionAmount || 0).toFixed(2)),
+    paidBy: p.paidBy || 'Admin',
+    notes: p.notes || ''
+  }));
+
+  // Sheet 7: Ledger Balances
+  const ledSheet = workbook.addWorksheet('Ledger Balances');
+  ledSheet.columns = [
+    { header: 'Employee ID', key: 'id', width: 14 },
+    { header: 'Worker Name', key: 'name', width: 22 },
+    { header: 'Primary Shop', key: 'shop', width: 18 },
+    { header: 'Total Earned (£)', key: 'earned', width: 16 },
+    { header: 'Total Paid (£)', key: 'paid', width: 16 },
+    { header: 'Closing Balance (£)', key: 'balance', width: 18 }
+  ];
+  ledSheet.getRow(1).font = headerFont;
+  ledSheet.getRow(1).fill = headerFill;
+  ledgerBalances.forEach(l => ledSheet.addRow({
+    id: l.employeeId,
+    name: l.employeeName,
+    shop: l.shopName || '—',
+    earned: Number((l.totalEarned || 0).toFixed(2)),
+    paid: Number((l.totalPaid || 0).toFixed(2)),
+    balance: Number((l.currentBalance || 0).toFixed(2))
+  }));
+
+  return workbook;
+}
+
 module.exports = {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
@@ -2373,6 +2974,8 @@ module.exports = {
   buildDistributorSalaryPDF,
   buildLedgerExcel,
   buildLedgerPDF,
+  buildSystemBackupPDF,
+  buildSystemBackupExcel,
   SHOP_COLORS,
   getShopColor,
   sortDailyAttendanceRecords

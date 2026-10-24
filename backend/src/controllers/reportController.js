@@ -33,6 +33,8 @@ const {
   buildPaymentsPDF,
   buildLedgerExcel,
   buildLedgerPDF,
+  buildSystemBackupPDF,
+  buildSystemBackupExcel,
   getShopColor,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
@@ -2924,5 +2926,339 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to retrieve company payroll summary.');
+  }
+};
+
+// ============================================================
+// 8. SYSTEM DATABASE BACKUP & MONTH-END ARCHIVE (Admin only)
+// ============================================================
+
+async function getSystemBackupData(query = {}) {
+  const { month, year, scope } = query;
+  const now = new Date();
+
+  let targetYear = year ? Number(year) : now.getFullYear();
+  let targetMonth;
+  const isAllTime = scope === 'all';
+
+  const monthsMap = {
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
+  };
+
+  if (month === 'last') {
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    targetMonth = lastMonthDate.getMonth() + 1;
+    targetYear = lastMonthDate.getFullYear();
+  } else if (month && monthsMap[String(month).toLowerCase().slice(0, 3)]) {
+    targetMonth = monthsMap[String(month).toLowerCase().slice(0, 3)];
+  } else if (month && !isNaN(Number(month))) {
+    targetMonth = Number(month);
+  } else {
+    targetMonth = now.getMonth() + 1;
+  }
+
+  let period;
+  let startStr, endStr, monthStart, monthEnd, monthLabel;
+
+  if (isAllTime) {
+    period = {
+      scope: 'all',
+      targetYear,
+      targetMonth,
+      monthLabel: 'Full Lifetime',
+      startStr: 'All Records',
+      endStr: 'All Records'
+    };
+  } else {
+    monthStart = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
+    monthEnd = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
+    const monthName = monthStart.toLocaleString('en-US', { timeZone: 'UTC', month: 'short' });
+    monthLabel = `${monthName}-${String(targetYear).slice(-2)}`;
+    startStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+    endStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    period = {
+      scope: 'month',
+      targetYear,
+      targetMonth,
+      monthName,
+      monthLabel,
+      startStr,
+      endStr,
+      monthStart,
+      monthEnd
+    };
+  }
+
+  // 1. Fetch Shops
+  const rawShops = await Shop.find().sort({ name: 1 }).lean();
+  const rawEmployees = await Employee.find().populate('assignedShop').sort({ name: 1 }).lean();
+
+  const shops = rawShops.map(s => {
+    const count = rawEmployees.filter(e => e.assignedShop && String(e.assignedShop._id || e.assignedShop) === String(s._id)).length;
+    return {
+      _id: s._id,
+      name: s.name,
+      address: s.address || '',
+      phone: s.phone || '',
+      status: s.status || 'Active',
+      staffCount: count
+    };
+  });
+
+  // 2. Fetch Ledger running balances for all employees
+  const ledgerBalances = await Promise.all(rawEmployees.map(async emp => {
+    const lastTx = await LedgerTransaction.findOne({ employee: emp._id }).sort({ date: -1, createdAt: -1 });
+    const balance = lastTx ? Number(lastTx.runningBalance || 0) : Number(emp.openingBalance || 0);
+    const allTx = await LedgerTransaction.find({ employee: emp._id });
+    const totalEarned = allTx.reduce((sum, t) => sum + (Number(t.amountEarned) || 0), 0);
+    const totalPaid = allTx.reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
+    return {
+      _id: emp._id,
+      employeeId: emp.employeeId,
+      employeeName: emp.name,
+      shopName: emp.assignedShop?.name || 'Unassigned',
+      dailyWage: emp.dailyWage || 0,
+      role: emp.role || 'WORKER',
+      status: emp.status || 'Active',
+      openingBalance: emp.openingBalance || 0,
+      currentBalance: balance,
+      totalEarned,
+      totalPaid
+    };
+  }));
+
+  const employees = ledgerBalances.map(l => ({
+    _id: l._id,
+    employeeId: l.employeeId,
+    name: l.employeeName,
+    shopName: l.shopName,
+    role: l.role,
+    dailyWage: l.dailyWage,
+    status: l.status,
+    openingBalance: l.openingBalance,
+    currentBalance: l.currentBalance
+  }));
+
+  // 3. Attendance Query
+  const attQuery = isAllTime ? {} : { dateString: { $gte: startStr, $lte: endStr } };
+  const rawAttendances = await Attendance.find(attQuery).populate('shop employee').sort({ dateString: 1 }).lean();
+
+  // Aggregate attendance by worker
+  const attMap = new Map();
+  rawEmployees.forEach(emp => {
+    attMap.set(String(emp._id), {
+      employeeId: emp.employeeId,
+      employeeName: emp.name,
+      shopName: emp.assignedShop?.name || 'Unassigned',
+      shiftsCount: 0,
+      present: 0,
+      late: 0,
+      half: 0,
+      absent: 0,
+      hours: 0,
+      lateDeductions: 0,
+      attendancePay: 0
+    });
+  });
+
+  rawAttendances.forEach(a => {
+    const empKey = String(a.employee?._id || a.employee);
+    if (!attMap.has(empKey)) {
+      attMap.set(empKey, {
+        employeeId: a.employeeId || '',
+        employeeName: a.employeeName || 'Worker',
+        shopName: a.shopName || a.shop?.name || 'Shop',
+        shiftsCount: 0,
+        present: 0,
+        late: 0,
+        half: 0,
+        absent: 0,
+        hours: 0,
+        lateDeductions: 0,
+        attendancePay: 0
+      });
+    }
+    const item = attMap.get(empKey);
+    item.shiftsCount += 1;
+    if (a.status === 'Present') item.present += 1;
+    else if (a.status === 'Late') item.late += 1;
+    else if (a.status === 'Half') item.half += 1;
+    else if (a.status === 'Absent') item.absent += 1;
+
+    item.hours += Number(a.actualHours || 0);
+
+    const wage = resolveDailyWage(a.dailyWage, a.employee?.dailyWage);
+    let calc = { lateDeduction: 0, attendancePay: 0 };
+    if (a.status !== 'Absent') {
+      calc = calculateAttendanceRecord({
+        dailyWage: wage,
+        shiftStart: a.shiftStart || '09:00',
+        shiftEnd: a.shiftEnd || '19:00',
+        timeReached: a.timeReached || a.shiftStart || '09:00',
+        workerEndTime: a.workerEndTime || a.shiftEnd || '19:00',
+        status: a.status,
+        gracePeriodMinutes: 15
+      });
+    }
+    item.lateDeductions += calc.lateDeduction || 0;
+    item.attendancePay += calc.attendancePay || 0;
+  });
+
+  const attendanceByWorker = Array.from(attMap.values()).filter(a => a.shiftsCount > 0);
+
+  // 4. Weekly Salaries Query
+  let salQuery = {};
+  if (!isAllTime) {
+    salQuery = {
+      $or: [
+        { weekEndDate: { $gte: monthStart, $lte: monthEnd } },
+        { weekStartDate: { $gte: monthStart, $lte: monthEnd } }
+      ]
+    };
+  }
+  const rawSalaries = await WeeklySalary.find(salQuery).populate('employee shop').sort({ weekStartDate: 1 }).lean();
+
+  const salaries = rawSalaries.map(s => {
+    const weeklyWages = Number(s.attendanceSalary ?? (s.netAttendancePay || s.grossDailyWages || 0));
+    const deductions = Number(s.manualDeductions || s.lateDeductions || 0);
+    const allowances = Number((s.travelAllowance || 0) + (s.otherAllowances || 0));
+    const openingBal = Number(s.openingBalance || 0);
+    const bonus = Number(s.bonus || 0);
+    const payable = Number(s.totalPayable || (weeklyWages + allowances + openingBal + bonus - deductions));
+    const paid = Number(s.totalPaid || 0);
+    const remaining = Number(s.balanceRemaining || 0);
+
+    return {
+      weekLabel: s.weekLabel,
+      employeeName: s.employeeName,
+      shopName: s.shopName,
+      workingDays: s.workingDays || 0,
+      attendanceSalary: weeklyWages,
+      deductions,
+      allowances,
+      openingBalance: openingBal,
+      bonus,
+      totalPayable: payable,
+      totalPaid: paid,
+      balanceRemaining: remaining,
+      status: s.status || (remaining === 0 ? 'PAID' : 'FINALIZED')
+    };
+  });
+
+  // 5. Salary Payments Query
+  let payQuery = {};
+  if (!isAllTime) {
+    payQuery = { paymentDate: { $gte: monthStart, $lte: monthEnd } };
+  }
+  const rawPayments = await SalaryPayment.find(payQuery).populate('employee').sort({ paymentDate: -1 }).lean();
+
+  const payments = rawPayments.map(p => ({
+    dateStr: p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB') : '',
+    receiptId: p.clientReference || String(p._id).slice(-8).toUpperCase(),
+    employeeName: p.employeeName || p.employee?.name || 'Worker',
+    shopName: p.shopName || p.employee?.assignedShop?.name || 'Shop',
+    paymentMethod: p.paymentMethod || 'Cash',
+    amount: Number(p.amount || 0),
+    deductionAmount: Number(p.deductionAmount || 0),
+    paidBy: p.paidByName || 'Admin',
+    notes: p.notes || '',
+    status: 'COMPLETED'
+  }));
+
+  // 6. Summary Totals
+  const totalWagesEarned = salaries.reduce((sum, s) => sum + s.attendanceSalary, 0) || attendanceByWorker.reduce((sum, a) => sum + a.attendancePay, 0);
+  const totalAllowances = salaries.reduce((sum, s) => sum + s.allowances, 0);
+  const totalBonus = salaries.reduce((sum, s) => sum + s.bonus, 0);
+  const totalPayable = salaries.reduce((sum, s) => sum + s.totalPayable, 0);
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const cashTotal = payments.filter(p => String(p.paymentMethod).toLowerCase() === 'cash').reduce((sum, p) => sum + p.amount, 0);
+  const bankTotal = payments.filter(p => String(p.paymentMethod).toLowerCase() === 'bank').reduce((sum, p) => sum + p.amount, 0);
+  const totalRemaining = ledgerBalances.reduce((sum, l) => sum + l.currentBalance, 0);
+
+  const summary = {
+    totalEmployees: employees.length,
+    activeEmployees: employees.filter(e => e.status === 'Active').length,
+    totalShops: shops.length,
+    activeShops: shops.filter(s => s.status === 'Active').length,
+    totalAttendanceRecords: rawAttendances.length,
+    totalWeeklySalaries: salaries.length,
+    totalPaymentsCount: payments.length,
+    totalWagesEarned,
+    totalAllowances,
+    totalBonus,
+    totalPayable,
+    totalPaid,
+    cashTotal,
+    bankTotal,
+    totalRemaining,
+    totalOutstandingLiability: totalRemaining
+  };
+
+  return {
+    period,
+    summary,
+    shops,
+    employees,
+    attendanceByWorker,
+    salaries,
+    payments,
+    ledgerBalances
+  };
+}
+
+exports.getSystemBackupSummary = async (req, res) => {
+  try {
+    const backupData = await getSystemBackupData(req.query);
+    res.json({
+      success: true,
+      period: backupData.period,
+      summary: backupData.summary,
+      shopsCount: backupData.shops.length,
+      employeesCount: backupData.employees.length,
+      attendanceCount: backupData.attendanceByWorker.length,
+      salariesCount: backupData.salaries.length,
+      paymentsCount: backupData.payments.length
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to generate system backup summary.');
+  }
+};
+
+exports.exportSystemBackupPDF = async (req, res) => {
+  try {
+    const backupData = await getSystemBackupData(req.query);
+    await logAction({
+      user: req.user,
+      action: 'SYSTEM_DATABASE_BACKUP_PDF',
+      recordType: 'SystemBackup',
+      details: `Generated complete system database backup PDF for ${backupData.period.monthLabel}`,
+      req
+    });
+    await buildSystemBackupPDF(res, backupData, req.user?.name || 'Fahad Rasheed');
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to export system database backup PDF.');
+  }
+};
+
+exports.exportSystemBackupExcel = async (req, res) => {
+  try {
+    const backupData = await getSystemBackupData(req.query);
+    const workbook = await buildSystemBackupExcel(backupData);
+    await logAction({
+      user: req.user,
+      action: 'SYSTEM_DATABASE_BACKUP_EXCEL',
+      recordType: 'SystemBackup',
+      details: `Generated complete system database backup Excel for ${backupData.period.monthLabel}`,
+      req
+    });
+    const filename = `Pixx_System_Database_Backup_${(backupData.period.monthLabel || 'All').replace(/[\/–\s]/g, '_')}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to export system database backup Excel.');
   }
 };

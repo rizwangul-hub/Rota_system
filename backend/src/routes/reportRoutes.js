@@ -266,4 +266,29 @@ router.get(
   reportController.getCompanyPayrollSummary
 );
 
+// ============================================================
+// 8. SYSTEM DATABASE BACKUP & MONTH-END ARCHIVE (Admin only)
+// ============================================================
+
+router.get(
+  '/system-backup/summary',
+  authenticate,
+  authorize('ADMIN'),
+  reportController.getSystemBackupSummary
+);
+
+router.get(
+  '/system-backup/pdf',
+  authenticate,
+  authorize('ADMIN'),
+  reportController.exportSystemBackupPDF
+);
+
+router.get(
+  '/system-backup/excel',
+  authenticate,
+  authorize('ADMIN'),
+  reportController.exportSystemBackupExcel
+);
+
 module.exports = router;

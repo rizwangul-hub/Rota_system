@@ -48,8 +48,6 @@ export default function SalaryDistributor() {
   // Pay Modal state
   const [payModalSalary, setPayModalSalary] = useState(null);
   const [payAmount, setPayAmount] = useState('');
-  const [deductAmount, setDeductAmount] = useState('');
-  const [deductReason, setDeductReason] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [payNotes, setPayNotes] = useState('');
@@ -145,14 +143,12 @@ export default function SalaryDistributor() {
   const openPayModal = (salary) => {
     setPayModalSalary(salary);
     const openingBal = Number(salary.openingBalance || salary.employee?.openingBalance || 0);
-    const weeklySalary = Number(salary.attendanceSalary ?? (salary.weeklySalary || salary.finalSalary || 0));
+    const weeklySalary = Number(salary.weeklySalary || salary.finalSalary || 0);
     const bonus = Number(salary.bonus || 0);
     const totalPayable = Number(salary.totalPayable || (weeklySalary + openingBal + bonus));
     const totalPaid = Number(salary.totalPaid || 0);
     const outstanding = Number(salary.balanceRemaining > 0 ? salary.balanceRemaining : Math.max(0, totalPayable - totalPaid));
     setPayAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
-    setDeductAmount('');
-    setDeductReason('');
     const todayStr = new Date().toLocaleDateString('en-CA');
     setPaymentDate(todayStr >= '2026-10-11' ? todayStr : '2026-10-11');
     setPaymentMethod('Cash');
@@ -162,29 +158,15 @@ export default function SalaryDistributor() {
   const handleConfirmPayment = async (e) => {
     e.preventDefault();
     if (!payModalSalary) return;
-    const amount = Number(payAmount || 0);
-    const deduct = Number(deductAmount || 0);
-    const outstanding = Number(payModalSalary.balanceRemaining || 0);
-
-    if (amount <= 0 && deduct <= 0) {
-      alert('Please enter an Amount to Submit or a Deduct / Adjust Amount.');
+    const amount = Number(payAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > Number(payModalSalary.balanceRemaining || 0)) {
+      alert(`Enter an amount between £0.01 and the outstanding £${Number(payModalSalary.balanceRemaining || 0).toFixed(2)}.`);
       return;
     }
-    if (amount < 0 || deduct < 0) {
-      alert('Amounts cannot be negative.');
-      return;
-    }
-    if (amount + deduct > outstanding + 0.005) {
-      alert(`Combined payment (£${amount.toFixed(2)}) and deduction (£${deduct.toFixed(2)}) cannot exceed outstanding balance of £${outstanding.toFixed(2)}.`);
-      return;
-    }
-
     setIsPaying(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/salaries/${payModalSalary._id}/pay`, {
         amount,
-        deductionAmount: deduct,
-        deductionReason: deductReason || 'Rounding adjustment / write-off',
         paymentDate,
         paymentMethod,
         notes: payNotes,
@@ -192,13 +174,10 @@ export default function SalaryDistributor() {
       });
       if (res.data.success) {
         const openingBal = Number(payModalSalary.openingBalance || payModalSalary.employee?.openingBalance || 0);
-        const weeklySalary = Number(payModalSalary.attendanceSalary ?? (payModalSalary.weeklySalary || payModalSalary.finalSalary || 0));
+        const weeklySalary = Number(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0);
         const bonus = Number(payModalSalary.bonus || 0);
         const totalPayable = Number(payModalSalary.totalPayable || (weeklySalary + openingBal + bonus));
         const createdPaymentId = res.data.payment?._id || res.data.receipt?.paymentId;
-        const totalSettled = amount + deduct;
-        const newRemaining = Math.max(0, (payModalSalary.balanceRemaining || 0) - totalSettled);
-
         setPaymentReceipt(res.data.receipt || {
           paymentId: createdPaymentId,
           employeeName: payModalSalary.employeeName,
@@ -208,15 +187,14 @@ export default function SalaryDistributor() {
           bonus,
           totalPayable,
           paymentAmount: amount,
-          deductionAmount: deduct,
           paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
           paymentMethod,
           notes: payNotes,
           previousPaid: payModalSalary.totalPaid,
           newTotalPaid: (payModalSalary.totalPaid || 0) + amount,
-          remainingOutstanding: newRemaining,
-          paidByName: 'Fahad Rasheed',
-          status: newRemaining === 0 ? 'PAID' : 'PARTIALLY_PAID'
+          remainingOutstanding: Math.max(0, (payModalSalary.balanceRemaining || 0) - amount),
+          paidByName: 'Arsalan',
+          status: Math.max(0, (payModalSalary.balanceRemaining || 0) - amount) === 0 ? 'PAID' : 'PARTIALLY_PAID'
         });
         setPayModalSalary(null);
         await fetchDistributorData();
@@ -716,10 +694,9 @@ export default function SalaryDistributor() {
               const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID' || s.status === 'Paid';
               const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
               const openingBal = Number(s.openingBalance || 0);
-              const weeklySalary = Number(s.attendanceSalary ?? (s.weeklySalaryOverride ?? s.netAttendancePay ?? s.weeklySalary ?? s.finalSalary ?? 0));
-              const allowance = Number(s.allowance ?? ((s.travelAllowance || 0) + (s.otherAllowances || 0)));
+              const weeklySalary = Number(s.weeklySalary || s.finalSalary || 0);
               const bonus = Number(s.bonus || 0);
-              const totalPayable = Number(s.totalPayable || (weeklySalary + allowance + openingBal + bonus));
+              const totalPayable = Number(s.totalPayable || (weeklySalary + openingBal + bonus));
               const totalPaid = Number(s.totalPaid || 0);
               const balanceRemaining = Number(s.balanceRemaining || 0);
 
@@ -783,15 +760,9 @@ export default function SalaryDistributor() {
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748b' }}>Attendance Wages:</span>
+                      <span style={{ color: '#64748b' }}>Weekly Salary:</span>
                       <strong style={{ color: '#0f172a' }}>£{weeklySalary.toFixed(2)}</strong>
                     </div>
-                    {allowance > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>Allowance:</span>
-                        <strong style={{ color: '#0284c7' }}>+£{allowance.toFixed(2)}</strong>
-                      </div>
-                    )}
                     {openingBal > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
@@ -881,9 +852,9 @@ export default function SalaryDistributor() {
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Wage</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Deduct.</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Salary</th>
-                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Allowance</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Opening</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Bonus</th>
+                  <th style={{ textAlign: 'right', padding: '8px 8px', minWidth: '85px' }}>Payable</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Paid</th>
                   <th style={{ textAlign: 'right', padding: '8px 8px', minWidth: '85px' }}>Remaining</th>
                   <th style={{ textAlign: 'center', padding: '8px 6px', minWidth: '95px' }}>Status</th>
@@ -941,16 +912,7 @@ export default function SalaryDistributor() {
                         )}
                       </td>
                       <td style={{ textAlign: 'right', padding: '8px 6px', fontWeight: 600, color: '#0f172a' }}>
-                        £{(s.attendanceSalary ?? (s.weeklySalaryOverride ?? s.netAttendancePay ?? s.weeklySalary ?? s.finalSalary ?? 0)).toFixed(2)}
-                      </td>
-                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
-                        {(s.allowance || ((s.travelAllowance || 0) + (s.otherAllowances || 0))) > 0 ? (
-                          <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                            +£{(s.allowance || ((s.travelAllowance || 0) + (s.otherAllowances || 0))).toFixed(2)}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#94a3b8' }}>£0.00</span>
-                        )}
+                        £{(s.weeklySalary || s.finalSalary || 0).toFixed(2)}
                       </td>
                       <td style={{ textAlign: 'right', padding: '8px 6px' }}>
                         {(s.openingBalance || 0) > 0 ? (
@@ -969,6 +931,9 @@ export default function SalaryDistributor() {
                         ) : (
                           <span style={{ color: '#94a3b8' }}>£0.00</span>
                         )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 8px', fontWeight: 700, color: '#2563eb' }}>
+                        £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0) + (s.bonus || 0))).toFixed(2)}
                       </td>
                       <td style={{ textAlign: 'right', padding: '8px 6px' }}>
                         {(s.totalPaid || 0) > 0 ? (
@@ -1159,15 +1124,9 @@ export default function SalaryDistributor() {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                    <span style={{ color: '#64748b' }}>Attendance Wages:</span>
-                    <strong style={{ color: '#0f172a' }}>£{(payModalSalary.attendanceSalary ?? (payModalSalary.weeklySalary || payModalSalary.finalSalary || 0)).toFixed(2)}</strong>
+                    <span style={{ color: '#64748b' }}>Weekly Salary:</span>
+                    <strong style={{ color: '#0f172a' }}>£{(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0).toFixed(2)}</strong>
                   </div>
-                  {(payModalSalary.allowance || ((payModalSalary.travelAllowance || 0) + (payModalSalary.otherAllowances || 0))) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-                      <span style={{ color: '#64748b' }}>Allowance:</span>
-                      <strong style={{ color: '#0284c7' }}>+£{(payModalSalary.allowance || ((payModalSalary.travelAllowance || 0) + (payModalSalary.otherAllowances || 0))).toFixed(2)}</strong>
-                    </div>
-                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
                     <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
                     <strong style={{ color: '#7c3aed' }}>+£{(payModalSalary.openingBalance || 0).toFixed(2)}</strong>
@@ -1234,94 +1193,21 @@ export default function SalaryDistributor() {
                       >
                         Pay Half (£{(payModalSalary.balanceRemaining / 2).toFixed(2)})
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-xs"
-                        onClick={() => setPayAmount('0.00')}
-                        style={{ fontSize: '11px', padding: '3px 8px', background: '#f8fafc', color: '#64748b', borderColor: '#cbd5e1', fontWeight: 600 }}
-                      >
-                        £0 (Deduct Only)
-                      </button>
                     </div>
                   </div>
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
+                    min="0.01"
                     max={payModalSalary.balanceRemaining}
                     className="form-input"
                     style={{ fontSize: '16px', fontWeight: 700, color: '#059669' }}
                     value={payAmount}
                     onChange={(e) => setPayAmount(e.target.value)}
-                    placeholder="0.00"
+                    required
                   />
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                    Enter cash/bank payout amount. Enter £0 if you only want to deduct or adjust leftover balance.
-                  </div>
-                </div>
-
-                {/* Adjustment / Deduct from Balance Section */}
-                <div style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #86efac',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  marginBottom: '14px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label className="form-label" style={{ fontWeight: 700, margin: 0, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-                      <span>✂️ Adjustment / Deduct Amount (£)</span>
-                    </label>
-                    {/* Quick Button to deduct whatever is leftover */}
-                    {Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0) > 0.001 && (
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-xs"
-                        onClick={() => {
-                          const leftover = Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0));
-                          setDeductAmount(leftover.toFixed(2));
-                        }}
-                        style={{
-                          fontSize: '11px',
-                          padding: '3px 8px',
-                          background: '#ecfdf5',
-                          color: '#059669',
-                          borderColor: '#a7f3d0',
-                          fontWeight: 700
-                        }}
-                        title="Click to deduct all remaining balance"
-                      >
-                        Deduct Leftover (£{Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)).toFixed(2)})
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#15803d', marginBottom: '8px' }}>
-                    Remove leftover £1 - £2 or odd balance directly from remaining and worker ledger.
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '8px' }}>
-                    <div>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max={payModalSalary.balanceRemaining}
-                        placeholder="0.00"
-                        className="form-input"
-                        style={{ fontSize: '15px', fontWeight: 700, color: '#dc2626' }}
-                        value={deductAmount}
-                        onChange={(e) => setDeductAmount(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        placeholder="Reason (e.g. Rounding off / waived leftover £1 - £2)"
-                        className="form-input"
-                        style={{ fontSize: '12.5px' }}
-                        value={deductReason}
-                        onChange={(e) => setDeductReason(e.target.value)}
-                      />
-                    </div>
+                    You can pay full, half, or any custom partial amount now and pay the remaining balance later.
                   </div>
                 </div>
 
@@ -1344,43 +1230,36 @@ export default function SalaryDistributor() {
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Paid cash at shop, leftover adjusted"
+                    placeholder="e.g. Paid half salary, remaining will be given later"
                     value={payNotes}
                     onChange={(e) => setPayNotes(e.target.value)}
                   />
                 </div>
 
                 {/* Live Balance Preview Calculation */}
-                {(payAmount || deductAmount) && (
+                {payAmount && (
                   <div style={{
-                    background: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))) > 0 ? '#fffbeb' : '#ecfdf5',
-                    border: `1px solid ${Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))) > 0 ? '#fde68a' : '#a7f3d0'}`,
+                    background: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#fffbeb' : '#ecfdf5',
+                    border: `1px solid ${Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#fde68a' : '#a7f3d0'}`,
                     padding: '12px 16px',
-                    borderRadius: '8px',
-                    marginBottom: '10px'
+                    borderRadius: '8px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                      <span style={{ color: '#475569' }}>Payout Payment ({paymentDate}):</span>
+                      <span style={{ color: '#475569' }}>Submitting Payout ({paymentDate}):</span>
                       <strong style={{ color: '#059669' }}>£{Number(payAmount || 0).toFixed(2)}</strong>
                     </div>
-                    {Number(deductAmount || 0) > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px' }}>
-                        <span style={{ color: '#dc2626' }}>Balance Deduction / Write-off:</span>
-                        <strong style={{ color: '#dc2626' }}>-£{Number(deductAmount || 0).toFixed(2)}</strong>
-                      </div>
-                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '6px', borderTop: '1px dashed #cbd5e1', paddingTop: '6px' }}>
-                      <span style={{ fontWeight: 600, color: '#1e293b' }}>Remaining Balance After Action:</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>Remaining Balance After Payment:</span>
                       <strong style={{
                         fontSize: '15px',
-                        color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))) > 0 ? '#d97706' : '#059669'
+                        color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#d97706' : '#059669'
                       }}>
-                        £{Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))).toFixed(2)}
+                        £{Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)).toFixed(2)}
                       </strong>
                     </div>
-                    <div style={{ fontSize: '12px', marginTop: '6px', color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))) > 0 ? '#b45309' : '#047857' }}>
-                      {Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))) > 0
-                        ? `ℹ️ Worker will have £${Math.max(0, Number(payModalSalary.balanceRemaining || 0) - (Number(payAmount || 0) + Number(deductAmount || 0))).toFixed(2)} remaining. You can pay or adjust the remaining balance at another time.`
+                    <div style={{ fontSize: '12px', marginTop: '6px', color: Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? '#b45309' : '#047857' }}>
+                      {Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0
+                        ? `ℹ️ Worker will have £${Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)).toFixed(2)} remaining. You can pay the remaining amount at another time.`
                         : '✓ Entire salary cleared! Status will be marked as FULLY PAID.'}
                     </div>
                   </div>
@@ -1390,25 +1269,8 @@ export default function SalaryDistributor() {
                 <button type="button" className="btn btn-outline" onClick={() => setPayModalSalary(null)}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="btn btn-success btn-lg"
-                  disabled={isPaying || (Number(payAmount || 0) <= 0 && Number(deductAmount || 0) <= 0)}
-                  style={{
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <HandCoins size={16} />
-                  {isPaying ? 'Processing...' : (
-                    Number(payAmount || 0) > 0 && Number(deductAmount || 0) > 0
-                      ? `Confirm Pay (£${Number(payAmount).toFixed(2)}) & Deduct (£${Number(deductAmount).toFixed(2)})`
-                      : Number(payAmount || 0) > 0
-                        ? `Submit Payment (£${Number(payAmount).toFixed(2)})`
-                        : `Confirm Deduction (£${Number(deductAmount).toFixed(2)})`
-                  )}
+                <button type="submit" className="btn btn-success btn-lg" disabled={isPaying} style={{ fontWeight: 700 }}>
+                  {isPaying ? 'Submitting...' : Math.max(0, Number(payModalSalary.balanceRemaining || 0) - Number(payAmount || 0)) > 0 ? `Submit Partial Payment (£${Number(payAmount || 0).toFixed(2)})` : `Submit Full Payment (£${Number(payAmount || 0).toFixed(2)})`}
                 </button>
               </div>
             </form>
