@@ -249,6 +249,33 @@ export default function ReportsPage() {
     }
   };
 
+  const handleDownloadBackup = async (format = 'pdf', customMonth = null, customScope = null) => {
+    const key = `backup_${format}_${customMonth || 'selected'}_${customScope || 'scope'}`;
+    setDownloadingBackup(key);
+    setErrorMsg('');
+    try {
+      let monthParam;
+      if (customMonth === 'last') {
+        monthParam = 'last';
+      } else if (customMonth) {
+        monthParam = customMonth;
+      } else {
+        monthParam = monthOptions.indexOf(selectedMonth) + 1;
+      }
+      const scope = customScope || (customMonth === 'all' ? 'all' : 'month');
+      const filename = `Pixx_System_Database_Backup_${scope === 'all' ? 'Full' : (customMonth === 'last' ? 'Last_Month' : `${selectedMonth}_${selectedYear}`)}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      await downloadReportFile(`/reports/system-backup/${format}`, {
+        month: monthParam,
+        year: selectedYear,
+        scope
+      }, filename);
+    } catch (error) {
+      setErrorMsg(error.message || `Unable to download system database backup ${format.toUpperCase()}.`);
+    } finally {
+      setDownloadingBackup('');
+    }
+  };
+
   const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const yearOptions = [2025, 2026, 2027];
   const weeklySalaryDays = getWeeklySalaryDays(weeklySalaryData?.weekStartDateString, selectedDate);
