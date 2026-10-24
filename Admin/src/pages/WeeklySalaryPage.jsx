@@ -464,7 +464,10 @@ export default function WeeklySalaryPage() {
   const activeSalary = detailData?.salary || detailSalary;
 
   return (
-    <div className="page-container">
+    <div
+      ref={salaryPageRef}
+      className={`page-container weekly-salary-page ${isFullscreen ? 'salary-fullscreen-active' : ''}`}
+    >
       {/* Toast Notification */}
       {feedback && (
         <div style={{
@@ -491,7 +494,7 @@ export default function WeeklySalaryPage() {
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
               Weekly Attendance Salary
             </h1>
@@ -508,6 +511,11 @@ export default function WeeklySalaryPage() {
             }}>
               <ShieldCheck size={12} /> Phase 6 Engine
             </span>
+            {isFullscreen && (
+              <span className="salary-fullscreen-badge">
+                ⛶ Fullscreen View
+              </span>
+            )}
           </div>
           <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px', margin: 0 }}>
             Monday–Sunday salary with allowances, deductions & commission adjustments.
@@ -515,6 +523,17 @@ export default function WeeklySalaryPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Fullscreen Toggle Button */}
+          <button
+            className={`btn btn-sm ${isFullscreen ? 'btn-danger' : 'btn-outline'}`}
+            onClick={toggleFullscreen}
+            style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Open Weekly Attendance Salary in Fullscreen without scrolling'}
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          </button>
+
           <button
             className="btn btn-primary btn-sm"
             onClick={handleGenerateWeeklySalaries}
@@ -739,24 +758,24 @@ export default function WeeklySalaryPage() {
       </div>
 
       {/* Weekly Salaries Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card weekly-salary-table-container" style={{ padding: 0 }}>
         <div className="table-responsive" style={{ border: 'none' }}>
-          <table className="custom-table">
+          <table className="custom-table weekly-salary-table">
             <thead>
               <tr>
-                <th>Employee</th>
+                <th className="sticky-col-emp">Employee</th>
                 <th>Shop(s)</th>
-                <th>Working Days</th>
-                <th>Actual Hours</th>
-                <th>Gross Wages</th>
-                <th>Late Ded.</th>
-                <th>Attendance Pay</th>
-                <th>Allowances</th>
-                <th>Bonus</th>
-                <th>Deductions</th>
+                <th title="Working Days">Days</th>
+                <th title="Actual Hours Worked">Hours</th>
+                <th title="Gross Daily Wages">Gross</th>
+                <th title="Late Deductions">Late Ded.</th>
+                <th title="Net Attendance Pay">Net Pay</th>
+                <th title="Travel & Other Allowances">Allow.</th>
+                <th title="Commission / Monthly Bonus">Bonus</th>
+                <th title="Manual Deductions">Ded.</th>
                 <th style={{ fontWeight: 800, color: '#0f172a' }}>Final Salary</th>
                 <th>Paid</th>
-                <th>Outstanding</th>
+                <th title="Outstanding Balance Remaining">Remaining</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -766,10 +785,11 @@ export default function WeeklySalaryPage() {
                 const hasAdj = (s.travelAllowance || 0) + (s.otherAllowances || 0) + (s.bonus || 0) + (s.manualDeductions || 0) > 0;
                 return (
                   <tr key={s._id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{s.employeeName}</div>
+                    <td className="sticky-col-emp">
+                      <div style={{ fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{s.employeeName}</div>
+                      {s.empCode && <div style={{ fontSize: '11px', color: '#64748b' }}>{s.empCode}</div>}
                     </td>
-                    <td><span style={{ fontSize: '12px', fontWeight: 500 }}>{s.shopName}</span></td>
+                    <td><span style={{ fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap' }}>{s.shopName}</span></td>
                     <td>
                       <span style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
                         {s.workingDays || 0}d
@@ -795,7 +815,7 @@ export default function WeeklySalaryPage() {
                     <td style={{ fontSize: '12px', color: '#dc2626', fontWeight: (s.manualDeductions || 0) > 0 ? 600 : 400 }}>
                       {(s.manualDeductions || 0) > 0 ? `-£${s.manualDeductions.toFixed(2)}` : '—'}
                     </td>
-                    <td style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a' }}>
+                    <td style={{ fontWeight: 800, fontSize: '14.5px', color: '#0f172a' }}>
                       £{(s.finalSalary || s.netAttendancePay || 0).toFixed(2)}
                     </td>
                     <td style={{ fontSize: '13px', color: '#059669', fontWeight: 600 }}>
@@ -810,7 +830,7 @@ export default function WeeklySalaryPage() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
                         <button
                           className="btn btn-outline btn-sm"
                           style={{
@@ -825,14 +845,25 @@ export default function WeeklySalaryPage() {
                             fontWeight: 600
                           }}
                           onClick={() => openEditDeductionModal(s)}
-                          title={isFinalized(s) ? "Edit Finalized Salary (Admin Override)" : "Edit Employee Salary & Deduction"}
+                          title={isFinalized(s) ? `Edit Finalized Salary for ${s.employeeName}` : `Edit Salary & Deductions for ${s.employeeName}`}
                         >
                           <Edit2 size={12} /> {isFinalized(s) ? 'Edit Finalized' : 'Edit Salary'}
                         </button>
                         <button
                           className="btn btn-outline btn-sm"
-                          style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 600,
+                            color: '#2563eb',
+                            borderColor: '#bfdbfe',
+                            background: '#eff6ff'
+                          }}
                           onClick={() => handleViewDetail(s)}
+                          title={`Check details for ${s.employeeName}`}
                         >
                           <Eye size={13} /> Details
                         </button>
@@ -860,12 +891,12 @@ export default function WeeklySalaryPage() {
       {/* ===== DETAIL MODAL ===== */}
       {detailSalary && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '820px' }}>
+          <div className="modal-card" style={{ maxWidth: '1080px', width: '95vw' }}>
             <div className="modal-header">
               <div>
-                <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Info size={18} color="#2563eb" />
-                  Weekly Salary: {activeSalary?.employeeName}
+                <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Info size={20} color="#2563eb" />
+                  Salary Details: {activeSalary?.employeeName}
                 </h2>
                 <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                   Period: <strong>{activeSalary?.weekLabel}</strong>
@@ -876,11 +907,48 @@ export default function WeeklySalaryPage() {
                 </div>
               </div>
               <button onClick={closeDetail} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
             <div className="modal-body" style={{ fontSize: '13px' }}>
+              {/* Prominent Worker Header Banner */}
+              <div style={{
+                background: '#f0f9ff',
+                border: '1.5px solid #bae6fd',
+                borderRadius: '10px',
+                padding: '12px 18px',
+                marginBottom: '18px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#0369a1' }}>
+                    Worker: {activeSalary?.employeeName} {activeSalary?.employeeCode ? `(${activeSalary.employeeCode})` : ''}
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#0284c7', marginTop: '2px' }}>
+                    Shop: <strong>{activeSalary?.shopName || 'Assigned Shops'}</strong> • Days Worked: <strong>{activeSalary?.workingDays || 0} days</strong> • Hours: <strong>{activeSalary?.actualHours?.toFixed(1) || '0.0'} hrs</strong>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '18px', alignItems: 'center' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Net Att. Pay</div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>
+                      £{(activeSalary?.netAttendancePay || 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '11px', color: '#059669', textTransform: 'uppercase', fontWeight: 700 }}>Final Salary</div>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>
+                      £{(activeSalary?.finalSalary || activeSalary?.netAttendancePay || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {detailLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading details...</div>
               ) : (
