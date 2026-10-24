@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import { formatTime12Hour } from '../utils/formatTime';
@@ -25,8 +25,11 @@ import {
   BadgeDollarSign,
   TrendingUp,
   TrendingDown,
-  Landmark
+  Landmark,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+import './WeeklySalaryPage.css';
 
 const ADJUSTMENT_TYPES = [
   { value: 'TRAVEL_ALLOWANCE', label: 'Travel Allowance', color: '#2563eb' },
@@ -110,6 +113,56 @@ export default function WeeklySalaryPage() {
   const [ledgerTransactions, setLedgerTransactions] = useState([]);
   const [ledgerTotals, setLedgerTotals] = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+
+  // Fullscreen state & ref
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const salaryPageRef = useRef(null);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === salaryPageRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === salaryPageRef.current) {
+        await document.exitFullscreen();
+      } else if (salaryPageRef.current?.requestFullscreen) {
+        await salaryPageRef.current.requestFullscreen();
+      } else {
+        setIsFullscreen(v => !v);
+      }
+    } catch (err) {
+      setIsFullscreen(v => !v);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (detailSalary) {
+          closeDetail();
+        } else if (deductionModalOpen) {
+          closeEditDeductionModal();
+        } else if (adjModalOpen) {
+          closeAdjModal();
+        } else if (ledgerEmployee) {
+          closeLedger();
+        } else if (isFullscreen) {
+          if (document.fullscreenElement === salaryPageRef.current) {
+            document.exitFullscreen().catch(() => {});
+          } else {
+            setIsFullscreen(false);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [detailSalary, deductionModalOpen, adjModalOpen, ledgerEmployee, isFullscreen]);
 
   const handleOpenLedger = async (employee) => {
     if (!employee) return;
