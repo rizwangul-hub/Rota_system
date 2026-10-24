@@ -87,11 +87,11 @@ export default function App() {
             }
           />
 
-          {/* Weekly Rota Planner (Admin only) */}
+          {/* Weekly Rota Planner */}
           <Route
             path="/rota-planner"
             element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
+              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR']}>
                 <WeeklyRotaPlanner />
               </ProtectedLayout>
             }

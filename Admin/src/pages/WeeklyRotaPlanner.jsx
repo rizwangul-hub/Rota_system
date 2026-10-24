@@ -6,7 +6,7 @@ import {
   Maximize2, Minimize2, Move, Plus, Printer, RefreshCw, Save, Trash2,
   UserCheck, UserX, Users, X
 } from 'lucide-react';
-import { API_BASE_URL } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import './WeeklyRotaPlanner.css';
 
 const API = `${API_BASE_URL}/rota`;
@@ -71,6 +71,9 @@ function getDefaultTimesForDateKey(dateKey, workerName = '') {
 }
 
 export default function WeeklyRotaPlanner() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [weekStart, setWeekStart] = useState(() => getSundayOf(new Date().toISOString().slice(0, 10)));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -338,6 +341,7 @@ export default function WeeklyRotaPlanner() {
 
   // Open the replacement / availability modal
   const openAvailabilityModal = (shopId, employeeId, dateKey, dayName) => {
+    if (!isAdmin) return;
     const shop = shopMap.get(shopId);
     const emp = employeeMap.get(employeeId);
 
@@ -654,6 +658,7 @@ export default function WeeklyRotaPlanner() {
   // Moving a worker automatically clears them from other shops!
   // -------------------------------------------------------------
   const moveWorkerToTarget = (employeeId, targetShopId, dateKey, sourceShopId) => {
+    if (!isAdmin) return;
     // If targetShopId is null, it means mark as OFF for this day!
     setCells(prev => {
       const next = { ...prev };
@@ -702,11 +707,16 @@ export default function WeeklyRotaPlanner() {
 
   // HTML5 Drag & Drop Handlers
   const handleDragStart = (e, employeeId, sourceShopId, dateKey) => {
+    if (!isAdmin) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('text/plain', JSON.stringify({ employeeId, sourceShopId, dateKey }));
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e, targetKey) => {
+    if (!isAdmin) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverTarget !== targetKey) {
@@ -721,6 +731,7 @@ export default function WeeklyRotaPlanner() {
   const handleDrop = (e, targetShopId, dateKey) => {
     e.preventDefault();
     setDragOverTarget(null);
+    if (!isAdmin) return;
     try {
       const dataStr = e.dataTransfer.getData('text/plain');
       if (!dataStr) return;
@@ -737,6 +748,7 @@ export default function WeeklyRotaPlanner() {
   // CELL ACTIONS (AVAILABLE, OFF, LOAN TO SHOP, CUSTOM)
   // -------------------------------------------------------------
   const openCellPopover = (shopId, employeeId, dateKey, e) => {
+    if (!isAdmin) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const cellKey = `${shopId}:${employeeId}:${dateKey}`;
     const cell = cells[cellKey] || { status: 'AVAILABLE', note: '' };
@@ -793,6 +805,7 @@ export default function WeeklyRotaPlanner() {
 
   // Add Worker to Shop Roster
   const addWorkerToShop = (shopId, employeeId) => {
+    if (!isAdmin) return;
     if (!shopId || !employeeId) return;
     const employee = employeeMap.get(employeeId);
     if (employee?.employmentStatus !== 'Active') {
@@ -814,6 +827,7 @@ export default function WeeklyRotaPlanner() {
 
   // Remove Worker from Shop Roster
   const removeWorkerFromShop = (shopId, employeeId) => {
+    if (!isAdmin) return;
     const emp = employeeMap.get(employeeId);
     if (!window.confirm(`Remove ${emp?.name || 'this worker'} from this shop's weekly rota?`)) return;
 
@@ -835,6 +849,7 @@ export default function WeeklyRotaPlanner() {
 
   // Copy From Previous Week
   const copyFromPreviousWeek = async () => {
+    if (!isAdmin) return;
     const prevDate = new Date(`${weekStart}T12:00:00.000Z`);
     prevDate.setUTCDate(prevDate.getUTCDate() - 7);
     const prevWeekKey = prevDate.toISOString().slice(0, 10);
@@ -963,6 +978,7 @@ export default function WeeklyRotaPlanner() {
 
   // Save Rota Draft
   const saveRota = async () => {
+    if (!isAdmin) return;
     if (conflicts.length > 0) {
       setError(`Resolve the ${conflicts.length} double-booking conflict(s) shown below before saving this rota.`);
       return;
@@ -1261,11 +1277,23 @@ export default function WeeklyRotaPlanner() {
             )}
           </div>
           <p className="rota-sub-title">
-            Set weekly schedule for all shops in advance with Pick & Drop. Prevents double-booking automatically.
+            {isAdmin
+              ? "Set weekly schedule for all shops in advance with Pick & Drop. Prevents double-booking automatically."
+              : "Viewing published schedule for all shops. Changes made by Admin update live here automatically."}
           </p>
         </div>
 
         <div className="rota-top-actions">
+          {/* Refresh Button */}
+          <button
+            className="btn btn-outline btn-sm rota-btn-action"
+            onClick={() => loadWeek(weekStart)}
+            disabled={loading}
+            title="Refresh rota to see latest updates from Admin"
+          >
+            <RefreshCw size={15} /> Refresh
+          </button>
+
           {/* Fullscreen Toggle Button */}
           <button
             className={`btn btn-sm rota-btn-fullscreen ${isFullscreen ? 'btn-danger' : 'btn-outline'}`}
@@ -1318,14 +1346,16 @@ export default function WeeklyRotaPlanner() {
             )}
           </button>
 
-          <button
-            className="btn btn-outline btn-sm rota-btn-action"
-            onClick={copyFromPreviousWeek}
-            disabled={copying || loading}
-            title="Copy previous week's entire rota to save time"
-          >
-            <Copy size={15} /> {copying ? 'Copying…' : 'Copy Last Week'}
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-outline btn-sm rota-btn-action"
+              onClick={copyFromPreviousWeek}
+              disabled={copying || loading}
+              title="Copy previous week's entire rota to save time"
+            >
+              <Copy size={15} /> {copying ? 'Copying…' : 'Copy Last Week'}
+            </button>
+          )}
           <button
             className="btn btn-outline btn-sm rota-btn-action"
             onClick={printRota}
@@ -1354,14 +1384,20 @@ export default function WeeklyRotaPlanner() {
           >
             <Download size={15} /> Excel
           </button>
-          <button
-            className="btn btn-primary btn-sm rota-btn-save"
-            onClick={saveRota}
-            disabled={saving || loading}
-            title="Save changes to database"
-          >
-            <Save size={16} /> {saving ? 'Saving…' : 'Save Changes'}
-          </button>
+          {isAdmin ? (
+            <button
+              className="btn btn-primary btn-sm rota-btn-save"
+              onClick={saveRota}
+              disabled={saving || loading}
+              title="Save changes to database"
+            >
+              <Save size={16} /> {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          ) : (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
+              🔒 View Only
+            </div>
+          )}
         </div>
       </div>
 
@@ -1568,7 +1604,7 @@ export default function WeeklyRotaPlanner() {
                       <div style={{ fontSize: '11px', color: '#64748b' }}>{staffList.length} staff working</div>
                     </div>
                     {/* Quick drop button if picked */}
-                    {pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
+                    {isAdmin && pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
                       <button
                         className="btn btn-sm btn-primary drop-here-btn"
                         onClick={() => moveWorkerToTarget(pickedWorker.employeeId, shop._id, selectedDailyDate, pickedWorker.sourceShopId)}
@@ -1582,7 +1618,7 @@ export default function WeeklyRotaPlanner() {
                   <div className="column-cards-list">
                     {staffList.length === 0 ? (
                       <div className="empty-column-dropzone">
-                        <span>Drag or Drop worker here</span>
+                        <span>{isAdmin ? 'Drag or Drop worker here' : 'No staff working today'}</span>
                       </div>
                     ) : (
                       staffList.map(item => {
@@ -1593,11 +1629,11 @@ export default function WeeklyRotaPlanner() {
                           <div
                             key={item.employeeId}
                             className={`worker-drag-card ${isPicked ? 'picked-card-highlight' : ''}`}
-                            draggable
+                            draggable={isAdmin}
                             onDragStart={(e) => handleDragStart(e, item.employeeId, item.homeShopId, selectedDailyDate)}
                           >
                             <div className="card-top-row">
-                              <span className="card-grip"><GripVertical size={14} color="#94a3b8" /></span>
+                              {isAdmin && <span className="card-grip"><GripVertical size={14} color="#94a3b8" /></span>}
                               <strong className="card-name">{emp?.name || 'Worker'}</strong>
                               <span className="card-id">{emp?.employeeId || ''}</span>
                             </div>
@@ -1606,28 +1642,30 @@ export default function WeeklyRotaPlanner() {
                               <div className="card-note-badge">{item.note}</div>
                             )}
 
-                            <div className="card-action-bar">
-                              <button
-                                className="card-pick-btn"
-                                onClick={() => setPickedWorker({
-                                  employeeId: item.employeeId,
-                                  sourceShopId: item.homeShopId,
-                                  dateKey: selectedDailyDate,
-                                  employeeName: emp?.name || 'Worker',
-                                  sourceShopName: shop.name
-                                })}
-                                title="Pick to move this worker to another shop"
-                              >
-                                <Move size={12} /> {isPicked ? 'Picked' : 'Move'}
-                              </button>
-                              <button
-                                className="card-off-btn"
-                                onClick={() => moveWorkerToTarget(item.employeeId, null, selectedDailyDate, item.homeShopId)}
-                                title="Mark as OFF for this day"
-                              >
-                                Set OFF
-                              </button>
-                            </div>
+                            {isAdmin && (
+                              <div className="card-action-bar">
+                                <button
+                                  className="card-pick-btn"
+                                  onClick={() => setPickedWorker({
+                                    employeeId: item.employeeId,
+                                    sourceShopId: item.homeShopId,
+                                    dateKey: selectedDailyDate,
+                                    employeeName: emp?.name || 'Worker',
+                                    sourceShopName: shop.name
+                                  })}
+                                  title="Pick to move this worker to another shop"
+                                >
+                                  <Move size={12} /> {isPicked ? 'Picked' : 'Move'}
+                                </button>
+                                <button
+                                  className="card-off-btn"
+                                  onClick={() => moveWorkerToTarget(item.employeeId, null, selectedDailyDate, item.homeShopId)}
+                                  title="Mark as OFF for this day"
+                                >
+                                  Set OFF
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })
@@ -1651,7 +1689,7 @@ export default function WeeklyRotaPlanner() {
                     {getOffStaffForDay(selectedDailyDate).length} staff off
                   </div>
                 </div>
-                {pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
+                {isAdmin && pickedWorker && pickedWorker.dateKey === selectedDailyDate && (
                   <button
                     className="btn btn-sm btn-danger drop-here-btn"
                     onClick={() => moveWorkerToTarget(pickedWorker.employeeId, null, selectedDailyDate, pickedWorker.sourceShopId)}
@@ -1675,28 +1713,30 @@ export default function WeeklyRotaPlanner() {
                       <div
                         key={item.employeeId}
                         className={`worker-drag-card card-off-item ${isPicked ? 'picked-card-highlight' : ''}`}
-                        draggable
+                        draggable={isAdmin}
                         onDragStart={(e) => handleDragStart(e, item.employeeId, item.homeShopId, selectedDailyDate)}
                       >
                         <div className="card-top-row">
-                          <span className="card-grip"><GripVertical size={14} color="#94a3b8" /></span>
+                          {isAdmin && <span className="card-grip"><GripVertical size={14} color="#94a3b8" /></span>}
                           <strong className="card-name" style={{ color: '#991b1b' }}>{emp?.name || 'Worker'}</strong>
                           <span className="card-id">{emp?.employeeId || ''}</span>
                         </div>
-                        <div className="card-action-bar">
-                          <button
-                            className="card-pick-btn"
-                            onClick={() => setPickedWorker({
-                              employeeId: item.employeeId,
-                              sourceShopId: item.homeShopId,
-                              dateKey: selectedDailyDate,
-                              employeeName: emp?.name || 'Worker',
-                              sourceShopName: 'OFF'
-                            })}
-                          >
-                            <Move size={12} /> Assign to Shop
-                          </button>
-                        </div>
+                        {isAdmin && (
+                          <div className="card-action-bar">
+                            <button
+                              className="card-pick-btn"
+                              onClick={() => setPickedWorker({
+                                employeeId: item.employeeId,
+                                sourceShopId: item.homeShopId,
+                                dateKey: selectedDailyDate,
+                                employeeName: emp?.name || 'Worker',
+                                sourceShopName: 'OFF'
+                              })}
+                            >
+                              <Move size={12} /> Assign to Shop
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -1755,57 +1795,59 @@ export default function WeeklyRotaPlanner() {
                     <span className="sheet-shop-name-title" style={{ color: style.text }}>
                       {shop.name}
                     </span>
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        className="sheet-add-emp-btn"
-                        onClick={() => {
-                          setWorkerSearch('');
-                          setAddingWorkerShopId(isAddingWorker ? null : shop._id);
-                        }}
-                      >
-                        <Plus size={12} /> Add Worker
-                      </button>
-                      {isAddingWorker && (
-                        <div className="add-worker-popover card">
-                          <div className="add-worker-header">
-                            <span>Add Worker to {shop.name}</span>
-                            <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                    {isAdmin && (
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          className="sheet-add-emp-btn"
+                          onClick={() => {
+                            setWorkerSearch('');
+                            setAddingWorkerShopId(isAddingWorker ? null : shop._id);
+                          }}
+                        >
+                          <Plus size={12} /> Add Worker
+                        </button>
+                        {isAddingWorker && (
+                          <div className="add-worker-popover card">
+                            <div className="add-worker-header">
+                              <span>Add Worker to {shop.name}</span>
+                              <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                            </div>
+                            <input
+                              type="search"
+                              className="form-input"
+                              placeholder="Search workers by name or ID"
+                              value={workerSearch}
+                              onChange={event => setWorkerSearch(event.target.value)}
+                              style={{ margin: '8px 10px', width: 'calc(100% - 20px)' }}
+                            />
+                            <div className="add-worker-list">
+                              {matchingWorkers.length === 0 ? (
+                                <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
+                                  {availableToAdd.length === 0
+                                    ? 'All workers are already in this shop roster.'
+                                    : 'No workers match your search.'}
+                                </div>
+                              ) : (
+                                matchingWorkers.map(emp => (
+                                  <button
+                                    key={emp._id}
+                                    className="add-worker-item"
+                                    disabled={emp.employmentStatus !== 'Active'}
+                                    onClick={() => addWorkerToShop(shop._id, emp._id)}
+                                  >
+                                    <strong>{emp.name}</strong>
+                                    <span>
+                                      {emp.employeeId}
+                                      {emp.employmentStatus !== 'Active' && ` · ${emp.employmentStatus || 'Inactive'}`}
+                                    </span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
                           </div>
-                          <input
-                            type="search"
-                            className="form-input"
-                            placeholder="Search workers by name or ID"
-                            value={workerSearch}
-                            onChange={event => setWorkerSearch(event.target.value)}
-                            style={{ margin: '8px 10px', width: 'calc(100% - 20px)' }}
-                          />
-                          <div className="add-worker-list">
-                            {matchingWorkers.length === 0 ? (
-                              <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
-                                {availableToAdd.length === 0
-                                  ? 'All workers are already in this shop roster.'
-                                  : 'No workers match your search.'}
-                              </div>
-                            ) : (
-                              matchingWorkers.map(emp => (
-                                <button
-                                  key={emp._id}
-                                  className="add-worker-item"
-                                  disabled={emp.employmentStatus !== 'Active'}
-                                  onClick={() => addWorkerToShop(shop._id, emp._id)}
-                                >
-                                  <strong>{emp.name}</strong>
-                                  <span>
-                                    {emp.employeeId}
-                                    {emp.employmentStatus !== 'Active' && ` · ${emp.employmentStatus || 'Inactive'}`}
-                                  </span>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Subheader: Name & Dates */}
@@ -1843,7 +1885,7 @@ export default function WeeklyRotaPlanner() {
                         <div key={empId} className={`sheet-worker-row ${empIdx % 2 === 1 ? 'sheet-row-alt' : ''}`}>
                           <div className="sheet-col-name sheet-worker-name-cell">
                             <span className="sheet-emp-name">{empName}</span>
-                            {isHomeRosterWorker && (
+                            {isAdmin && isHomeRosterWorker && (
                               <button
                                 className="sheet-remove-btn"
                                 onClick={() => removeWorkerFromShop(shop._id, empId)}
@@ -1891,19 +1933,22 @@ export default function WeeklyRotaPlanner() {
                               <div
                                 key={d.dateKey}
                                 className={`sheet-col-day sheet-cell-interactive ${cellClass}`}
+                                style={!isAdmin ? { cursor: 'default' } : undefined}
                                 onClick={(e) => {
-                                  if (!isHomeRosterWorker) return;
+                                  if (!isAdmin || !isHomeRosterWorker) return;
                                   if (showPreview && isUnavailable) {
                                     openAvailabilityModal(shop._id, empId, d.dateKey, d.dayName);
                                   } else {
                                     openCellPopover(shop._id, empId, d.dateKey, e);
                                   }
                                 }}
-                                title={!isHomeRosterWorker
-                                  ? `Displayed here because this worker is assigned from ${shopMap.get(getTransferOriginShopId(shop._id, empId))?.name || 'another shop'}. Edit the assignment at their home shop.`
-                                  : showPreview && isUnavailable
-                                    ? 'Worker unavailable! Click to assign replacement or transfer from another shop.'
-                                    : 'Click to edit status or transfer'}
+                                title={!isAdmin
+                                  ? `${empName}: ${displayText}`
+                                  : !isHomeRosterWorker
+                                    ? `Displayed here because this worker is assigned from ${shopMap.get(getTransferOriginShopId(shop._id, empId))?.name || 'another shop'}. Edit the assignment at their home shop.`
+                                    : showPreview && isUnavailable
+                                      ? 'Worker unavailable! Click to assign replacement or transfer from another shop.'
+                                      : 'Click to edit status or transfer'}
                               >
                                 {showPreview && isUnavailable && (
                                   <span className="preview-red-tag">NOT AVAIL</span>
@@ -2005,58 +2050,60 @@ export default function WeeklyRotaPlanner() {
                     </div>
 
                     <div className="shop-header-actions">
-                      <div style={{ position: 'relative' }}>
-                        <button
-                          className="btn btn-outline btn-sm add-worker-btn"
-                          onClick={() => {
-                            setWorkerSearch('');
-                            setAddingWorkerShopId(isAddingWorker ? null : shop._id);
-                          }}
-                        >
-                          <Plus size={14} /> Add Worker
-                        </button>
+                      {isAdmin && (
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            className="btn btn-outline btn-sm add-worker-btn"
+                            onClick={() => {
+                              setWorkerSearch('');
+                              setAddingWorkerShopId(isAddingWorker ? null : shop._id);
+                            }}
+                          >
+                            <Plus size={14} /> Add Worker
+                          </button>
 
-                        {isAddingWorker && (
-                          <div className="add-worker-popover card">
-                            <div className="add-worker-header">
-                              <span>Add Worker to {shop.name}</span>
-                              <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                          {isAddingWorker && (
+                            <div className="add-worker-popover card">
+                              <div className="add-worker-header">
+                                <span>Add Worker to {shop.name}</span>
+                                <button onClick={() => setAddingWorkerShopId(null)}><X size={14} /></button>
+                              </div>
+                              <input
+                                type="search"
+                                className="form-input"
+                                placeholder="Search workers by name or ID"
+                                value={workerSearch}
+                                onChange={event => setWorkerSearch(event.target.value)}
+                                style={{ margin: '8px 10px', width: 'calc(100% - 20px)' }}
+                              />
+                              <div className="add-worker-list">
+                                {matchingWorkers.length === 0 ? (
+                                  <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
+                                    {availableToAdd.length === 0
+                                      ? 'All workers are already in this shop roster.'
+                                      : 'No workers match your search.'}
+                                  </div>
+                                ) : (
+                                  matchingWorkers.map(emp => (
+                                    <button
+                                      key={emp._id}
+                                      className="add-worker-item"
+                                      disabled={emp.employmentStatus !== 'Active'}
+                                      onClick={() => addWorkerToShop(shop._id, emp._id)}
+                                    >
+                                      <strong>{emp.name}</strong>
+                                      <span>
+                                        {emp.employeeId}
+                                        {emp.employmentStatus !== 'Active' && ` · ${emp.employmentStatus || 'Inactive'}`}
+                                      </span>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
                             </div>
-                            <input
-                              type="search"
-                              className="form-input"
-                              placeholder="Search workers by name or ID"
-                              value={workerSearch}
-                              onChange={event => setWorkerSearch(event.target.value)}
-                              style={{ margin: '8px 10px', width: 'calc(100% - 20px)' }}
-                            />
-                            <div className="add-worker-list">
-                              {matchingWorkers.length === 0 ? (
-                                <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8' }}>
-                                  {availableToAdd.length === 0
-                                    ? 'All workers are already in this shop roster.'
-                                    : 'No workers match your search.'}
-                                </div>
-                              ) : (
-                                matchingWorkers.map(emp => (
-                                  <button
-                                    key={emp._id}
-                                    className="add-worker-item"
-                                    disabled={emp.employmentStatus !== 'Active'}
-                                    onClick={() => addWorkerToShop(shop._id, emp._id)}
-                                  >
-                                    <strong>{emp.name}</strong>
-                                    <span>
-                                      {emp.employeeId}
-                                      {emp.employmentStatus !== 'Active' && ` · ${emp.employmentStatus || 'Inactive'}`}
-                                    </span>
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2104,7 +2151,7 @@ export default function WeeklyRotaPlanner() {
                                       <div className="worker-name-label">{empName}</div>
                                       <div className="worker-id-sub">{empCode}</div>
                                     </div>
-                                    {isHomeRosterWorker && (
+                                    {isAdmin && isHomeRosterWorker && (
                                       <button
                                         className="remove-worker-btn"
                                         onClick={() => removeWorkerFromShop(shop._id, empId)}
@@ -2167,20 +2214,20 @@ export default function WeeklyRotaPlanner() {
                                         <button
                                           type="button"
                                           className={cellClass}
-                                          style={cellStyle}
-                                          draggable={isHomeRosterWorker}
+                                          style={{ ...cellStyle, cursor: !isAdmin ? 'default' : undefined }}
+                                          draggable={isAdmin && isHomeRosterWorker}
                                           onDragStart={(e) => {
-                                            if (isHomeRosterWorker) handleDragStart(e, empId, shop._id, day.dateKey);
+                                            if (isAdmin && isHomeRosterWorker) handleDragStart(e, empId, shop._id, day.dateKey);
                                           }}
                                           onClick={(e) => {
-                                            if (!isHomeRosterWorker) return;
+                                            if (!isAdmin || !isHomeRosterWorker) return;
                                             if (showPreview && isUnavailable) {
                                               openAvailabilityModal(shop._id, empId, day.dateKey, day.dayName);
                                             } else {
                                               openCellPopover(shop._id, empId, day.dateKey, e);
                                             }
                                           }}
-                                          title={showPreview && isUnavailable ? "Worker unavailable! Click to assign replacement or transfer from another shop." : "Click to edit, or drag & drop to another shop"}
+                                          title={!isAdmin ? `${empName}: ${cellLabel}` : (showPreview && isUnavailable ? "Worker unavailable! Click to assign replacement or transfer from another shop." : "Click to edit, or drag & drop to another shop")}
                                         >
                                           {conflicted && <span className="conflict-dot">⚠️</span>}
                                           {showPreview && isUnavailable && (
@@ -2190,23 +2237,25 @@ export default function WeeklyRotaPlanner() {
                                         </button>
 
                                         {/* Quick Pick Button on Hover */}
-                                        <button
-                                          type="button"
-                                          className="quick-pick-btn"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setPickedWorker({
-                                              employeeId: empId,
-                                              sourceShopId: shop._id,
-                                              dateKey: day.dateKey,
-                                              employeeName: empName,
-                                              sourceShopName: shop.name
-                                            });
-                                          }}
-                                          title="Pick worker to move to another shop"
-                                        >
-                                          <Move size={11} />
-                                        </button>
+                                        {isAdmin && (
+                                          <button
+                                            type="button"
+                                            className="quick-pick-btn"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setPickedWorker({
+                                                employeeId: empId,
+                                                sourceShopId: shop._id,
+                                                dateKey: day.dateKey,
+                                                employeeName: empName,
+                                                sourceShopName: shop.name
+                                              });
+                                            }}
+                                            title="Pick worker to move to another shop"
+                                          >
+                                            <Move size={11} />
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   );

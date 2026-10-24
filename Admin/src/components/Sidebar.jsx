@@ -114,6 +114,11 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
                 <CheckSquare size={18} /> Daily Attendance
               </NavLink>
             </li>
+            <li className="nav-item">
+              <NavLink to="/rota-planner" onClick={() => setMobileOpen(false)}>
+                <CalendarDays size={18} /> Weekly Rota Planner
+              </NavLink>
+            </li>
             <li className="nav-section-title">Reports</li>
             <li className="nav-item">
               <NavLink to="/reports" onClick={() => setMobileOpen(false)}>
