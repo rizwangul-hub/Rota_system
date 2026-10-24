@@ -1020,7 +1020,15 @@ exports.recordSalaryPayment = async (req, res) => {
   let session;
   try {
     const { id } = req.params; // weeklySalary id
-    const { amount, paymentMethod = 'Cash', notes = '', clientReference, paymentDate } = req.body || {};
+    const {
+      amount = 0,
+      paymentMethod = 'Cash',
+      notes = '',
+      clientReference,
+      paymentDate,
+      deductionAmount = 0,
+      deductionReason = ''
+    } = req.body || {};
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid salary record ID.' });
     }
@@ -1035,6 +1043,18 @@ exports.recordSalaryPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Payment notes must be text no longer than 500 characters.' });
     }
 
+    const numAmount = Number(amount || 0);
+    const numDeduct = Number(deductionAmount || 0);
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, message: 'Payment amount must be 0 or a positive number.' });
+    }
+    if (isNaN(numDeduct) || numDeduct < 0) {
+      return res.status(400).json({ success: false, message: 'Deduction amount must be 0 or a positive number.' });
+    }
+    if (numAmount === 0 && numDeduct === 0) {
+      return res.status(400).json({ success: false, message: 'Please enter a payment amount or a deduction amount.' });
+    }
+
     const methodStr = String(paymentMethod || '').trim();
     let normalizedMethod = 'Cash';
     if (/^bank$/i.test(methodStr)) normalizedMethod = 'Bank';
@@ -1044,12 +1064,13 @@ exports.recordSalaryPayment = async (req, res) => {
     }
 
     let salary;
-    let payment;
+    let payment = null;
     let openingBal = 0;
     let commissionBonus = 0;
     let totalPayable = 0;
     let previousPaid = 0;
     let payAmount = 0;
+    let deductAmt = 0;
     let totalPaid = 0;
     let balanceRemaining = 0;
     let outcome;
@@ -1065,11 +1086,11 @@ exports.recordSalaryPayment = async (req, res) => {
       }
 
       if (!['FINALIZED', 'PARTIALLY_PAID', 'Finalized', 'Partially Paid'].includes(salary.status)) {
-        outcome = { status: 400, message: 'Only finalized salaries can receive payments.' };
+        outcome = { status: 400, message: 'Only finalized salaries can receive payments or deductions.' };
         return;
       }
 
-      if (clientReferenceValue) {
+      if (clientReferenceValue && numAmount > 0) {
         const duplicate = await SalaryPayment.findOne({ clientReference: clientReferenceValue }).session(session);
         if (duplicate) {
           outcome = {
@@ -1094,30 +1115,37 @@ exports.recordSalaryPayment = async (req, res) => {
       previousPaid = Number(priorPayments.reduce((sum, record) => sum + record.amount, 0).toFixed(2));
       const outstanding = Number(Math.max(0, totalPayable - previousPaid).toFixed(2));
       if (outstanding <= 0) {
-        outcome = { status: 400, message: 'This salary is already fully paid.' };
+        outcome = { status: 400, message: 'This salary is already fully settled.' };
         return;
       }
 
-      const paymentValidation = validatePaymentAmount(amount, outstanding);
-      if (!paymentValidation.valid) {
-        outcome = { status: 400, message: paymentValidation.message };
-        return;
-      }
-      payAmount = paymentValidation.amount;
-
-      const recentDuplicate = await SalaryPayment.findOne({
-        weeklySalary: salary._id,
-        amount: payAmount,
-        paymentMethod: normalizedMethod,
-        createdAt: { $gte: new Date(Date.now() - 3000) }
-      }).session(session);
-      if (recentDuplicate) {
+      const totalAction = Number((numAmount + numDeduct).toFixed(2));
+      if (totalAction > outstanding + 0.005) {
         outcome = {
-          status: 409,
-          message: 'Duplicate payment submission detected. Please wait.',
-          payment: recentDuplicate
+          status: 400,
+          message: `Combined payment (£${numAmount.toFixed(2)}) and deduction (£${numDeduct.toFixed(2)}) cannot exceed the outstanding balance (£${outstanding.toFixed(2)}).`
         };
         return;
+      }
+
+      payAmount = Number(numAmount.toFixed(2));
+      deductAmt = Number(numDeduct.toFixed(2));
+
+      if (payAmount > 0) {
+        const recentDuplicate = await SalaryPayment.findOne({
+          weeklySalary: salary._id,
+          amount: payAmount,
+          paymentMethod: normalizedMethod,
+          createdAt: { $gte: new Date(Date.now() - 3000) }
+        }).session(session);
+        if (recentDuplicate) {
+          outcome = {
+            status: 409,
+            message: 'Duplicate payment submission detected. Please wait.',
+            payment: recentDuplicate
+          };
+          return;
+        }
       }
 
       let pDate = new Date();
@@ -1131,53 +1159,89 @@ exports.recordSalaryPayment = async (req, res) => {
         pDate = new Date('2026-10-11T00:00:00.000Z');
       }
 
-      const paymentPayload = {
-        weeklySalary: salary._id,
-        employee: salary.employee,
-        employeeName: salary.employeeName,
-        shop: salary.shop,
-        shopName: salary.shopName,
-        weekLabel: salary.weekLabel,
-        amount: payAmount,
-        paymentMethod: normalizedMethod,
-        paymentDate: pDate,
-        paidBy: req.user._id,
-        paidByName: req.user.name,
-        notes: notes.trim()
-      };
-      if (clientReferenceValue) {
-        paymentPayload.clientReference = clientReferenceValue;
+      // 1. Process adjustment/deduction if requested
+      if (deductAmt > 0) {
+        const reasonText = (deductionReason && deductionReason.trim()) || 'Rounding / balance adjustment';
+        await SalaryAdjustment.create([{
+          weeklySalary: salary._id,
+          employee: salary.employee,
+          type: 'MANUAL_DEDUCTION',
+          amount: deductAmt,
+          reason: reasonText,
+          addedBy: req.user._id,
+          addedByName: req.user.name
+        }], { session });
+
+        salary.manualDeductions = Number(((salary.manualDeductions || 0) + deductAmt).toFixed(2));
+        salary.finalSalary = Number(Math.max(0, (salary.finalSalary || 0) - deductAmt).toFixed(2));
+        totalPayable = Number(Math.max(0, totalPayable - deductAmt).toFixed(2));
+
+        await LedgerTransaction.findOneAndUpdate(
+          {
+            employee: salary.employee,
+            transactionType: 'SALARY_EARNED',
+            referenceId: salary._id
+          },
+          {
+            employee: salary.employee,
+            date: salary.weekEndDate,
+            description: `Weekly Salary for week ${salary.weekLabel} (${salary.shopName})`,
+            referenceType: 'WeeklySalary',
+            referenceId: salary._id,
+            attendancePay: salary.netAttendancePay,
+            lateDeduction: salary.lateDeductions,
+            allowance: (salary.travelAllowance || 0) + (salary.otherAllowances || 0),
+            deduction: salary.manualDeductions || 0,
+            amountEarned: salary.finalSalary,
+            amountPaid: 0
+          },
+          { upsert: true, session }
+        );
       }
 
-      [payment] = await SalaryPayment.create([paymentPayload], { session });
-      totalPaid = Number((previousPaid + payAmount).toFixed(2));
+      // 2. Process payment payout if requested
+      if (payAmount > 0) {
+        const paymentPayload = {
+          weeklySalary: salary._id,
+          employee: salary.employee,
+          employeeName: salary.employeeName,
+          shop: salary.shop,
+          shopName: salary.shopName,
+          weekLabel: salary.weekLabel,
+          amount: payAmount,
+          paymentMethod: normalizedMethod,
+          paymentDate: pDate,
+          paidBy: req.user._id,
+          paidByName: req.user.name,
+          notes: notes.trim()
+        };
+        if (clientReferenceValue) {
+          paymentPayload.clientReference = clientReferenceValue;
+        }
+
+        [payment] = await SalaryPayment.create([paymentPayload], { session });
+        totalPaid = Number((previousPaid + payAmount).toFixed(2));
+
+        await LedgerTransaction.create([{
+          employee: salary.employee,
+          date: payment.paymentDate,
+          transactionType: 'SALARY_PAYMENT',
+          description: `Payment via ${normalizedMethod} for week ${salary.weekLabel}`,
+          referenceType: 'SalaryPayment',
+          referenceId: payment._id,
+          amountEarned: 0,
+          amountPaid: payAmount,
+          createdBy: req.user._id
+        }], { session });
+      } else {
+        totalPaid = previousPaid;
+      }
+
       balanceRemaining = Number(Math.max(0, totalPayable - totalPaid).toFixed(2));
       salary.totalPaid = totalPaid;
       salary.balanceRemaining = balanceRemaining;
-      salary.status = balanceRemaining === 0 ? 'PAID' : 'PARTIALLY_PAID';
+      salary.status = balanceRemaining === 0 ? 'PAID' : (totalPaid > 0 ? 'PARTIALLY_PAID' : 'FINALIZED');
       await salary.save({ session });
-
-      const allTransactions = await LedgerTransaction.find({ employee: salary.employee })
-        .sort({ date: 1, createdAt: 1 })
-        .session(session);
-      const currentBalance = allTransactions.reduce(
-        (balance, transaction) => balance + (transaction.amountEarned || 0) - (transaction.amountPaid || 0),
-        0
-      );
-      const newBalance = Number((currentBalance - payAmount).toFixed(2));
-
-      await LedgerTransaction.create([{
-        employee: salary.employee,
-        date: payment.paymentDate,
-        transactionType: 'SALARY_PAYMENT',
-        description: `Payment via ${normalizedMethod} for week ${salary.weekLabel}`,
-        referenceType: 'SalaryPayment',
-        referenceId: payment._id,
-        amountEarned: 0,
-        amountPaid: payAmount,
-        runningBalance: newBalance,
-        createdBy: req.user._id
-      }], { session });
     });
 
     if (outcome) {
@@ -1191,24 +1255,39 @@ exports.recordSalaryPayment = async (req, res) => {
     // Fully recalculate running balances and sync ledger statement
     await recalculateEmployeeLedger(salary.employee);
 
+    let logDetails = '';
+    if (payAmount > 0 && deductAmt > 0) {
+      logDetails = `Paid £${payAmount.toFixed(2)} via ${normalizedMethod} & deducted £${deductAmt.toFixed(2)} for ${salary.employeeName} for week ${salary.weekLabel}`;
+    } else if (payAmount > 0) {
+      logDetails = `Paid £${payAmount.toFixed(2)} via ${normalizedMethod} to ${salary.employeeName} for week ${salary.weekLabel}`;
+    } else {
+      logDetails = `Deducted £${deductAmt.toFixed(2)} (${deductionReason || 'balance write-off'}) from remaining balance for ${salary.employeeName} for week ${salary.weekLabel}`;
+    }
+
     await logAction({
       user: req.user._id,
       username: req.user.name,
       role: req.user.role,
-      action: 'SALARY_PAYMENT_CREATED',
-      recordType: 'SalaryPayment',
-      recordId: payment._id,
-      details: `Paid £${payAmount.toFixed(2)} via ${normalizedMethod} to ${salary.employeeName} for week ${salary.weekLabel}`,
+      action: payAmount > 0 ? 'SALARY_PAYMENT_CREATED' : 'SALARY_ADJUSTMENT_CREATED',
+      recordType: payment ? 'SalaryPayment' : 'WeeklySalary',
+      recordId: payment ? payment._id : salary._id,
+      details: logDetails,
       req
     });
 
+    const msg = payAmount > 0 && deductAmt > 0
+      ? `Payment of £${payAmount.toFixed(2)} and deduction of £${deductAmt.toFixed(2)} recorded successfully.`
+      : payAmount > 0
+        ? `Payment of £${payAmount.toFixed(2)} recorded successfully.`
+        : `Deduction of £${deductAmt.toFixed(2)} applied and removed from balance & ledger successfully.`;
+
     res.json({
       success: true,
-      message: `Payment of £${payAmount.toFixed(2)} recorded successfully.`,
+      message: msg,
       payment,
       salary,
       receipt: {
-        paymentId: payment._id,
+        paymentId: payment ? payment._id : null,
         employeeName: salary.employeeName,
         employeeId: salary.employeeId,
         shopName: salary.shopName,
@@ -1218,15 +1297,16 @@ exports.recordSalaryPayment = async (req, res) => {
         bonus: commissionBonus,
         totalPayable: totalPayable,
         paymentAmount: payAmount,
-        paymentDate: payment.paymentDate,
+        deductionAmount: deductAmt,
+        paymentDate: payment ? payment.paymentDate : new Date(),
         paymentMethod: normalizedMethod,
-        notes: payment.notes,
+        notes: payment ? payment.notes : deductionReason,
         previousPaid,
         newTotalPaid: totalPaid,
         remainingOutstanding: balanceRemaining,
-        paidByName: payment.paidByName,
+        paidByName: req.user.name,
         status: salary.status,
-        clientReference: payment.clientReference
+        clientReference: payment ? payment.clientReference : null
       }
     });
   } catch (error) {
