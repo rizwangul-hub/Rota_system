@@ -6,7 +6,7 @@ import { formatTime12Hour } from '../utils/formatTime';
 import {
   FileText, Download, MessageSquare, Clock, Users, Award,
   RefreshCw, Calendar, Banknote, CreditCard, Building, CheckCircle,
-  AlertCircle, ChevronRight, TrendingUp, Layers
+  AlertCircle, ChevronRight, TrendingUp, Layers, Database, Archive, HardDrive
 } from 'lucide-react';
 
 const SHOP_COLORS = {
@@ -92,6 +92,8 @@ export default function ReportsPage() {
   const [paymentsData, setPaymentsData] = useState(null);
   const [ledgerData, setLedgerData] = useState(null);
   const [cashBankSummary, setCashBankSummary] = useState(null);
+  const [backupData, setBackupData] = useState(null);
+  const [downloadingBackup, setDownloadingBackup] = useState('');
 
   useEffect(() => {
     fetchShopsAndEmployees();
@@ -187,6 +189,12 @@ export default function ReportsPage() {
           params: { startDate: startDate || undefined, endDate: endDate || undefined }
         });
         if (res.data.success) setLedgerData(res.data);
+      } else if (activeTab === 'database_backup' && isAdmin) {
+        const monthNum = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(selectedMonth) + 1;
+        const res = await axios.get(`${API_BASE_URL}/reports/system-backup/summary`, {
+          params: { month: monthNum, year: selectedYear }
+        });
+        if (res.data.success) setBackupData(res.data);
       }
     } catch (err) {
       console.error('Failed to load report:', err);
