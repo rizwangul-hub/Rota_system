@@ -2038,7 +2038,7 @@ async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, ca
   return await sendPdfOrBuffer(res, doc, `Salary_Payments_${periodLabel.replace(/\s+/g, '_')}.pdf`);
 }
 
-function drawDistributorSignatures(doc, yPos, isLandscape = true, distributorName = 'Arsalan') {
+function drawDistributorSignatures(doc, yPos, isLandscape = true, distributorName = 'Fahad Rasheed') {
   const width = isLandscape ? 841.89 : 595.28;
   const margin = 25;
   const cardWidth = isLandscape ? 385 : 260;
@@ -2050,10 +2050,15 @@ function drawDistributorSignatures(doc, yPos, isLandscape = true, distributorNam
     y = 40;
   }
 
-  // Card 1: Salary Distributor (Arsalan)
+  let signerName = distributorName || 'Fahad Rasheed';
+  if (/system\s*admin/i.test(signerName) || /^admin$/i.test(signerName)) {
+    signerName = 'Fahad Rasheed';
+  }
+
+  // Card 1: Salary Distributor / Authorized Signer (Fahad Rasheed)
   doc.rect(margin, y, cardWidth, 50).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text(distributorName.toUpperCase(), margin + 12, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Salary Distributor • Cash & Bank Handover Audit', margin + 12, y + 21);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text(signerName.toUpperCase(), margin + 12, y + 8);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Salary Disbursement & Reconciliation Audit', margin + 12, y + 21);
   doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ DISBURSED & RECONCILED', margin + 12, y + 34);
 
   // Card 2: Management / Payroll Auditor
