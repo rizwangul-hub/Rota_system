@@ -397,3 +397,5 @@ exports.exportDistributorPDF = async (req, res) => {
     return sendServerError(res, error, 'Failed to export distributor PDF report.');
   }
 };
+
+exports.getDistributorDataInternal = getDistributorDataInternal;

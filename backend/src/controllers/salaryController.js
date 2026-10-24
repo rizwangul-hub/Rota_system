@@ -1430,16 +1430,8 @@ exports.reverseSalaryPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Associated salary record not found.' });
     }
 
-    const emp = await Employee.findById(salary.employee);
-    const openingBal = Number(emp?.openingBalance || 0);
-
-    const empBonuses = await Bonus.find({ employee: salary.employee, status: { $ne: 'DRAFT' } });
-    const standaloneBonus = empBonuses
-      .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === salary._id.toString())
-      .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
-    const commissionBonus = Number(((salary.bonus || 0) > 0 ? salary.bonus : standaloneBonus).toFixed(2));
-
-    const totalPayable = Number(((salary.finalSalary || 0) + openingBal + commissionBonus).toFixed(2));
+    const breakdown = await getSalaryFinancialBreakdown(salary);
+    const totalPayable = breakdown ? breakdown.totalPayable : Number(((salary.finalSalary || 0) + (salary.bonus || 0)).toFixed(2));
 
     // Calculate remaining payments excluding this one
     const otherPayments = await SalaryPayment.find({ weeklySalary: salary._id, _id: { $ne: payment._id } });

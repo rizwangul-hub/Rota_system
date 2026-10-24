@@ -854,7 +854,6 @@ export default function SalaryDistributor() {
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Salary</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Opening</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Bonus</th>
-                  <th style={{ textAlign: 'right', padding: '8px 8px', minWidth: '85px' }}>Payable</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Paid</th>
                   <th style={{ textAlign: 'right', padding: '8px 8px', minWidth: '85px' }}>Remaining</th>
                   <th style={{ textAlign: 'center', padding: '8px 6px', minWidth: '95px' }}>Status</th>
@@ -931,9 +930,6 @@ export default function SalaryDistributor() {
                         ) : (
                           <span style={{ color: '#94a3b8' }}>£0.00</span>
                         )}
-                      </td>
-                      <td style={{ textAlign: 'right', padding: '8px 8px', fontWeight: 700, color: '#2563eb' }}>
-                        £{(s.totalPayable || ((s.finalSalary || 0) + (s.openingBalance || 0) + (s.bonus || 0))).toFixed(2)}
                       </td>
                       <td style={{ textAlign: 'right', padding: '8px 6px' }}>
                         {(s.totalPaid || 0) > 0 ? (
@@ -1064,7 +1060,7 @@ export default function SalaryDistributor() {
 
                 {filteredSalaries.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="14" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                    <td colSpan="13" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                       No finalized salary records found matching current criteria.
                     </td>
                   </tr>
