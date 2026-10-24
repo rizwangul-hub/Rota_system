@@ -2122,19 +2122,19 @@ async function buildDistributorSalaryPDF(res, data = {}, generatedBy = 'Arsalan'
   const drawHeader = () => {
     doc.rect(margin, y, contentWidth, tableHeaderH).fillAndStroke('#f1f5f9', '#cbd5e1');
     doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(6.8);
-    doc.text('#', margin + 2, y + 5.5, { width: 16, align: 'center', lineBreak: false });
-    doc.text('WORKER NAME & ID', margin + 20, y + 5.5, { width: 110, lineBreak: false });
-    doc.text('SHOP LOCATION', margin + 133, y + 5.5, { width: 82, lineBreak: false });
-    doc.text('WEEK PERIOD', margin + 217, y + 5.5, { width: 78, align: 'center', lineBreak: false });
-    doc.text('DAYS & RATE', margin + 297, y + 5.5, { width: 50, align: 'right', lineBreak: false });
-    doc.text('ATTEND WAGE', margin + 349, y + 5.5, { width: 54, align: 'right', lineBreak: false });
-    doc.text('ALLOWANCE', margin + 405, y + 5.5, { width: 48, align: 'right', lineBreak: false });
-    doc.text('OPENING BAL', margin + 455, y + 5.5, { width: 52, align: 'right', lineBreak: false });
-    doc.text('BONUS', margin + 509, y + 5.5, { width: 48, align: 'right', lineBreak: false });
-    doc.text('TOTAL PAYABLE', margin + 559, y + 5.5, { width: 62, align: 'right', lineBreak: false });
-    doc.text('PAID SO FAR', margin + 623, y + 5.5, { width: 54, align: 'right', lineBreak: false });
-    doc.text('REMAINING', margin + 679, y + 5.5, { width: 54, align: 'right', lineBreak: false });
-    doc.text('STATUS', margin + 735, y + 5.5, { width: 48, align: 'center', lineBreak: false });
+    doc.text('#', 26, y + 5.5, { width: 16, align: 'center', lineBreak: false });
+    doc.text('WORKER NAME & ID', 44, y + 5.5, { width: 108, lineBreak: false });
+    doc.text('SHOP LOCATION', 154, y + 5.5, { width: 80, lineBreak: false });
+    doc.text('WEEK PERIOD', 236, y + 5.5, { width: 78, align: 'center', lineBreak: false });
+    doc.text('DAYS & RATE', 316, y + 5.5, { width: 50, align: 'right', lineBreak: false });
+    doc.text('DEDUCT.', 368, y + 5.5, { width: 48, align: 'right', lineBreak: false });
+    doc.text('ATTEND WAGE', 418, y + 5.5, { width: 58, align: 'right', lineBreak: false });
+    doc.text('ALLOWANCE', 478, y + 5.5, { width: 50, align: 'right', lineBreak: false });
+    doc.text('OPENING BAL', 530, y + 5.5, { width: 54, align: 'right', lineBreak: false });
+    doc.text('BONUS', 586, y + 5.5, { width: 48, align: 'right', lineBreak: false });
+    doc.text('TOTAL PAYABLE', 636, y + 5.5, { width: 64, align: 'right', lineBreak: false });
+    doc.text('PAID SO FAR', 702, y + 5.5, { width: 56, align: 'right', lineBreak: false });
+    doc.text('REMAINING', 760, y + 5.5, { width: 56, align: 'right', lineBreak: false });
     y += tableHeaderH;
   };
 
@@ -2147,11 +2147,11 @@ async function buildDistributorSalaryPDF(res, data = {}, generatedBy = 'Arsalan'
       drawHeader();
     }
 
-    const isPaid = (s.balanceRemaining || 0) <= 0 || s.status === 'PAID';
     const isPartial = (s.totalPaid || 0) > 0 && (s.balanceRemaining || 0) > 0;
     const openingBal = Number(s.openingBalance || 0);
     const attendanceWage = Number(s.attendanceSalary ?? (s.weeklySalaryOverride ?? s.netAttendancePay ?? s.weeklySalary ?? s.finalSalary ?? 0));
     const allowance = Number(s.allowance ?? ((s.travelAllowance || 0) + (s.otherAllowances || 0)));
+    const deduction = Number(((s.lateDeductions || 0) + (s.manualDeductions || 0)).toFixed(2));
     const bonus = Number(s.bonus || 0);
     const totalPayableRow = Number(s.totalPayable || (attendanceWage + allowance + openingBal + bonus));
     const paidRow = Number(s.totalPaid || 0);
@@ -2165,80 +2165,79 @@ async function buildDistributorSalaryPDF(res, data = {}, generatedBy = 'Arsalan'
 
     // 1. Index
     doc.fillColor('#64748b').font('Helvetica').fontSize(7)
-      .text(String(idx + 1), margin + 2, y + 6, { width: 16, align: 'center', lineBreak: false });
+      .text(String(idx + 1), 26, y + 6, { width: 16, align: 'center', lineBreak: false });
 
     // 2. Name & ID
     doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7.5)
-      .text((s.employeeName || '').slice(0, 17), margin + 20, y + 2.5, { width: 110, lineBreak: false });
+      .text((s.employeeName || '').slice(0, 16), 44, y + 2.5, { width: 108, lineBreak: false });
     doc.fillColor('#64748b').font('Helvetica').fontSize(6.5)
-      .text(s.employeeId || '', margin + 20, y + 10.5, { width: 110, lineBreak: false });
+      .text(s.employeeId || '', 44, y + 10.5, { width: 108, lineBreak: false });
 
     // 3. Shop
     doc.fillColor('#334155').font('Helvetica').fontSize(6.8)
-      .text((s.shopName || '').slice(0, 15), margin + 133, y + 6, { width: 82, lineBreak: false });
+      .text((s.shopName || '').slice(0, 14), 154, y + 6, { width: 80, lineBreak: false });
 
     // 4. Week Period
     doc.fillColor('#475569').font('Helvetica').fontSize(6.6)
-      .text(s.weekLabel || '', margin + 217, y + 6, { width: 78, align: 'center', lineBreak: false });
+      .text(s.weekLabel || '', 236, y + 6, { width: 78, align: 'center', lineBreak: false });
 
     // 5. Work / Rate
     doc.fillColor('#475569').font('Helvetica').fontSize(6.8)
-      .text(workStr, margin + 297, y + 6, { width: 50, align: 'right', lineBreak: false });
+      .text(workStr, 316, y + 6, { width: 50, align: 'right', lineBreak: false });
 
-    // 6. Attendance Wages
+    // 6. Deduct
+    doc.fillColor(deduction > 0 ? '#dc2626' : '#94a3b8').font(deduction > 0 ? 'Helvetica-Bold' : 'Helvetica').fontSize(6.8)
+      .text(deduction > 0 ? `-£${deduction.toFixed(2)}` : '£0.00', 368, y + 6, { width: 48, align: 'right', lineBreak: false });
+
+    // 7. Attendance Wages
     doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7)
-      .text(`£${attendanceWage.toFixed(2)}`, margin + 349, y + 6, { width: 54, align: 'right', lineBreak: false });
+      .text(`£${attendanceWage.toFixed(2)}`, 418, y + 6, { width: 58, align: 'right', lineBreak: false });
 
-    // 7. Allowance
+    // 8. Allowance
     doc.fillColor(allowance > 0 ? '#0284c7' : '#94a3b8').font(allowance > 0 ? 'Helvetica-Bold' : 'Helvetica').fontSize(6.8)
-      .text(allowance > 0 ? `+£${allowance.toFixed(2)}` : '£0.00', margin + 405, y + 6, { width: 48, align: 'right', lineBreak: false });
+      .text(allowance > 0 ? `+£${allowance.toFixed(2)}` : '£0.00', 478, y + 6, { width: 50, align: 'right', lineBreak: false });
 
-    // 8. Opening Bal
+    // 9. Opening Bal
     doc.fillColor(openingBal > 0 ? '#7c3aed' : '#94a3b8').font(openingBal > 0 ? 'Helvetica-Bold' : 'Helvetica').fontSize(6.8)
-      .text(openingBal > 0 ? `+£${openingBal.toFixed(2)}` : '£0.00', margin + 455, y + 6, { width: 52, align: 'right', lineBreak: false });
+      .text(openingBal > 0 ? `+£${openingBal.toFixed(2)}` : '£0.00', 530, y + 6, { width: 54, align: 'right', lineBreak: false });
 
-    // 9. Bonus / Comm
+    // 10. Bonus / Comm
     doc.fillColor(bonus > 0 ? '#db2777' : '#94a3b8').font(bonus > 0 ? 'Helvetica-Bold' : 'Helvetica').fontSize(6.8)
-      .text(bonus > 0 ? `+£${bonus.toFixed(2)}` : '£0.00', margin + 509, y + 6, { width: 48, align: 'right', lineBreak: false });
+      .text(bonus > 0 ? `+£${bonus.toFixed(2)}` : '£0.00', 586, y + 6, { width: 48, align: 'right', lineBreak: false });
 
-    // 10. Total Payable
+    // 11. Total Payable
     doc.fillColor('#1e40af').font('Helvetica-Bold').fontSize(7.2)
-      .text(`£${totalPayableRow.toFixed(2)}`, margin + 559, y + 6, { width: 62, align: 'right', lineBreak: false });
+      .text(`£${totalPayableRow.toFixed(2)}`, 636, y + 6, { width: 64, align: 'right', lineBreak: false });
 
-    // 11. Paid
+    // 12. Paid
     doc.fillColor(paidRow > 0 ? '#059669' : '#94a3b8').font('Helvetica-Bold').fontSize(7.2)
-      .text(paidRow > 0 ? `£${paidRow.toFixed(2)}` : '£0.00', margin + 623, y + 6, { width: 54, align: 'right', lineBreak: false });
+      .text(paidRow > 0 ? `£${paidRow.toFixed(2)}` : '£0.00', 702, y + 6, { width: 56, align: 'right', lineBreak: false });
 
-    // 12. Remaining
+    // 13. Remaining
     doc.fillColor(remainingRow > 0 ? (isPartial ? '#d97706' : '#dc2626') : '#059669').font('Helvetica-Bold').fontSize(7.2)
-      .text(remainingRow > 0 ? `£${remainingRow.toFixed(2)}` : '£0.00', margin + 679, y + 6, { width: 54, align: 'right', lineBreak: false });
-
-    // 13. Status Pill
-    const statusText = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'AWAITING';
-    const statusBg = isPaid ? '#ecfdf5' : isPartial ? '#fffbeb' : '#eff6ff';
-    const statusColor = isPaid ? '#047857' : isPartial ? '#b45309' : '#1d4ed8';
-    doc.roundedRect(margin + 739, y + 3, 40, 13, 3).fill(statusBg);
-    doc.fillColor(statusColor).font('Helvetica-Bold').fontSize(6)
-      .text(statusText, margin + 739, y + 6.5, { width: 40, align: 'center', lineBreak: false });
+      .text(remainingRow > 0 ? `£${remainingRow.toFixed(2)}` : '£0.00', 760, y + 6, { width: 56, align: 'right', lineBreak: false });
 
     y += rowH;
   });
 
   // Grand Totals Summary Row
+  const totalDeductions = salaries.reduce((sum, s) => sum + Number(((s.lateDeductions || 0) + (s.manualDeductions || 0)).toFixed(2)), 0);
+
   if (y + totalH + 75 > 570) {
     doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
     y = 30;
   }
   doc.rect(margin, y, contentWidth, totalH).fill('#e2e8f0');
   doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7);
-  doc.text(`GRAND TOTALS (${salaries.length} WORKERS)`, margin + 20, y + 5, { width: 180, lineBreak: false });
-  doc.text(`£${totalWeeklyWages.toFixed(2)}`, margin + 349, y + 5, { width: 54, align: 'right', lineBreak: false });
-  doc.fillColor('#0284c7').text(`£${totalAllowance.toFixed(2)}`, margin + 405, y + 5, { width: 48, align: 'right', lineBreak: false });
-  doc.fillColor('#7c3aed').text(`£${totalOpeningBalance.toFixed(2)}`, margin + 455, y + 5, { width: 52, align: 'right', lineBreak: false });
-  doc.fillColor('#db2777').text(`£${totalCommissionBonus.toFixed(2)}`, margin + 509, y + 5, { width: 48, align: 'right', lineBreak: false });
-  doc.fillColor('#1e40af').text(`£${totalPayable.toFixed(2)}`, margin + 559, y + 5, { width: 62, align: 'right', lineBreak: false });
-  doc.fillColor('#059669').text(`£${totalPaid.toFixed(2)}`, margin + 623, y + 5, { width: 54, align: 'right', lineBreak: false });
-  doc.fillColor(totalRemaining > 0 ? '#dc2626' : '#059669').text(`£${totalRemaining.toFixed(2)}`, margin + 679, y + 5, { width: 54, align: 'right', lineBreak: false });
+  doc.text(`GRAND TOTALS (${salaries.length} WORKERS)`, 44, y + 5, { width: 220, lineBreak: false });
+  doc.fillColor(totalDeductions > 0 ? '#dc2626' : '#64748b').text(totalDeductions > 0 ? `-£${totalDeductions.toFixed(2)}` : '£0.00', 368, y + 5, { width: 48, align: 'right', lineBreak: false });
+  doc.fillColor('#0f172a').text(`£${totalWeeklyWages.toFixed(2)}`, 418, y + 5, { width: 58, align: 'right', lineBreak: false });
+  doc.fillColor('#0284c7').text(`£${totalAllowance.toFixed(2)}`, 478, y + 5, { width: 50, align: 'right', lineBreak: false });
+  doc.fillColor('#7c3aed').text(`£${totalOpeningBalance.toFixed(2)}`, 530, y + 5, { width: 54, align: 'right', lineBreak: false });
+  doc.fillColor('#db2777').text(`£${totalCommissionBonus.toFixed(2)}`, 586, y + 5, { width: 48, align: 'right', lineBreak: false });
+  doc.fillColor('#1e40af').text(`£${totalPayable.toFixed(2)}`, 636, y + 5, { width: 64, align: 'right', lineBreak: false });
+  doc.fillColor('#059669').text(`£${totalPaid.toFixed(2)}`, 702, y + 5, { width: 56, align: 'right', lineBreak: false });
+  doc.fillColor(totalRemaining > 0 ? '#dc2626' : '#059669').text(`£${totalRemaining.toFixed(2)}`, 760, y + 5, { width: 56, align: 'right', lineBreak: false });
   y += totalH;
 
   // Sign-off cards
