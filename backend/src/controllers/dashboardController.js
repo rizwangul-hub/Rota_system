@@ -392,6 +392,10 @@ exports.exportDistributorPDF = async (req, res) => {
   try {
     const { weekLabel, shopId, status } = req.query;
     const data = await getDistributorDataInternal({ weekLabel, shopId, status });
+    let author = req.user?.name || 'Fahad Rasheed';
+    if (!author || /system\s*admin/i.test(author) || /^admin$/i.test(author)) {
+      author = 'Fahad Rasheed';
+    }
     return await buildDistributorSalaryPDF(
       res,
       {
@@ -401,7 +405,7 @@ exports.exportDistributorPDF = async (req, res) => {
         shopName: data.shopName,
         statusFilter: status || 'All'
       },
-      req.user?.name || 'Arsalan'
+      author
     );
   } catch (error) {
     return sendServerError(res, error, 'Failed to export distributor PDF report.');
