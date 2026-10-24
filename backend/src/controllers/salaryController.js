@@ -10,7 +10,7 @@ const Bonus = require('../models/Bonus');
 const LedgerTransaction = require('../models/LedgerTransaction');
 const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord, safeObjectId, resolveDailyWage } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
-const { validatePaymentAmount, calculatePaymentState } = require('../utils/payment');
+const { validatePaymentAmount, calculatePaymentState, getSalaryFinancialBreakdown } = require('../utils/payment');
 const { recalculateEmployeeLedger } = require('../utils/ledgerHelper');
 
 /**
@@ -1081,18 +1081,14 @@ exports.recordSalaryPayment = async (req, res) => {
         }
       }
 
-      const Employee = require('../models/Employee');
-      const Bonus = require('../models/Bonus');
-      const emp = await Employee.findById(salary.employee).session(session);
-      openingBal = Number(emp?.openingBalance || 0);
-
-      const empBonuses = await Bonus.find({ employee: salary.employee, status: { $ne: 'DRAFT' } }).session(session);
-      const standaloneBonus = empBonuses
-        .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === salary._id.toString())
-        .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
-      commissionBonus = Number(((salary.bonus || 0) > 0 ? salary.bonus : standaloneBonus).toFixed(2));
-
-      totalPayable = Number(((salary.finalSalary || 0) + openingBal + commissionBonus).toFixed(2));
+      const breakdown = await getSalaryFinancialBreakdown(salary, session);
+      if (!breakdown) {
+        outcome = { status: 400, message: 'Could not compute salary breakdown.' };
+        return;
+      }
+      openingBal = breakdown.openingBalance;
+      commissionBonus = breakdown.bonus;
+      totalPayable = breakdown.totalPayable;
 
       const priorPayments = await SalaryPayment.find({ weeklySalary: salary._id }).session(session);
       previousPaid = Number(priorPayments.reduce((sum, record) => sum + record.amount, 0).toFixed(2));
@@ -1324,16 +1320,11 @@ exports.updateSalaryPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Associated salary record not found.' });
     }
 
-    const emp = await Employee.findById(salary.employee);
-    const openingBal = Number(emp?.openingBalance || 0);
-
-    const empBonuses = await Bonus.find({ employee: salary.employee, status: { $ne: 'DRAFT' } });
-    const standaloneBonus = empBonuses
-      .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === salary._id.toString())
-      .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
-    const commissionBonus = Number(((salary.bonus || 0) > 0 ? salary.bonus : standaloneBonus).toFixed(2));
-
-    const totalPayable = Number(((salary.finalSalary || 0) + openingBal + commissionBonus).toFixed(2));
+    const breakdown = await getSalaryFinancialBreakdown(salary);
+    if (!breakdown) {
+      return res.status(400).json({ success: false, message: 'Could not compute salary breakdown.' });
+    }
+    const totalPayable = breakdown.totalPayable;
 
     // Calculate other payments excluding this one
     const otherPayments = await SalaryPayment.find({ weeklySalary: salary._id, _id: { $ne: payment._id } });

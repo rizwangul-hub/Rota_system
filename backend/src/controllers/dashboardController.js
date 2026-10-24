@@ -206,7 +206,18 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     return true;
   });
 
-  const allBonuses = await Bonus.find({ status: { $ne: 'DRAFT' } }).lean();
+  const empIds = [...new Set(eligibleSalaries.map(s => (s.employee?._id || s.employee || '').toString()).filter(Boolean))];
+
+  // Fetch all historical salaries for these employees to accurately compute running opening balances
+  const allHistSalaries = await WeeklySalary.find({
+    employee: { $in: empIds }
+  }).sort({ weekStartDate: 1 }).lean();
+
+  const allBonuses = await Bonus.find({
+    employee: { $in: empIds },
+    status: { $ne: 'DRAFT' }
+  }).lean();
+
   const bonusMap = {};
   allBonuses.forEach(b => {
     const empKey = b.employee?.toString();
@@ -215,30 +226,104 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     bonusMap[empKey].push(b);
   });
 
+  const empSalariesMap = {};
+  allHistSalaries.forEach(s => {
+    const empKey = s.employee?.toString();
+    if (!empKey) return;
+    if (!empSalariesMap[empKey]) empSalariesMap[empKey] = [];
+    empSalariesMap[empKey].push(s);
+  });
+
+  const empOpeningMap = {};
+  eligibleSalaries.forEach(s => {
+    const empKey = (s.employee?._id || s.employee || '').toString();
+    if (s.employee && s.employee.openingBalance !== undefined) {
+      empOpeningMap[empKey] = Number(s.employee.openingBalance || 0);
+    }
+  });
+  for (const eId of empIds) {
+    if (empOpeningMap[eId] === undefined) {
+      const eDoc = await Employee.findById(eId).select('openingBalance').lean();
+      empOpeningMap[eId] = Number(eDoc?.openingBalance || 0);
+    }
+  }
+
+  // Calculate historical running remaining for every salary of each employee
+  const salaryBreakdowns = new Map();
+  for (const eId of empIds) {
+    const hist = empSalariesMap[eId] || [];
+    const empBonuses = bonusMap[eId] || [];
+    let runningRemaining = empOpeningMap[eId] || 0;
+
+    for (let i = 0; i < hist.length; i++) {
+      const s = hist[i];
+      // Week 1 opening is initial openingBalance; subsequent week opening is last week's remaining amount
+      const opening = i === 0 ? (empOpeningMap[eId] || 0) : runningRemaining;
+
+      const sStart = new Date(s.weekStartDate);
+      const sEnd = new Date(s.weekEndDate);
+      sEnd.setHours(23, 59, 59, 999);
+
+      // Only include bonuses assigned to this specific salary OR created within this week's date range
+      const weekBonusFromDocs = empBonuses.filter(b => {
+        if (b.assignedWeeklySalary) {
+          return b.assignedWeeklySalary.toString() === s._id.toString();
+        }
+        const bDate = new Date(b.createdAt);
+        return bDate >= sStart && bDate <= sEnd;
+      }).reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
+
+      const bonus = Number(((s.bonus || 0) > 0 ? s.bonus : weekBonusFromDocs).toFixed(2));
+      const weeklySalary = Number(s.finalSalary || 0);
+      const totalPayable = Number((opening + weeklySalary + bonus).toFixed(2));
+      const totalPaid = Number(s.totalPaid || 0);
+      const balanceRemaining = Number(Math.max(0, totalPayable - totalPaid).toFixed(2));
+
+      runningRemaining = balanceRemaining;
+
+      salaryBreakdowns.set(s._id.toString(), {
+        openingBalance: opening,
+        bonus,
+        weeklySalary,
+        totalPayable,
+        totalPaid,
+        balanceRemaining
+      });
+    }
+  }
+
   const salaries = eligibleSalaries.map(s => {
     const sObj = s.toObject ? s.toObject() : { ...s };
     const empKey = (s.employee?._id || s.employee || '').toString();
-    const empBonuses = bonusMap[empKey] || [];
-    const standaloneBonus = empBonuses
-      .filter(b => !b.assignedWeeklySalary || b.assignedWeeklySalary.toString() === s._id.toString())
-      .reduce((sum, b) => sum + (Number(b.bonusAmount) || 0), 0);
-    const commissionBonus = Number(((s.bonus || 0) > 0 ? s.bonus : standaloneBonus).toFixed(2));
+    const bd = salaryBreakdowns.get(s._id.toString()) || {
+      openingBalance: 0,
+      weeklySalary: Number(s.finalSalary || 0),
+      bonus: Number(s.bonus || 0),
+      totalPayable: Number(s.finalSalary || 0),
+      totalPaid: Number(s.totalPaid || 0),
+      balanceRemaining: Number(s.balanceRemaining || 0)
+    };
 
-    const openingBal = Number(s.employee?.openingBalance || 0);
-    const weeklySalary = Number(s.finalSalary || 0);
-    const totalPayableForEmp = Number((weeklySalary + openingBal + commissionBonus).toFixed(2));
-    const totalPaidForEmp = Number((s.totalPaid || 0).toFixed(2));
-    const balanceRemainingForEmp = Number(Math.max(0, totalPayableForEmp - totalPaidForEmp).toFixed(2));
+    const sStart = new Date(s.weekStartDate);
+    const sEnd = new Date(s.weekEndDate);
+    sEnd.setHours(23, 59, 59, 999);
 
-    sObj.openingBalance = openingBal;
-    sObj.weeklySalary = weeklySalary;
-    sObj.bonus = commissionBonus;
-    sObj.bonusDetails = empBonuses;
-    sObj.totalPayable = totalPayableForEmp;
-    sObj.balanceRemaining = balanceRemainingForEmp;
-    if (balanceRemainingForEmp === 0 && totalPaidForEmp > 0) {
+    const weekBonusDetails = (bonusMap[empKey] || []).filter(b => {
+      if (b.assignedWeeklySalary) return b.assignedWeeklySalary.toString() === s._id.toString();
+      const bDate = new Date(b.createdAt);
+      return bDate >= sStart && bDate <= sEnd;
+    });
+
+    sObj.openingBalance = bd.openingBalance;
+    sObj.weeklySalary = bd.weeklySalary;
+    sObj.bonus = bd.bonus;
+    sObj.bonusDetails = weekBonusDetails;
+    sObj.totalPayable = bd.totalPayable;
+    sObj.totalPaid = bd.totalPaid;
+    sObj.balanceRemaining = bd.balanceRemaining;
+    if (bd.balanceRemaining === 0 && bd.totalPaid > 0) {
       sObj.status = 'PAID';
-    } else if (totalPaidForEmp > 0) {
+    } else if (bd.totalPaid > 0) {
       sObj.status = 'PARTIALLY_PAID';
     }
     return sObj;
