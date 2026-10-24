@@ -314,8 +314,16 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
       return bDate >= sStart && bDate <= sEnd;
     });
 
+    const attendanceSalary = Number((s.netAttendancePay ?? s.weeklySalaryOverride ?? (s.grossDailyWages - (s.lateDeductions || 0)) ?? s.finalSalary ?? 0).toFixed(2));
+    const allowance = Number(((s.travelAllowance || 0) + (s.otherAllowances || 0)).toFixed(2));
+
+    sObj.attendanceSalary = attendanceSalary;
+    sObj.allowance = allowance;
+    sObj.travelAllowance = Number(s.travelAllowance || 0);
+    sObj.otherAllowances = Number(s.otherAllowances || 0);
+    sObj.weeklySalary = attendanceSalary; // Displays attendance wages in the salary field as requested
+    sObj.finalSalary = Number(s.finalSalary || 0);
     sObj.openingBalance = bd.openingBalance;
-    sObj.weeklySalary = bd.weeklySalary;
     sObj.bonus = bd.bonus;
     sObj.bonusDetails = weekBonusDetails;
     sObj.totalPayable = bd.totalPayable;
@@ -329,7 +337,8 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     return sObj;
   });
 
-  const totalWeeklyWages = salaries.reduce((sum, s) => sum + (s.weeklySalary || 0), 0);
+  const totalWeeklyWages = salaries.reduce((sum, s) => sum + (s.attendanceSalary || s.weeklySalary || 0), 0);
+  const totalAllowance = salaries.reduce((sum, s) => sum + (s.allowance || 0), 0);
   const totalOpeningBalance = salaries.reduce((sum, s) => sum + (s.openingBalance || 0), 0);
   const totalCommissionBonus = salaries.reduce((sum, s) => sum + (s.bonus || 0), 0);
   const totalPayable = salaries.reduce((sum, s) => sum + (s.totalPayable || 0), 0);
@@ -354,6 +363,7 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     shopName,
     metrics: {
       totalWeeklyWages: Number(totalWeeklyWages.toFixed(2)),
+      totalAllowance: Number(totalAllowance.toFixed(2)),
       totalOpeningBalance: Number(totalOpeningBalance.toFixed(2)),
       totalCommissionBonus: Number(totalCommissionBonus.toFixed(2)),
       totalPayable: Number(totalPayable.toFixed(2)),

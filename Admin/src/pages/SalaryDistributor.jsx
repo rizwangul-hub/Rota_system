@@ -852,6 +852,7 @@ export default function SalaryDistributor() {
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Wage</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Deduct.</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Salary</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Allowance</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Opening</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Bonus</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Paid</th>
@@ -911,7 +912,16 @@ export default function SalaryDistributor() {
                         )}
                       </td>
                       <td style={{ textAlign: 'right', padding: '8px 6px', fontWeight: 600, color: '#0f172a' }}>
-                        £{(s.weeklySalary || s.finalSalary || 0).toFixed(2)}
+                        £{(s.attendanceSalary ?? (s.weeklySalaryOverride ?? s.netAttendancePay ?? s.weeklySalary ?? s.finalSalary ?? 0)).toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
+                        {(s.allowance || ((s.travelAllowance || 0) + (s.otherAllowances || 0))) > 0 ? (
+                          <span style={{ color: '#0284c7', fontWeight: 600 }}>
+                            +£{(s.allowance || ((s.travelAllowance || 0) + (s.otherAllowances || 0))).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>£0.00</span>
+                        )}
                       </td>
                       <td style={{ textAlign: 'right', padding: '8px 6px' }}>
                         {(s.openingBalance || 0) > 0 ? (
@@ -1060,7 +1070,7 @@ export default function SalaryDistributor() {
 
                 {filteredSalaries.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="13" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                    <td colSpan="14" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
                       No finalized salary records found matching current criteria.
                     </td>
                   </tr>
