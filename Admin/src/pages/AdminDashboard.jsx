@@ -388,11 +388,19 @@ export default function AdminDashboard() {
           <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
             Weekly payroll is grouped into the month containing the rota week's end date.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '11px', color: '#64748b', margin: '-8px 0 14px' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#2563eb' }}></span> Finalized
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#10b981' }}></span> Total Paid
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {charts.monthlySalaryTrend?.map((m, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ width: '80px', fontWeight: 600 }}>{m.month}</span>
-                <div style={{ flex: 1, margin: '0 12px', display: 'grid', gap: '3px' }} title="Weekly payroll grouped by the month in which each rota week ends">
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px', gap: '8px' }}>
+                <span style={{ width: '65px', fontWeight: 600, flexShrink: 0 }}>{m.month}</span>
+                <div style={{ flex: 1, margin: '0 8px', display: 'grid', gap: '3px', minWidth: '60px' }} title="Weekly payroll grouped by the month in which each rota week ends">
                   <div style={{ background: '#f1f5f9', height: '5px', borderRadius: '4px', overflow: 'hidden' }}>
                     <div style={{ background: '#2563eb', height: '100%', width: `${Math.min(100, (m.finalizedSalary / maxMonthlySalary) * 100)}%` }} title={`Finalized: £${m.finalizedSalary}`} />
                   </div>
@@ -400,9 +408,22 @@ export default function AdminDashboard() {
                     <div style={{ background: '#10b981', height: '100%', width: `${Math.min(100, (m.totalPaid / maxMonthlySalary) * 100)}%` }} title={`Paid: £${m.totalPaid}`} />
                   </div>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, width: '130px', textAlign: 'right' }}>
-                  £{m.finalizedSalary.toFixed(2)} (Paid: £{m.totalPaid.toFixed(2)})
-                </span>
+                <div style={{ fontSize: '12px', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                  <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                    £{m.finalizedSalary.toFixed(2)}{' '}
+                    <span style={{ color: '#059669', fontWeight: 600 }}>
+                      (Paid: £{m.totalPaid.toFixed(2)})
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', marginTop: '2px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <span style={{ color: '#b45309', fontWeight: 600, background: '#fef3c7', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                      Cash: £{(m.cashPaid || 0).toFixed(2)}
+                    </span>
+                    <span style={{ color: '#4338ca', fontWeight: 600, background: '#e0e7ff', padding: '1px 5px', borderRadius: '4px', border: '1px solid #c7d2fe' }}>
+                      Bank: £{(m.bankPaid || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

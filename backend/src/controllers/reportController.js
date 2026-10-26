@@ -2782,7 +2782,8 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       shops,
       bonuses,
       weekAttendances,
-      trendSalaries
+      trendSalaries,
+      trendPayments
     ] = await Promise.all([
       Employee.countDocuments({ employmentStatus: 'Active' }),
       WeeklySalary.find(salaryQuery).lean(),
@@ -2794,6 +2795,12 @@ exports.getCompanyPayrollSummary = async (req, res) => {
         $or: [
           { weekEndDate: { $gte: sixMonthsAgo } },
           { weekEndDateString: { $gte: sixMonthsAgoStr } }
+        ]
+      }).lean(),
+      SalaryPayment.find({
+        $or: [
+          { paymentDate: { $gte: sixMonthsAgo } },
+          { createdAt: { $gte: sixMonthsAgo } }
         ]
       }).lean()
     ]);
@@ -2890,16 +2897,45 @@ exports.getCompanyPayrollSummary = async (req, res) => {
         return false;
       });
 
+      const mSalaryIds = new Set(mSalaries.map(s => String(s._id)));
+      const mPayments = (trendPayments || []).filter(p => {
+        if (p.weeklySalary && mSalaryIds.has(String(p.weeklySalary))) return true;
+        if (p.paymentDate) {
+          const dt = new Date(p.paymentDate);
+          return dt >= mStart && dt <= mEnd;
+        }
+        return false;
+      });
+
+      const cashPaid = Number(mPayments
+        .filter(p => String(p.paymentMethod || '').toLowerCase() === 'cash' && (!selectedShopId || String(p.shop) === selectedShopId))
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+        .toFixed(2));
+      const bankPaid = Number(mPayments
+        .filter(p => String(p.paymentMethod || '').toLowerCase() === 'bank' && (!selectedShopId || String(p.shop) === selectedShopId))
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+        .toFixed(2));
+
+      const totalPaidVal = Number(mSalaries.reduce(
+        (sum, salary) => sum + allocateWeeklySalaryValue(salary, shops, 'totalPaid', selectedShopId),
+        0
+      ).toFixed(2));
+
+      let finalCash = cashPaid;
+      let finalBank = bankPaid;
+      if (totalPaidVal > 0 && finalCash === 0 && finalBank === 0) {
+        finalCash = totalPaidVal;
+      }
+
       monthlySalaryTrend.push({
         month: `${mName} '${String(mYear).slice(-2)}`,
         finalizedSalary: Number(mSalaries.reduce(
           (sum, salary) => sum + allocateWeeklySalaryValue(salary, shops, 'finalSalary', selectedShopId),
           0
         ).toFixed(2)),
-        totalPaid: Number(mSalaries.reduce(
-          (sum, salary) => sum + allocateWeeklySalaryValue(salary, shops, 'totalPaid', selectedShopId),
-          0
-        ).toFixed(2))
+        totalPaid: totalPaidVal,
+        cashPaid: finalCash,
+        bankPaid: finalBank
       });
     }
 
