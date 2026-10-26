@@ -44,6 +44,7 @@ const {
   attendanceOperatorRecord,
   attendanceCheckerRecord
 } = require('../utils/attendanceViews');
+const { getAvailableWeeksList } = require('../utils/weekList');
 
 function attendanceReportFilename(shopName, dateString, extension) {
   const safeShopName = String(shopName || 'All-Shops')
@@ -2753,6 +2754,8 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     // 1. Compute 6 months trend date range
     const sixMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
     const sixMonthsAgoStr = `${sixMonthsAgo.getUTCFullYear()}-${String(sixMonthsAgo.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const sixMonthsEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    const sixMonthsEndStr = `${sixMonthsEnd.getUTCFullYear()}-${String(sixMonthsEnd.getUTCMonth() + 1).padStart(2, '0')}-${String(sixMonthsEnd.getUTCDate()).padStart(2, '0')}`;
 
     const salaryQuery = {
       status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
@@ -2776,6 +2779,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     if (sId) weekAttendanceQuery.shop = sId;
 
     // 2. Run all queries in parallel with Promise.all
+    const toLean = q => (typeof q?.lean === 'function' ? q.lean() : q);
     const [
       activeEmployees,
       finalizedSalaries,
@@ -2783,26 +2787,28 @@ exports.getCompanyPayrollSummary = async (req, res) => {
       bonuses,
       weekAttendances,
       trendSalaries,
-      trendPayments
+      trendPayments,
+      availableWeeks
     ] = await Promise.all([
       Employee.countDocuments({ employmentStatus: 'Active' }),
-      WeeklySalary.find(salaryQuery).lean(),
-      Shop.find({ isActive: true }).lean(),
-      Bonus.find(bonusQuery).lean(),
-      Attendance.find(weekAttendanceQuery).lean(),
-      WeeklySalary.find({
+      toLean(WeeklySalary.find(salaryQuery)),
+      toLean(Shop.find({ isActive: true })),
+      toLean(Bonus.find(bonusQuery)),
+      toLean(Attendance.find(weekAttendanceQuery)),
+      toLean(WeeklySalary.find({
         status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
         $or: [
-          { weekEndDate: { $gte: sixMonthsAgo } },
-          { weekEndDateString: { $gte: sixMonthsAgoStr } }
+          { weekEndDate: { $gte: sixMonthsAgo, $lte: sixMonthsEnd } },
+          { weekEndDateString: { $gte: sixMonthsAgoStr, $lte: sixMonthsEndStr } }
         ]
-      }).lean(),
-      SalaryPayment.find({
+      })),
+      toLean(SalaryPayment.find({
         $or: [
           { paymentDate: { $gte: sixMonthsAgo } },
           { createdAt: { $gte: sixMonthsAgo } }
         ]
-      }).lean()
+      })),
+      getAvailableWeeksList()
     ]);
 
     const selectedShopId = sId ? sId.toString() : null;
@@ -2942,6 +2948,7 @@ exports.getCompanyPayrollSummary = async (req, res) => {
     res.json({
       success: true,
       currentWeek,
+      availableWeeks,
       cards: {
         finalizedSalary,
         totalPaid,

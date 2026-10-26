@@ -5,6 +5,7 @@ const Bonus = require('../models/Bonus');
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 const WeeklySalary = require('../models/WeeklySalary');
+const SalaryPayment = require('../models/SalaryPayment');
 const reportController = require('../controllers/reportController');
 const dashboardController = require('../controllers/dashboardController');
 const { getUKDateString, getWeekRange } = require('../utils/calc');
@@ -98,6 +99,7 @@ async function run() {
       return [];
     });
     replaceMethod(Shop, 'find', async () => shops);
+    replaceMethod(SalaryPayment, 'find', async () => []);
     replaceMethod(Attendance, 'find', async query => {
       if (query.dateString) {
         return [

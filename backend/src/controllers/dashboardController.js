@@ -6,53 +6,79 @@ const WeeklySalary = require('../models/WeeklySalary');
 const Bonus = require('../models/Bonus');
 const { getWeekRange, getUKDateString, formatUKDate } = require('../utils/calc');
 const { attendanceCheckerRecord } = require('../utils/attendanceViews');
+const { getAvailableWeeksList } = require('../utils/weekList');
 
 exports.getAdminDashboard = async (req, res) => {
   try {
     const todayStr = getUKDateString();
-    const week = getWeekRange(todayStr);
+    const requestedWeek = req.query?.weekLabel;
+
+    let week;
+    if (requestedWeek && requestedWeek !== 'All' && requestedWeek !== 'current') {
+      const dmyMatch = requestedWeek.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const ymdMatch = requestedWeek.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dmyMatch) {
+        week = getWeekRange(`${dmyMatch[1]}/${dmyMatch[2]}/${dmyMatch[3]}`);
+      } else if (ymdMatch) {
+        week = getWeekRange(ymdMatch[0]);
+      } else {
+        week = getWeekRange(todayStr);
+      }
+    } else {
+      week = getWeekRange(todayStr);
+    }
     const { startDate, endDate, weekLabel } = week;
 
-    const [currentYear, currentMonthNumber] = todayStr.split('-').map(Number);
-    const currentMonth = new Date(Date.UTC(currentYear, currentMonthNumber - 1, 1))
+    const [targetYear, targetMonthNumber] = week.endDateString.split('-').map(Number);
+    const targetMonth = new Date(Date.UTC(targetYear, targetMonthNumber - 1, 1))
       .toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
 
     // Parallelize all independent DB queries to dramatically reduce load time
+    const toLean = q => (typeof q?.lean === 'function' ? q.lean() : q);
     const [
       totalEmployees,
       activeEmployees,
       totalShops,
       todayAttendance,
+      weekAttendance,
       pendingAttendanceCount,
       weekSalaries,
       shops,
-      monthlyBonuses
+      monthlyBonuses,
+      availableWeeks
     ] = await Promise.all([
       Employee.countDocuments(),
       Employee.countDocuments({ employmentStatus: 'Active' }),
       Shop.countDocuments({ isActive: true }),
-      Attendance.find({ dateString: todayStr }).lean(),
+      toLean(Attendance.find({ dateString: todayStr })),
+      toLean(Attendance.find({
+        $or: [
+          { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+          { date: { $gte: week.startDate, $lte: week.endDate } }
+        ]
+      })),
       Attendance.countDocuments({ approvalStatus: 'Pending Review' }),
-      WeeklySalary.find({
+      toLean(WeeklySalary.find({
         status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] },
         $or: [
-          { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel] } },
+          { weekLabel: { $in: [week.weekLabel, week.legacyWeekLabel, requestedWeek].filter(Boolean) } },
           { weekStartDateString: week.startDateString },
           { weekStartDate: { $gte: week.startDate, $lte: week.endDate } }
         ]
-      }).lean(),
-      Shop.find({ isActive: true }).lean(),
-      Bonus.find({ month: currentMonth, year: currentYear }).lean()
+      })),
+      toLean(Shop.find({ isActive: true })),
+      toLean(Bonus.find({ month: targetMonth, year: targetYear })),
+      getAvailableWeeksList()
     ]);
 
     const attendanceStats = {
-      total: todayAttendance.length,
-      present: todayAttendance.filter(a => a.status === 'Present').length,
-      late: todayAttendance.filter(a => a.status === 'Late').length,
-      half: todayAttendance.filter(a => a.status === 'Half').length,
-      absent: todayAttendance.filter(a => a.status === 'Absent').length,
-      totalHours: todayAttendance.reduce((sum, a) => sum + (a.actualHours || 0), 0),
-      totalWages: todayAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0)
+      total: weekAttendance.length,
+      present: weekAttendance.filter(a => a.status === 'Present').length,
+      late: weekAttendance.filter(a => a.status === 'Late').length,
+      half: weekAttendance.filter(a => a.status === 'Half').length,
+      absent: weekAttendance.filter(a => a.status === 'Absent').length,
+      totalHours: Number(weekAttendance.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2)),
+      totalWages: Number(weekAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2))
     };
 
     const thisWeekSalaryTotal = weekSalaries.reduce((sum, s) => sum + (s.finalSalary || 0), 0);
@@ -102,18 +128,29 @@ exports.getAdminDashboard = async (req, res) => {
     const shopBreakdown = [];
 
     for (const s of shops) {
-      const shopAttendance = todayAttendance.filter(a => a.shop && a.shop.toString() === s._id.toString());
-      const presentWorkers = new Set(shopAttendance
+      const sId = s._id.toString();
+      const shopWeekAttendance = weekAttendance.filter(a => a.shop && a.shop.toString() === sId);
+      const weekWorkers = new Set(shopWeekAttendance
         .filter(a => ['Present', 'Late', 'Half'].includes(a.status))
         .map(a => String(a.employee?._id || a.employee || ''))
         .filter(Boolean));
+
+      const shopTodayAttendance = todayAttendance.filter(a => a.shop && a.shop.toString() === sId);
+      const todayWorkers = new Set(shopTodayAttendance
+        .filter(a => ['Present', 'Late', 'Half'].includes(a.status))
+        .map(a => String(a.employee?._id || a.employee || ''))
+        .filter(Boolean));
+
       shopBreakdown.push({
         shopId: s._id,
         shopName: s.name,
-        todayWorkers: presentWorkers.size,
-        todayHours: Number(shopAttendance.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2)),
-        todayCost: Number(shopAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2)),
-        weekSalaryCost: Number(((allocatedSalaryCentsByShop.get(s._id.toString()) || 0) / 100).toFixed(2))
+        todayWorkers: todayWorkers.size,
+        todayHours: Number(shopTodayAttendance.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2)),
+        todayCost: Number(shopTodayAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2)),
+        weekWorkers: weekWorkers.size,
+        weekHours: Number(shopWeekAttendance.reduce((sum, a) => sum + (a.actualHours || 0), 0).toFixed(2)),
+        weekCost: Number(shopWeekAttendance.reduce((sum, a) => sum + (a.attendancePay || 0), 0).toFixed(2)),
+        weekSalaryCost: Number(((allocatedSalaryCentsByShop.get(sId) || 0) / 100).toFixed(2))
       });
     }
 
@@ -126,6 +163,8 @@ exports.getAdminDashboard = async (req, res) => {
         pendingAttendanceCount,
         attendanceStats,
         weekLabel,
+        selectedWeek: weekLabel,
+        availableWeeks,
         thisWeekSalaryTotal,
         thisWeekPaidTotal,
         thisWeekOutstanding,

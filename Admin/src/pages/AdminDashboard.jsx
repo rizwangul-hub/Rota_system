@@ -3,22 +3,27 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import {
   Users, Store, Clock, AlertCircle, Banknote, Award, ArrowUpRight,
-  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X
+  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { downloadReportFile } from '../utils/downloadReportFile';
 
 // Module-level cache — survives React navigation (component unmount/remount)
-// Data is kept until the page is fully refreshed in the browser
-const _cache = { data: null, summaryData: null, fetchedAt: null, request: null };
+// Caches per selected week
+const _cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // Re-fetch in background after 5 minutes
 
-function loadDashboardData() {
-  if (_cache.request) return _cache.request;
+function loadDashboardData(weekLabel = '') {
+  const cacheKey = weekLabel || 'default';
+  const cached = _cache.get(cacheKey);
+  if (cached && cached.data && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return Promise.resolve(cached);
+  }
 
-  _cache.request = Promise.all([
-    axios.get(`${API_BASE_URL}/dashboard/admin`),
-    axios.get(`${API_BASE_URL}/reports/summary`)
+  const params = weekLabel ? { weekLabel } : {};
+  return Promise.all([
+    axios.get(`${API_BASE_URL}/dashboard/admin`, { params }),
+    axios.get(`${API_BASE_URL}/reports/summary`, { params })
   ]).then(([dashRes, sumRes]) => {
     if (!dashRes.data.success || !sumRes.data.success) {
       throw new Error('Dashboard API returned an unsuccessful response.');
@@ -26,26 +31,23 @@ function loadDashboardData() {
 
     const result = {
       data: dashRes.data.data,
-      summaryData: sumRes.data
+      summaryData: sumRes.data,
+      fetchedAt: Date.now()
     };
-    _cache.data = result.data;
-    _cache.summaryData = result.summaryData;
-    _cache.fetchedAt = Date.now();
+    _cache.set(cacheKey, result);
     return result;
-  }).finally(() => {
-    _cache.request = null;
   });
-
-  return _cache.request;
 }
 
 export default function AdminDashboard() {
-  // Initialise from cache so there is NO loading flash on revisit
-  const [data, setData]             = useState(_cache.data);
-  const [summaryData, setSummaryData] = useState(_cache.summaryData);
-  const [loading, setLoading]       = useState(!_cache.data); // false if already cached
-  const [error, setError]           = useState('');
-  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [data, setData]                         = useState(null);
+  const [summaryData, setSummaryData]           = useState(null);
+  const [availableWeeks, setAvailableWeeks]     = useState([]);
+  const [selectedWeek, setSelectedWeek]         = useState('');
+  const [loading, setLoading]                   = useState(true);
+  const [isFetchingWeek, setIsFetchingWeek]     = useState(false);
+  const [error, setError]                       = useState('');
+  const [showBackupModal, setShowBackupModal]   = useState(false);
   const [downloadingBackup, setDownloadingBackup] = useState('');
   const isMounted = useRef(true);
 
@@ -75,38 +77,39 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     isMounted.current = true;
-
-    const cacheAge = _cache.fetchedAt ? Date.now() - _cache.fetchedAt : Infinity;
-    const needsFresh = cacheAge > CACHE_TTL_MS;
-
-    if (_cache.data && !needsFresh) {
-      // Cache is fresh — nothing to do, data already shown instantly
-      return () => { isMounted.current = false; };
-    }
-
-    // First load or stale cache: fetch (silently if we already have cached data).
-    // The shared request updates the module cache even if this page unmounts.
-    void fetchDashboard(/* silent = */ !!_cache.data);
+    fetchDashboard(selectedWeek);
     return () => { isMounted.current = false; };
-  }, []);
+  }, [selectedWeek]);
 
-  const fetchDashboard = async (silent = false) => {
-    if (!silent) setLoading(true);
+  const fetchDashboard = async (weekToFetch) => {
+    if (!data) setLoading(true);
+    else setIsFetchingWeek(true);
     setError('');
     try {
-      const result = await loadDashboardData();
-      if (!isMounted.current) return; // navigated away — discard
+      const result = await loadDashboardData(weekToFetch);
+      if (!isMounted.current) return;
       setData(result.data);
       setSummaryData(result.summaryData);
+
+      const weeks = result.summaryData?.availableWeeks || result.data?.availableWeeks || [];
+      if (weeks.length > 0) {
+        setAvailableWeeks(weeks);
+        if (!weekToFetch) {
+          const defaultWeek = result.summaryData?.currentWeek || result.data?.weekLabel || weeks[0];
+          setSelectedWeek(defaultWeek);
+        }
+      }
     } catch (err) {
       if (!isMounted.current) return;
       console.error('Failed to load dashboard:', err);
-      // Only show error when we have no data at all
-      if (!_cache.data) {
+      if (!data) {
         setError('Unable to load executive dashboard data. Please check connection and try again.');
       }
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setIsFetchingWeek(false);
+      }
     }
   };
 
@@ -175,14 +178,61 @@ export default function AdminDashboard() {
       {/* Title & Quick Actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
-            Executive Dashboard
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+              Executive Dashboard
+            </h1>
+            {isFetchingWeek && (
+              <span style={{ fontSize: '11px', background: '#eff6ff', color: '#2563eb', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                Updating...
+              </span>
+            )}
+          </div>
           <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0 0 0' }}>
             PixxTechnologies UK Rota, Attendance & Labour Economics
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Week Selector Dropdown */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: '#ffffff',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            border: '2px solid #2563eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <Calendar size={18} color="#2563eb" />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, color: '#2563eb', letterSpacing: '0.5px', lineHeight: 1 }}>
+                Select Rota Week
+              </span>
+              <select
+                value={selectedWeek || summaryData?.currentWeek || weekLabel || ''}
+                onChange={(e) => setSelectedWeek(e.target.value)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  padding: '2px 0 0 0'
+                }}
+              >
+                {availableWeeks.map((w, idx) => (
+                  <option key={w} value={w}>
+                    {w} {idx === 0 ? ' (Latest)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <button
             onClick={() => setShowBackupModal(true)}
             className="btn btn-sm"
@@ -218,7 +268,7 @@ export default function AdminDashboard() {
             £{(cards.finalizedSalary ?? thisWeekSalaryTotal ?? 0).toFixed(2)}
           </div>
           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-            Week: {weekLabel}
+            Week: {selectedWeek || summaryData?.currentWeek || weekLabel}
           </div>
         </div>
 
@@ -323,7 +373,7 @@ export default function AdminDashboard() {
             Labour Hours: Scheduled vs Actual
           </h2>
           <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
-            Current-week attendance records, grouped by the shop where each shift took place.
+            Attendance records for {selectedWeek || summaryData?.currentWeek || weekLabel}, grouped by the shop where each shift took place.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {charts.labourHoursByShop?.map(s => (
@@ -346,7 +396,7 @@ export default function AdminDashboard() {
             ))}
             {(!charts.labourHoursByShop || charts.labourHoursByShop.length === 0) && (
               <div style={{ color: '#94a3b8', fontSize: '13px', textAlign: 'center', padding: '20px' }}>
-                No labour hours recorded for current week.
+                No labour hours recorded for selected week.
               </div>
             )}
           </div>
@@ -358,7 +408,7 @@ export default function AdminDashboard() {
             Attendance Status Distribution
           </h2>
           <p style={{ fontSize: '12px', color: '#64748b', margin: '-8px 0 16px' }}>
-            Current-week attendance records; counts are records, not unique workers.
+            Attendance records for {selectedWeek || summaryData?.currentWeek || weekLabel}; counts are shift records.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
             <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
@@ -432,8 +482,13 @@ export default function AdminDashboard() {
 
       {/* Shop Labour & Cost Table */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Labour & Cost by Shop Location</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Labour & Cost by Shop Location</h2>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>
+              Full week performance breakdown for {selectedWeek || summaryData?.currentWeek || weekLabel}
+            </p>
+          </div>
           <Link to="/reports" className="btn btn-outline btn-sm">
             Detailed Labour Report <ArrowUpRight size={14} />
           </Link>
@@ -444,26 +499,26 @@ export default function AdminDashboard() {
             <thead>
               <tr>
                 <th>Shop Location</th>
-                <th>Today's Present Staff</th>
-                <th>Today's Labour Hours</th>
-                <th>Today's Wage Cost</th>
-                <th>This Week's Final Salary</th>
+                <th>Week Staff</th>
+                <th>Week Labour Hours</th>
+                <th>Shift Wage Cost</th>
+                <th>Allocated Final Salary</th>
               </tr>
             </thead>
             <tbody>
               {shopBreakdown.map(s => (
                 <tr key={s.shopId}>
                   <td style={{ fontWeight: 600 }}>{s.shopName}</td>
-                  <td>{s.todayWorkers} staff</td>
-                  <td>{s.todayHours} hrs</td>
-                  <td>£{s.todayCost.toFixed(2)}</td>
-                  <td style={{ fontWeight: 600, color: '#2563eb' }}>£{s.weekSalaryCost.toFixed(2)}</td>
+                  <td>{s.weekWorkers ?? s.todayWorkers} staff</td>
+                  <td>{s.weekHours ?? s.todayHours} hrs</td>
+                  <td>£{Number((s.weekCost ?? s.todayCost) || 0).toFixed(2)}</td>
+                  <td style={{ fontWeight: 600, color: '#2563eb' }}>£{Number(s.weekSalaryCost || 0).toFixed(2)}</td>
                 </tr>
               ))}
               {shopBreakdown.length === 0 && (
                 <tr>
                   <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
-                    No shop data available.
+                    No shop data available for this week.
                   </td>
                 </tr>
               )}
