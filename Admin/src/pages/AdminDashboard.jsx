@@ -467,7 +467,7 @@ export default function AdminDashboard() {
                   </div>
                   <div style={{ fontSize: '11px', marginTop: '2px', display: 'flex', gap: '4px', alignItems: 'center' }}>
                     <span style={{ color: '#b45309', fontWeight: 600, background: '#fef3c7', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fde68a' }}>
-                      Cash: £{(m.cashPaid || 0).toFixed(2)}
+                      C2: £{(m.cashPaid || 0).toFixed(2)}
                     </span>
                     <span style={{ color: '#4338ca', fontWeight: 600, background: '#e0e7ff', padding: '1px 5px', borderRadius: '4px', border: '1px solid #c7d2fe' }}>
                       Bank: £{(m.bankPaid || 0).toFixed(2)}
