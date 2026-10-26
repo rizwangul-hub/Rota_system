@@ -1504,7 +1504,16 @@ async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, 
   if (dailyRecords && dailyRecords.length > 0) {
     if (y + 60 > 500) {
       doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-      y = 30;
+      doc.rect(margin, 18, contentWidth, 30).fillAndStroke('#ffffff', '#cbd5e1');
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(12).text(
+        `WORKER: ${(employeeName || '').toUpperCase()}`,
+        margin + 12, 26, { lineBreak: false }
+      );
+      doc.fillColor('#2563eb').font('Helvetica-Bold').fontSize(9).text(
+        `${employeeId ? `[${employeeId}] ` : ''}${shopName} • Period: ${monthLabel}`,
+        margin + contentWidth - 260, 27, { width: 250, align: 'right', lineBreak: false }
+      );
+      y = 56;
     } else {
       y += 18;
     }
@@ -1528,7 +1537,16 @@ async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, 
     dailyRecords.forEach((r, idx) => {
       if (y + 15 > 520) {
         doc.addPage({ margin: 25, size: 'A4', layout: 'landscape' });
-        y = 30;
+        doc.rect(margin, 18, contentWidth, 30).fillAndStroke('#ffffff', '#cbd5e1');
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(12).text(
+          `WORKER: ${(employeeName || '').toUpperCase()}`,
+          margin + 12, 26, { lineBreak: false }
+        );
+        doc.fillColor('#2563eb').font('Helvetica-Bold').fontSize(9).text(
+          `${employeeId ? `[${employeeId}] ` : ''}${shopName} • Period: ${monthLabel} (Cont.)`,
+          margin + contentWidth - 260, 27, { width: 250, align: 'right', lineBreak: false }
+        );
+        y = 56;
         doc.rect(25, y, 790, 15).fill('#f1f5f9');
         doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7.5);
         doc.text('Date & Day', 35, y + 3.5, { width: 110, lineBreak: false });

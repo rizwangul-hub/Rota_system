@@ -36,9 +36,9 @@ export default function EmployeeDetail() {
     }
   };
 
-  // Monthly Report State (Matching Image 2)
-  const [reportMonth, setReportMonth] = useState('5'); // May
-  const [reportYear, setReportYear] = useState('2026');
+  // Monthly Report State (Matching Image 2) - Defaults to current active month
+  const [reportMonth, setReportMonth] = useState(String(new Date().getMonth() + 1));
+  const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
   const [monthlyReportData, setMonthlyReportData] = useState(null);
   const [monthlyReportError, setMonthlyReportError] = useState('');
   const [downloadingMonthlyExcel, setDownloadingMonthlyExcel] = useState(false);
@@ -397,7 +397,7 @@ export default function EmployeeDetail() {
                 <label className="form-label" style={{ margin: 0 }}>Statement Month:</label>
                 <select className="form-select" style={{ width: '130px' }} value={reportMonth} onChange={(e) => setReportMonth(e.target.value)}>
                   {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map(m => {
-                    const d = new Date(2026, Number(m) - 1, 1);
+                    const d = new Date(Number(reportYear), Number(m) - 1, 1);
                     return <option key={m} value={m}>{d.toLocaleString('en-US', { month: 'long' })}</option>;
                   })}
                 </select>
@@ -411,6 +411,10 @@ export default function EmployeeDetail() {
                   <option value="2027">2027</option>
                 </select>
               </div>
+
+              <button className="btn btn-outline btn-sm" onClick={downloadMonthlyPdf} disabled={downloadingMonthlyPdf} style={{ borderColor: '#dc2626', color: '#dc2626', fontWeight: 600 }}>
+                <FileText size={14} color="#dc2626" /> {downloadingMonthlyPdf ? 'Preparing PDF...' : 'Download Monthly PDF'}
+              </button>
 
               <button className="btn btn-outline btn-sm" onClick={downloadMonthlyExcel} disabled={downloadingMonthlyExcel}>
                 <Download size={14} /> {downloadingMonthlyExcel ? 'Preparing Excel...' : 'Download Excel Formatted'}
