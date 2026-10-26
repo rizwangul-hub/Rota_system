@@ -19,12 +19,14 @@
   "dependencies": {
     "archiver": "^5.3.2",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.3",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.2",
+    "multer": "^2.5.0",
     "pdfkit": "^0.20.2"
   },
   "devDependencies": {

@@ -4,7 +4,12 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import { downloadReportFile } from '../utils/downloadReportFile';
 import { formatTime12Hour } from '../utils/formatTime';
-import { ArrowLeft, Download, Banknote, Clock, Award, ShieldAlert, FileText, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft, Download, Banknote, Clock, Award, ShieldAlert,
+  FileText, Trash2, Edit, ExternalLink, ShieldCheck, CheckCircle2,
+  AlertTriangle, Building2, User
+} from 'lucide-react';
+import EmployeeJoiningModal from '../components/EmployeeJoiningModal';
 
 function getApiFailureMessage(error, fallback) {
   if (!error.response) {
@@ -18,6 +23,18 @@ export default function EmployeeDetail() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Joining modal & shops
+  const [joiningModalOpen, setJoiningModalOpen] = useState(false);
+  const [joiningModalTab, setJoiningModalTab] = useState('personal');
+  const [downloadingJoiningPdf, setDownloadingJoiningPdf] = useState(false);
+  const [shops, setShops] = useState([]);
+
+  useEffect(() => {
+    axios.get(`${API_BASE_URL}/shops`).then(res => {
+      if (res.data?.success) setShops(res.data.shops || []);
+    }).catch(err => console.warn('Could not load shops:', err.message));
+  }, []);
 
   const handleDeleteWorker = async () => {
     if (!profile?.employee) return;
@@ -146,6 +163,52 @@ export default function EmployeeDetail() {
     }
   };
 
+  const downloadJoiningFormPdf = async () => {
+    setDownloadingJoiningPdf(true);
+    try {
+      await downloadReportFile(
+        `/employees/${id}/joining-form/pdf`,
+        {},
+        `Joining_Form_${profile?.employee?.name ? profile.employee.name.replace(/\s+/g, '_') : id}.pdf`
+      );
+    } catch (err) {
+      window.alert(err.message || 'Unable to download joining form PDF.');
+    } finally {
+      setDownloadingJoiningPdf(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    if (!window.confirm('Are you sure you want to delete this compliance document?')) return;
+    try {
+      const res = await axios.delete(`${API_BASE_URL}/employees/${id}/documents/${docId}`);
+      if (res.data?.success) {
+        alert('Document removed successfully');
+        fetchProfile();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete document');
+    }
+  };
+
+  const getExpiryPill = (dateStr) => {
+    if (!dateStr) return { label: 'Not Specified', color: '#64748b', bg: '#f1f5f9', isAlert: false };
+    const exp = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const formatted = exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (diffDays <= 0) {
+      return { label: `${formatted} (EXPIRED ${Math.abs(diffDays)}d ago)`, color: '#b91c1c', bg: '#fee2e2', isAlert: true, urgent: true };
+    }
+    if (diffDays <= 7) {
+      return { label: `${formatted} (URGENT: ${diffDays}d left - 1 Week)`, color: '#c2410c', bg: '#ffedd5', isAlert: true, urgent: true };
+    }
+    if (diffDays <= 30) {
+      return { label: `${formatted} (NOTICE: ${diffDays}d left - 1 Month)`, color: '#b45309', bg: '#fef3c7', isAlert: true, urgent: false };
+    }
+    return { label: `${formatted} (${diffDays} days remaining)`, color: '#15803d', bg: '#dcfce7', isAlert: false };
+  };
+
   if (loading && !profile) {
     return (
       <div className="page-container" aria-busy="true">
@@ -231,6 +294,8 @@ export default function EmployeeDetail() {
             </div>
             <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
               ID: <strong>{employee.employeeId}</strong> • Daily Wage: <strong>£{Number(employee.dailyWage || 0).toFixed(2)}</strong>
+              {employee.jobTitle ? <> • Role: <strong>{employee.jobTitle}</strong></> : null}
+              {employee.workLocation ? <> • Location: <strong>{employee.workLocation}</strong></> : null}
               {employee.openingBalance !== undefined && employee.openingBalance !== 0 && (
                 <> • Opening Balance: <strong style={{ color: '#7c3aed' }}>£{Number(employee.openingBalance).toFixed(2)}</strong></>
               )}
@@ -238,7 +303,17 @@ export default function EmployeeDetail() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => { setJoiningModalTab('personal'); setJoiningModalOpen(true); }}
+              title="Edit Employee Joining Form, Right to Work & Documents"
+            >
+              <Edit size={14} /> Edit Joining Form
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={downloadJoiningFormPdf} disabled={downloadingJoiningPdf} title="Download Complete UK Joining Form PDF">
+              <FileText size={14} color="#2563eb" /> {downloadingJoiningPdf ? 'Generating PDF...' : 'Download Joining PDF'}
+            </button>
             <button className="btn btn-outline btn-sm" onClick={downloadMonthlyPdf} disabled={downloadingMonthlyPdf}>
               <FileText size={14} color="#dc2626" /> {downloadingMonthlyPdf ? 'Preparing PDF...' : 'Export Monthly PDF'}
             </button>
@@ -358,8 +433,63 @@ export default function EmployeeDetail() {
         </div>
       </div>
 
+      {/* Compliance Expiry Warning Banner for this Employee */}
+      {(() => {
+        const visaPill = getExpiryPill(employee?.visaExpiryDate);
+        const passPill = getExpiryPill(employee?.passportExpiryDate);
+        const docAlerts = (employee?.documents || []).filter(d => d.expiryDate && getExpiryPill(d.expiryDate).isAlert);
+        const hasAlert = visaPill.isAlert || passPill.isAlert || docAlerts.length > 0;
+
+        if (!hasAlert) return null;
+
+        return (
+          <div
+            style={{
+              background: '#fef2f2',
+              border: '1.5px solid #f87171',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <ShieldAlert size={20} color="#dc2626" />
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#991b1b' }}>
+                  Compliance Notice: Expiring or Expired Right to Work Documents
+                </div>
+                <div style={{ fontSize: '12px', color: '#7f1d1d', marginTop: '2px' }}>
+                  {visaPill.isAlert && <span>Visa: <strong>{visaPill.label}</strong>. </span>}
+                  {passPill.isAlert && <span>Passport: <strong>{passPill.label}</strong>. </span>}
+                  {docAlerts.length > 0 && <span>{docAlerts.length} uploaded document(s) need renewal.</span>}
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-sm"
+              style={{ background: '#dc2626', color: '#ffffff', border: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}
+              onClick={() => { setJoiningModalTab('right_to_work'); setJoiningModalOpen(true); }}
+            >
+              <Edit size={13} /> Update Expiry & Documents
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Tabs navigation */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <button
+          className={`btn ${activeTab === 'joining_record' ? 'btn-primary' : 'btn-outline'} btn-sm`}
+          onClick={() => setActiveTab('joining_record')}
+        >
+          📋 Joining & Right-to-Work Compliance
+        </button>
         <button
           className={`btn ${activeTab === 'monthly_report' ? 'btn-primary' : 'btn-outline'} btn-sm`}
           onClick={() => setActiveTab('monthly_report')}
@@ -378,6 +508,378 @@ export default function EmployeeDetail() {
         >
           ⏱️ Attendance History
         </button>
+
+      {/* TAB 0: Unified Joining Record & Right-to-Work Compliance */}
+      {activeTab === 'joining_record' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Action Toolbar */}
+          <div className="card" style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                UK Employee Onboarding & Compliance Record
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>
+                Official personnel record containing employment contract details, right-to-work verification, banking, and Cloudinary documents
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { setJoiningModalTab('personal'); setJoiningModalOpen(true); }}
+              >
+                <Edit size={13} /> Edit Joining Form
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={downloadJoiningFormPdf}
+                disabled={downloadingJoiningPdf}
+              >
+                <FileText size={13} color="#2563eb" /> {downloadingJoiningPdf ? 'Generating PDF...' : 'Download Official PDF'}
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => { setJoiningModalTab('documents'); setJoiningModalOpen(true); }}
+              >
+                <ExternalLink size={13} /> Upload Documents (Cloudinary)
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+            {/* Card 1: Company & Workplace Details */}
+            <div className="card">
+              <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                <Building2 size={16} color="#2563eb" /> Company & Role Details
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Employer Legal Name:</span>
+                  <strong>{employee.companyLegalName || 'Pixx Technologies Ltd'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Trading / Brand Name:</span>
+                  <strong>{employee.tradingName || 'Pixx Retail London'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Job Title:</span>
+                  <strong>{employee.jobTitle || 'Retail Assistant / Sales'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Work Location:</span>
+                  <strong>{employee.workLocation || (employee.assignedShop?.name || 'Pixx Retail')}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Employment Type:</span>
+                  <span className="badge" style={{ background: '#eff6ff', color: '#1d4ed8' }}>
+                    {employee.employmentType || 'Casual / Zero-Hours'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Start Date:</span>
+                  <strong>{employee.startDate ? new Date(employee.startDate).toLocaleDateString('en-GB') : '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Daily Wage Rate:</span>
+                  <strong style={{ color: '#059669', fontSize: '14px' }}>£{Number(employee.dailyWage || 0).toFixed(2)}</strong>
+                </div>
+                {employee.hourlyRate && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ color: '#64748b' }}>Equivalent Hourly Rate:</span>
+                    <strong>£{Number(employee.hourlyRate).toFixed(2)}/hr</strong>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Normal Hours / Week:</span>
+                  <strong>{employee.normalHoursPerWeek ? `${employee.normalHoursPerWeek} hrs/week` : 'Variable / Rota'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Line Manager:</span>
+                  <strong>{employee.lineManager || 'Fahad Rasheed'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span style={{ color: '#64748b' }}>H&S Induction:</span>
+                  <span style={{ color: employee.healthSafetyInductionCompleted ? '#16a34a' : '#ea580c', fontWeight: 600 }}>
+                    {employee.healthSafetyInductionCompleted ? '✅ Completed' : '⚠️ Pending Induction'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Personal Details & Emergency Contact */}
+            <div className="card">
+              <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                <User size={16} color="#2563eb" /> Personal Details & Emergency Contact
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Full Legal Name:</span>
+                  <strong>{employee.name}</strong>
+                </div>
+                {employee.preferredName && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ color: '#64748b' }}>Preferred Name:</span>
+                    <strong>{employee.preferredName}</strong>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Date of Birth:</span>
+                  <strong>{employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString('en-GB') : '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>National Insurance No:</span>
+                  <strong style={{ letterSpacing: '1px' }}>{employee.nationalInsuranceNumber || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Phone Number:</span>
+                  <strong>{employee.phone || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Email Address:</span>
+                  <strong>{employee.email || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Residential Address:</span>
+                  <strong style={{ textAlign: 'right', maxWidth: '60%' }}>{employee.homeAddress || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Postcode:</span>
+                  <strong>{employee.postcode || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Emergency Contact Name:</span>
+                  <strong>{employee.emergencyContactName || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span style={{ color: '#64748b' }}>Emergency Phone / Rel:</span>
+                  <strong>
+                    {employee.emergencyContactPhone || '—'} {employee.emergencyContactRelationship ? `(${employee.emergencyContactRelationship})` : ''}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Banking & Payroll Details */}
+            <div className="card">
+              <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                <Banknote size={16} color="#059669" /> Payroll & UK Banking Details
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Bank Account Name:</span>
+                  <strong>{employee.bankAccountName || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Bank Sort Code:</span>
+                  <strong style={{ letterSpacing: '1px' }}>{employee.bankSortCode || '—'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Bank Account Number:</span>
+                  <strong style={{ letterSpacing: '1px' }}>
+                    {employee.bankAccountNumber ? `•••• •••• ${employee.bankAccountNumber.slice(-4)}` : '—'}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>P45 Status:</span>
+                  <span className="badge" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' }}>
+                    {employee.p45Status || 'Pending'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Opening Balance:</span>
+                  <strong style={{ color: (employee.openingBalance || 0) !== 0 ? '#7c3aed' : '#94a3b8' }}>
+                    £{Number(employee.openingBalance || 0).toFixed(2)}
+                  </strong>
+                </div>
+                {employee.openingBalanceNote && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <span style={{ color: '#64748b' }}>Opening Note:</span>
+                    <span style={{ color: '#64748b', fontSize: '12px' }}>{employee.openingBalanceNote}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Card 4: Right to Work & Visa Compliance */}
+            <div className="card">
+              <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                <ShieldCheck size={16} color="#0284c7" /> Right to Work & Visa Verification
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Nationality / Status:</span>
+                  <strong>{employee.nationalityType || 'British / Irish Citizen'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Check Method:</span>
+                  <strong>{employee.rightToWorkCheckMethod || 'Manual eligible documents'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Verification Status:</span>
+                  <span className={`badge badge-${employee.rightToWorkStatus === 'Passed' ? 'present' : 'absent'}`}>
+                    {employee.rightToWorkStatus || 'Passed'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Checked By:</span>
+                  <strong>
+                    {employee.checkerName || 'Fahad Rasheed'} {employee.rightToWorkCheckDate ? `(${new Date(employee.rightToWorkCheckDate).toLocaleDateString('en-GB')})` : ''}
+                  </strong>
+                </div>
+                {employee.rightToWorkReference && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ color: '#64748b' }}>Share Code / Ref:</span>
+                    <strong style={{ letterSpacing: '1px' }}>{employee.rightToWorkReference}</strong>
+                  </div>
+                )}
+                {employee.cosReference && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ color: '#64748b' }}>CoS Reference:</span>
+                    <strong>{employee.cosReference}</strong>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Visa Expiry Date:</span>
+                  {(() => {
+                    const pill = getExpiryPill(employee.visaExpiryDate);
+                    return (
+                      <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: pill.bg, color: pill.color }}>
+                        {pill.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Passport Expiry Date:</span>
+                  {(() => {
+                    const pill = getExpiryPill(employee.passportExpiryDate);
+                    return (
+                      <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: pill.bg, color: pill.color }}>
+                        {pill.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+                {employee.visaConditions && (
+                  <div style={{ padding: '4px 0' }}>
+                    <span style={{ color: '#64748b', fontSize: '12px' }}>Visa Limitations / Conditions:</span>
+                    <div style={{ fontSize: '12px', color: '#1e293b', marginTop: '2px', fontStyle: 'italic' }}>
+                      {employee.visaConditions}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 5: Attached Compliance Documents (Cloudinary) */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                  <FileText size={16} color="#2563eb" /> Attached Compliance Documents (Cloudinary Store)
+                </h3>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                  Uploaded ID documents, visas, passports, and proof of address stored securely
+                </div>
+              </div>
+
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { setJoiningModalTab('documents'); setJoiningModalOpen(true); }}
+              >
+                <ExternalLink size={13} /> Add / Manage Documents
+              </button>
+            </div>
+
+            {employee.documents && employee.documents.length > 0 ? (
+              <div className="table-responsive">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Document Title</th>
+                      <th>Category</th>
+                      <th>Uploaded On</th>
+                      <th>Expiry Date & Status</th>
+                      <th>Notes</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employee.documents.map(doc => {
+                      const pill = getExpiryPill(doc.expiryDate);
+                      return (
+                        <tr key={doc._id}>
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{doc.title}</div>
+                            {doc.format && (
+                              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                                Format: {doc.format} {doc.bytes ? `• ${(doc.bytes / 1024).toFixed(0)} KB` : ''}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <span className="badge" style={{ background: '#f1f5f9', color: '#334155' }}>
+                              {doc.category || 'General Document'}
+                            </span>
+                          </td>
+                          <td style={{ color: '#64748b', fontSize: '12px' }}>
+                            {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-GB') : '—'}
+                          </td>
+                          <td>
+                            <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, background: pill.bg, color: pill.color }}>
+                              {pill.label}
+                            </span>
+                          </td>
+                          <td style={{ color: '#64748b', fontSize: '12px' }}>
+                            {doc.notes || '—'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                              <a
+                                href={doc.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn btn-outline btn-sm"
+                                style={{ padding: '4px 8px', fontSize: '11px' }}
+                                title="Open Document"
+                              >
+                                <ExternalLink size={12} /> View File
+                              </a>
+                              <button
+                                className="btn btn-outline btn-sm"
+                                style={{ padding: '4px 8px', fontSize: '11px', color: '#dc2626', borderColor: '#fca5a5' }}
+                                onClick={() => handleDeleteDocument(doc._id)}
+                                title="Delete Document"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '30px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                <FileText size={28} color="#94a3b8" style={{ marginBottom: '6px' }} />
+                <div style={{ fontWeight: 600, color: '#334155', fontSize: '14px' }}>No documents uploaded yet</div>
+                <div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px', marginBottom: '12px' }}>
+                  Upload passport copies, biometric residence permits (BRP), Home Office share codes, or Proof of Address.
+                </div>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => { setJoiningModalTab('documents'); setJoiningModalOpen(true); }}
+                >
+                  Upload First Document (Cloudinary)
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
         <button
           className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-outline'} btn-sm`}
           onClick={() => setActiveTab('history')}
@@ -797,6 +1299,19 @@ export default function EmployeeDetail() {
 
         </div>
       )}
+
+      {/* Unified Employee Joining & Profile Modal */}
+      <EmployeeJoiningModal
+        isOpen={joiningModalOpen}
+        onClose={() => setJoiningModalOpen(false)}
+        employee={employee}
+        defaultTab={joiningModalTab}
+        onSaved={() => {
+          fetchProfile();
+          setJoiningModalOpen(false);
+        }}
+        shops={shops}
+      />
     </div>
   );
 }

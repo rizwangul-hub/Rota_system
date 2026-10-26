@@ -1,6 +1,7 @@
-import React from 'react';
-import { Menu, LogOut, UserCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Menu, LogOut, UserCircle, ShieldAlert } from 'lucide-react';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 const ROUTE_TITLES = {
@@ -20,6 +21,27 @@ export default function Navbar({ setMobileOpen }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [complianceCounts, setComplianceCounts] = useState({ total: 0, expired: 0, urgent: 0 });
+
+  useEffect(() => {
+    let isSubscribed = true;
+    const checkCompliance = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/employees/compliance/expiring-documents`);
+        if (isSubscribed && res.data?.counts) {
+          setComplianceCounts(res.data.counts);
+        }
+      } catch (err) {
+        // silently ignore network issues
+      }
+    };
+    checkCompliance();
+    const timer = setInterval(checkCompliance, 60000); // Check once per minute
+    return () => {
+      isSubscribed = false;
+      clearInterval(timer);
+    };
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -73,6 +95,29 @@ export default function Navbar({ setMobileOpen }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+        {complianceCounts.total > 0 && (
+          <Link
+            to="/employees"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: complianceCounts.expired > 0 ? '#fee2e2' : complianceCounts.urgent > 0 ? '#ffedd5' : '#fef3c7',
+              border: `1px solid ${complianceCounts.expired > 0 ? '#f87171' : complianceCounts.urgent > 0 ? '#fb923c' : '#fcd34d'}`,
+              color: complianceCounts.expired > 0 ? '#991b1b' : complianceCounts.urgent > 0 ? '#9a3412' : '#92400e',
+              fontSize: '12px',
+              fontWeight: 700,
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+            title={`${complianceCounts.total} employee document(s) expiring or expired. Click to review staff compliance.`}
+          >
+            <ShieldAlert size={14} color={complianceCounts.expired > 0 ? '#dc2626' : complianceCounts.urgent > 0 ? '#ea580c' : '#d97706'} />
+            <span>{complianceCounts.total} Compliance Alert{complianceCounts.total === 1 ? '' : 's'}</span>
+          </Link>
+        )}
         {user && getRoleBadge(user.role)}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', padding: '4px 10px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
           <UserCircle size={18} color="#64748b" />

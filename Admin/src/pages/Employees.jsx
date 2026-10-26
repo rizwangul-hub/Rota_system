@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
-import { Search, Edit, Eye, UserPlus, X, ArrowUpRight, UserCheck, UserX, ArrowUpDown, Trash2 } from 'lucide-react';
+import { Search, Edit, Eye, UserPlus, X, ArrowUpRight, UserCheck, UserX, ArrowUpDown, Trash2, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
+import ComplianceExpiryBanner from '../components/ComplianceExpiryBanner';
+import EmployeeJoiningModal from '../components/EmployeeJoiningModal';
 
 // Module-level cache for employee list across tab navigation
 const _employeesCache = new Map();
@@ -18,17 +19,25 @@ export default function Employees() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
+  const [shops, setShops] = useState([]);
 
-  // Modals
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [editModalEmployee, setEditModalEmployee] = useState(null);
-  const [nextEmployeeId, setNextEmployeeId] = useState('');
+  // Joining / Profile Modal State
+  const [joiningModalOpen, setJoiningModalOpen] = useState(false);
+  const [joiningModalEmployee, setJoiningModalEmployee] = useState(null);
+  const [joiningModalTab, setJoiningModalTab] = useState('personal');
+  const [complianceRefresh, setComplianceRefresh] = useState(0);
 
   const currentCacheKey = `status:${selectedStatus}_search:${search}_sort:${sortBy}_${sortOrder}`;
 
   useEffect(() => {
     fetchEmployees();
   }, [selectedStatus, search, sortBy, sortOrder]);
+
+  useEffect(() => {
+    axios.get(`${API_BASE_URL}/shops`).then(res => {
+      if (res.data?.success) setShops(res.data.shops || []);
+    }).catch(err => console.warn('Could not load shops:', err.message));
+  }, []);
 
   const fetchEmployees = async () => {
     const cached = _employeesCache.get(currentCacheKey);
@@ -62,6 +71,7 @@ export default function Employees() {
       if (res.data.success) {
         _employeesCache.clear();
         fetchEmployees();
+        setComplianceRefresh(prev => prev + 1);
       }
     } catch (err) {
       alert(err.response?.data?.message || `Failed to ${action} employee`);
@@ -78,111 +88,46 @@ export default function Employees() {
         _employeesCache.clear();
         alert(res.data.message || `Worker ${employee.name} deleted successfully.`);
         fetchEmployees();
+        setComplianceRefresh(prev => prev + 1);
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete worker');
     }
   };
 
-
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    dailyWage: '',
-    openingBalance: '',
-    openingBalanceNote: '',
-    openingBalanceDate: ''
-  });
-
-  const [submitting, setSubmitting] = useState(false);
-
-  const openCreateModal = async () => {
-    setCreateModalOpen(true);
-    setNextEmployeeId('');
-    setFormData({
-      name: '',
-      email: '',
-      dailyWage: '',
-      openingBalance: '',
-      openingBalanceNote: '',
-      openingBalanceDate: new Date().toISOString().split('T')[0]
-    });
-    try {
-      const response = await axios.get(`${API_BASE_URL}/employees/next-id`);
-      if (response.data.success) setNextEmployeeId(response.data.employeeId);
-    } catch (err) {
-      console.error('Unable to preview next employee ID:', err);
-      alert(err.response?.data?.message || 'Could not generate an employee ID. Please try again.');
-    }
+  const handleOpenAddEmployee = () => {
+    setJoiningModalEmployee(null);
+    setJoiningModalTab('personal');
+    setJoiningModalOpen(true);
   };
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!nextEmployeeId) {
-      alert('An employee ID has not been generated yet. Close this form and try again.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const payload = {
-        ...formData,
-        dailyWage: Number(formData.dailyWage),
-        openingBalance: formData.openingBalance !== '' ? Number(formData.openingBalance) : 0
-      };
-      const res = await axios.post(`${API_BASE_URL}/employees`, payload);
-      if (res.data.success) {
-        setCreateModalOpen(false);
-        window.alert(`Employee ${res.data.employee.name} was added with ID ${res.data.employee.employeeId}.`);
-        setFormData({
-          name: '',
-          email: '',
-          dailyWage: '',
-          openingBalance: '',
-          openingBalanceNote: '',
-          openingBalanceDate: ''
-        });
-        setNextEmployeeId('');
-        _employeesCache.clear();
-        fetchEmployees();
+  const handleOpenEditEmployee = (emp, tab = 'personal') => {
+    setJoiningModalEmployee(emp);
+    setJoiningModalTab(tab);
+    setJoiningModalOpen(true);
+  };
+
+  const handleComplianceEdit = async (employeeMongoId, tab = 'right_to_work') => {
+    const found = employees.find(e => String(e._id) === String(employeeMongoId));
+    if (found) {
+      handleOpenEditEmployee(found, tab);
+    } else {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/employees/${employeeMongoId}/profile`);
+        if (res.data?.employee) {
+          handleOpenEditEmployee(res.data.employee, tab);
+        }
+      } catch (err) {
+        alert('Could not open worker record: ' + err.message);
       }
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create employee');
-    } finally {
-      setSubmitting(false);
     }
   };
 
-  const handleUpdate = async (e) => {
-    e.preventDefault();
-    if (!editModalEmployee) return;
-    setSubmitting(true);
-    try {
-      const res = await axios.put(`${API_BASE_URL}/employees/${editModalEmployee._id}`, {
-        name: editModalEmployee.name,
-        email: editModalEmployee.email,
-        dailyWage: Number(editModalEmployee.dailyWage),
-        employmentStatus: editModalEmployee.employmentStatus,
-        wageEffectiveDate: editModalEmployee.wageEffectiveDate || '2026-10-11',
-        wageChangeReason: editModalEmployee.wageChangeReason || '',
-        openingBalance: editModalEmployee.openingBalance !== '' && editModalEmployee.openingBalance !== undefined ? Number(editModalEmployee.openingBalance) : 0,
-        openingBalanceNote: editModalEmployee.openingBalanceNote || '',
-        openingBalanceDate: editModalEmployee.openingBalanceDate || undefined,
-        phone: editModalEmployee.phone || '',
-        notes: editModalEmployee.notes || ''
-      });
-      if (res.data.success) {
-        setEditModalEmployee(null);
-        _employeesCache.clear();
-        fetchEmployees();
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update employee');
-    } finally {
-      setSubmitting(false);
-    }
+  const handleModalSaved = () => {
+    _employeesCache.clear();
+    fetchEmployees();
+    setComplianceRefresh(prev => prev + 1);
   };
-
 
   return (
     <div className="page-container">
@@ -193,14 +138,20 @@ export default function Employees() {
             Staff & Employee Management
           </h1>
           <p style={{ color: '#64748b', fontSize: '13px' }}>
-            Manage employee details and daily wages used for attendance-based pay
+            Manage employee joining profiles, right-to-work compliance, Cloudinary documents, and attendance pay
           </p>
         </div>
 
-        <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
-          <UserPlus size={15} /> Add Employee
+        <button className="btn btn-primary btn-sm" onClick={handleOpenAddEmployee}>
+          <UserPlus size={15} /> Add Employee (Joining Form)
         </button>
       </div>
+
+      {/* Persistent Compliance Alert Banner (1 Month & 1 Week Expiring Visas/Passports/Documents) */}
+      <ComplianceExpiryBanner
+        onEditEmployee={handleComplianceEdit}
+        refreshTrigger={complianceRefresh}
+      />
 
       {/* Filter and Search Bar */}
       <div className="card" style={{ marginBottom: '20px', padding: '14px 18px' }}>
@@ -271,7 +222,7 @@ export default function Employees() {
                 <th>Full Name</th>
                 <th>Daily Wage</th>
                 <th>Opening Bal</th>
-                <th>Email</th>
+                <th>Role & Location</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -301,7 +252,10 @@ export default function Employees() {
                   <td style={{ fontWeight: 600, color: (emp.openingBalance || 0) !== 0 ? '#7c3aed' : '#94a3b8' }}>
                     {(emp.openingBalance || 0) !== 0 ? `£${Number(emp.openingBalance).toFixed(2)}` : '£0.00'}
                   </td>
-                  <td style={{ color: '#64748b' }}>{emp.email || '—'}</td>
+                  <td style={{ color: '#64748b', fontSize: '12px' }}>
+                    <div>{emp.jobTitle || 'Worker'}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{emp.workLocation || emp.assignedShop?.name || 'Pixx Retail'}</div>
+                  </td>
                   <td>
                     <span className={`badge badge-${emp.employmentStatus === 'Active' ? 'present' : 'absent'}`}>
                       {emp.employmentStatus}
@@ -312,8 +266,12 @@ export default function Employees() {
                       <Link to={`/employees/${emp._id}`} className="btn btn-outline btn-sm" title="View Full Profile & History">
                         <Eye size={13} /> Profile
                       </Link>
-                      <button className="btn btn-outline btn-sm" onClick={() => setEditModalEmployee({ ...emp, wageEffectiveDate: '2026-10-11', wageChangeReason: '' })} title="Edit Employee">
-                        <Edit size={13} />
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => handleOpenEditEmployee(emp, 'personal')}
+                        title="Edit Joining Profile & Documents"
+                      >
+                        <Edit size={13} /> Edit
                       </button>
                       <button
                         className={`btn btn-sm ${emp.employmentStatus === 'Active' ? 'btn-outline' : 'btn-primary'}`}
@@ -330,7 +288,7 @@ export default function Employees() {
                         onClick={() => handleDeleteWorker(emp)}
                         title="Delete Worker Permanently"
                       >
-                        <Trash2 size={13} /> Delete
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </td>
@@ -339,7 +297,7 @@ export default function Employees() {
 
               {employees.length === 0 && !loading && (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px 20px' }}>
                     <div style={{ color: '#334155', fontWeight: 600, fontSize: '15px', marginBottom: '4px' }}>No employees found</div>
                     <div style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '14px' }}>There are no employee records matching your current search or filters.</div>
                     {(search || selectedStatus) && (
@@ -356,7 +314,7 @@ export default function Employees() {
               )}
               {loading && (
                 <tr>
-                  <td colSpan="6" style={{ padding: '24px' }}>
+                  <td colSpan="7" style={{ padding: '24px' }}>
                     <div className="skeleton skeleton-text" style={{ width: '100%', marginBottom: '10px' }}></div>
                     <div className="skeleton skeleton-text" style={{ width: '85%', marginBottom: '10px' }}></div>
                     <div className="skeleton skeleton-text" style={{ width: '92%' }}></div>
@@ -368,279 +326,15 @@ export default function Employees() {
         </div>
       </div>
 
-
-      {/* Create Modal */}
-      {createModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-card">
-            <div className="modal-header">
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Add New Employee</h2>
-              <button onClick={() => setCreateModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleCreate}>
-              <div className="modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Full Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Shahab Ahmad"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Employee ID (Automatic)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={nextEmployeeId || 'Generating ID...'}
-                      readOnly
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Daily Wage (£)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="form-input"
-                      placeholder="Enter daily wage"
-                      value={formData.dailyWage}
-                      onChange={(e) => setFormData({ ...formData, dailyWage: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Email</label>
-                    <input
-                      type="email"
-                      className="form-input"
-                      placeholder="worker@example.com"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Opening Balance (£)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-input"
-                      placeholder="0.00"
-                      value={formData.openingBalance}
-                      onChange={(e) => setFormData({ ...formData, openingBalance: e.target.value })}
-                    />
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                      Starting balance brought forward (positive = company owes worker)
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Opening Balance Note</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Brought forward balance"
-                      value={formData.openingBalanceNote}
-                      onChange={(e) => setFormData({ ...formData, openingBalanceNote: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-outline" onClick={() => setCreateModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting || !nextEmployeeId}>
-                  {submitting ? 'Creating...' : 'Create Employee'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {editModalEmployee && (
-        <div className="modal-overlay">
-          <div className="modal-card">
-            <div className="modal-header">
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
-                Edit Employee: {editModalEmployee.name} ({editModalEmployee.employeeId})
-              </h2>
-              <button onClick={() => setEditModalEmployee(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleUpdate}>
-              <div className="modal-body">
-                <div style={{ background: '#eff6ff', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', color: '#1e40af', marginBottom: '16px' }}>
-                  ℹ️ <strong>Historical Integrity Note:</strong> Daily wage changes apply to new attendance records. Past attendance and salaries remain unchanged. Select the shop separately on each day’s attendance.
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Full Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editModalEmployee.name || ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, name: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Employee ID (Automatic)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editModalEmployee.employeeId || ''}
-                      readOnly
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Daily Wage (£)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="form-input"
-                      value={editModalEmployee.dailyWage ?? ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, dailyWage: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Email</label>
-                    <input
-                      type="email"
-                      className="form-input"
-                      placeholder="worker@example.com"
-                      value={editModalEmployee.email || ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, email: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Opening Balance (£)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-input"
-                      placeholder="0.00"
-                      value={editModalEmployee.openingBalance ?? ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, openingBalance: e.target.value })}
-                    />
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                      Initial balance brought forward (positive = company owes worker)
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Opening Balance Note</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Previous balance"
-                      value={editModalEmployee.openingBalanceNote || ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, openingBalanceNote: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Wage Increase / Change Effective Date</label>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={editModalEmployee.wageEffectiveDate || ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, wageEffectiveDate: e.target.value })}
-                    />
-                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                      Date when new daily wage takes effect (appears in employee ledger)
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Wage Adjustment Reason (Optional)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Salary increment, Promotion"
-                      value={editModalEmployee.wageChangeReason || ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, wageChangeReason: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      className="form-select"
-                      value={editModalEmployee.employmentStatus}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, employmentStatus: e.target.value })}
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                      <option value="Suspended">Suspended</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Phone</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editModalEmployee.phone || ''}
-                      onChange={(e) => setEditModalEmployee({ ...editModalEmployee, phone: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Notes</label>
-                  <textarea
-                    className="form-textarea"
-                    rows="2"
-                    value={editModalEmployee.notes || ''}
-                    onChange={(e) => setEditModalEmployee({ ...editModalEmployee, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-outline" onClick={() => setEditModalEmployee(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Unified Employee Joining & Profile Modal (Add New Employee or Edit Worker) */}
+      <EmployeeJoiningModal
+        isOpen={joiningModalOpen}
+        onClose={() => setJoiningModalOpen(false)}
+        employee={joiningModalEmployee}
+        defaultTab={joiningModalTab}
+        onSaved={handleModalSaved}
+        shops={shops}
+      />
     </div>
   );
 }

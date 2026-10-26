@@ -5,8 +5,9 @@ import {
   Users, Store, Clock, AlertCircle, Banknote, Award, ArrowUpRight,
   TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { downloadReportFile } from '../utils/downloadReportFile';
+import ComplianceExpiryBanner from '../components/ComplianceExpiryBanner';
 
 // Module-level cache — survives React navigation (component unmount/remount)
 // Caches per selected week
@@ -68,6 +69,7 @@ const getInitialDashboardCache = () => {
 };
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const initialCache = getInitialDashboardCache();
   const [data, setData]                         = useState(() => initialCache?.data || null);
   const [summaryData, setSummaryData]           = useState(() => initialCache?.summaryData || null);
@@ -291,6 +293,9 @@ export default function AdminDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Compliance Expiry Banner (1 Month and 1 Week Alerts for Visas/Passports/Documents) */}
+      <ComplianceExpiryBanner onEditEmployee={(empId, tab) => navigate('/employees')} />
 
       {/* Section 19: Comprehensive Management Summary Cards */}
       <div className="stat-grid" style={{ marginBottom: '24px' }}>

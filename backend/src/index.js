@@ -91,7 +91,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   maxAge: 86400
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use(async (req, res, next) => {
   if (req.path === '/health' || req.path === '/api/health' || req.path === '/' || req.path === '/favicon.ico' || req.path === '/favicon.png') {

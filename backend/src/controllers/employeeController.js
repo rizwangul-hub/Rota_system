@@ -13,6 +13,8 @@ const RotaAvailability = require('../models/RotaAvailability');
 const { logAction } = require('../utils/audit');
 const { employeeAttendanceRosterEntry } = require('../utils/attendanceViews');
 const { syncEmployeeOpeningBalance, syncWageHistoryToLedger, recalculateEmployeeLedger } = require('../utils/ledgerHelper');
+const { uploadDocumentToCloudinary } = require('../utils/cloudinary');
+const { buildJoiningFormPDF } = require('../utils/joiningFormPdf');
 
 async function findHighestEmployeeSequence() {
   const employees = await Employee.find({ employeeId: /^PIXX\d+$/i }).select('employeeId').lean();
@@ -131,7 +133,19 @@ exports.getEmployeeById = async (req, res) => {
 
 exports.createEmployee = async (req, res) => {
   try {
-    const { name, employeeId: requestedEmployeeId, phone, email, dailyWage, startDate, notes, openingBalance, openingBalanceDate, openingBalanceNote } = req.body;
+    const {
+      name, employeeId: requestedEmployeeId, phone, email, dailyWage, startDate, notes,
+      openingBalance, openingBalanceDate, openingBalanceNote,
+      assignedShop, companyLegalName, tradingName, jobTitle, workLocation,
+      employmentType, normalHoursPerWeek, hourlyRate, lineManager,
+      preferredName, dateOfBirth, homeAddress, postcode, nationalInsuranceNumber,
+      emergencyContactName, emergencyContactRelationship, emergencyContactPhone,
+      bankAccountName, bankSortCode, bankAccountNumber, p45Status,
+      rightToWorkCheckMethod, nationalityType, rightToWorkReference, rightToWorkCheckDate,
+      rightToWorkStatus, checkerName, visaExpiryDate, passportExpiryDate, visaConditions,
+      cosReference, healthSafetyInductionCompleted, healthSafetyInductionDate,
+      documents
+    } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Employee full name is required.' });
@@ -165,6 +179,40 @@ exports.createEmployee = async (req, res) => {
       openingBalance: initialOpeningBalance,
       openingBalanceDate: initialOpeningDate,
       openingBalanceNote: openingBalanceNote ? openingBalanceNote.trim() : '',
+      assignedShop: assignedShop || null,
+      companyLegalName: companyLegalName || 'Pixx Technologies Ltd',
+      tradingName: tradingName || 'Pixx Retail London',
+      jobTitle: jobTitle || 'Retail Assistant / Sales',
+      workLocation: workLocation || '',
+      employmentType: employmentType || 'Casual / Zero-Hours',
+      normalHoursPerWeek: Number(normalHoursPerWeek) || 0,
+      hourlyRate: Number(hourlyRate) || 0,
+      lineManager: lineManager || 'Fahad Rasheed',
+      preferredName: preferredName ? preferredName.trim() : '',
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+      homeAddress: homeAddress || '',
+      postcode: postcode ? postcode.trim().toUpperCase() : '',
+      nationalInsuranceNumber: nationalInsuranceNumber ? nationalInsuranceNumber.trim().toUpperCase() : '',
+      emergencyContactName: emergencyContactName || '',
+      emergencyContactRelationship: emergencyContactRelationship || '',
+      emergencyContactPhone: emergencyContactPhone || '',
+      bankAccountName: bankAccountName || '',
+      bankSortCode: bankSortCode || '',
+      bankAccountNumber: bankAccountNumber || '',
+      p45Status: p45Status || 'Pending',
+      rightToWorkCheckMethod: rightToWorkCheckMethod || 'Manual eligible documents',
+      nationalityType: nationalityType || 'British / Irish Citizen',
+      rightToWorkReference: rightToWorkReference || '',
+      rightToWorkCheckDate: rightToWorkCheckDate ? new Date(rightToWorkCheckDate) : null,
+      rightToWorkStatus: rightToWorkStatus || 'Passed',
+      checkerName: checkerName || 'Fahad Rasheed',
+      visaExpiryDate: visaExpiryDate ? new Date(visaExpiryDate) : null,
+      passportExpiryDate: passportExpiryDate ? new Date(passportExpiryDate) : null,
+      visaConditions: visaConditions || '',
+      cosReference: cosReference || '',
+      healthSafetyInductionCompleted: healthSafetyInductionCompleted !== undefined ? Boolean(healthSafetyInductionCompleted) : true,
+      healthSafetyInductionDate: healthSafetyInductionDate ? new Date(healthSafetyInductionDate) : hireDate,
+      documents: Array.isArray(documents) ? documents : [],
       wageHistory: [
         {
           wage,
@@ -221,6 +269,45 @@ exports.updateEmployee = async (req, res) => {
     if (updates.email !== undefined) oldEmp.email = updates.email;
     if (updates.notes !== undefined) oldEmp.notes = updates.notes;
     if (updates.startDate) oldEmp.startDate = new Date(updates.startDate);
+
+    // Onboarding text / simple fields
+    const onboardingKeys = [
+      'companyLegalName', 'tradingName', 'jobTitle', 'workLocation',
+      'employmentType', 'normalHoursPerWeek', 'hourlyRate', 'lineManager',
+      'preferredName', 'homeAddress', 'postcode', 'nationalInsuranceNumber',
+      'emergencyContactName', 'emergencyContactRelationship', 'emergencyContactPhone',
+      'bankAccountName', 'bankSortCode', 'bankAccountNumber', 'p45Status',
+      'rightToWorkCheckMethod', 'nationalityType', 'rightToWorkReference',
+      'rightToWorkStatus', 'checkerName', 'visaConditions', 'cosReference'
+    ];
+    onboardingKeys.forEach(key => {
+      if (updates[key] !== undefined) oldEmp[key] = updates[key];
+    });
+
+    if (updates.dateOfBirth !== undefined) {
+      oldEmp.dateOfBirth = updates.dateOfBirth ? new Date(updates.dateOfBirth) : null;
+    }
+    if (updates.rightToWorkCheckDate !== undefined) {
+      oldEmp.rightToWorkCheckDate = updates.rightToWorkCheckDate ? new Date(updates.rightToWorkCheckDate) : null;
+    }
+    if (updates.visaExpiryDate !== undefined) {
+      oldEmp.visaExpiryDate = updates.visaExpiryDate ? new Date(updates.visaExpiryDate) : null;
+    }
+    if (updates.passportExpiryDate !== undefined) {
+      oldEmp.passportExpiryDate = updates.passportExpiryDate ? new Date(updates.passportExpiryDate) : null;
+    }
+    if (updates.healthSafetyInductionCompleted !== undefined) {
+      oldEmp.healthSafetyInductionCompleted = Boolean(updates.healthSafetyInductionCompleted);
+    }
+    if (updates.healthSafetyInductionDate !== undefined) {
+      oldEmp.healthSafetyInductionDate = updates.healthSafetyInductionDate ? new Date(updates.healthSafetyInductionDate) : null;
+    }
+    if (updates.assignedShop !== undefined) {
+      oldEmp.assignedShop = updates.assignedShop || null;
+    }
+    if (Array.isArray(updates.documents)) {
+      oldEmp.documents = updates.documents;
+    }
 
     let wageChanged = false;
     // Wage update with history tracking
@@ -511,5 +598,201 @@ exports.deleteEmployee = async (req, res) => {
     res.json({ success: true, message: `Worker ${empName} (${empIdStr}) deleted successfully.` });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting worker.');
+  }
+};
+
+/**
+ * Returns compliance alerts for documents & visas expiring within 30 days, within 7 days, or expired.
+ */
+exports.getExpiringDocuments = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const employees = await Employee.find({ employmentStatus: 'Active' })
+      .select('name employeeId phone email visaExpiryDate passportExpiryDate nationalityType documents assignedShop')
+      .populate('assignedShop', 'name')
+      .lean();
+
+    const alerts = [];
+
+    const checkExpiry = (emp, docTitle, expiryDateVal, category, docId = null) => {
+      if (!expiryDateVal) return;
+      const expDate = new Date(expiryDateVal);
+      if (isNaN(expDate.getTime())) return;
+      expDate.setHours(0, 0, 0, 0);
+
+      const diffMs = expDate.getTime() - today.getTime();
+      const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+      // Alert if expiring within 30 days (1 month before) or already expired (<= 0)
+      if (daysRemaining <= 30) {
+        let urgency = 'WARNING'; // 8 to 30 days
+        let statusText = `Expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}`;
+
+        if (daysRemaining <= 0) {
+          urgency = 'EXPIRED';
+          statusText = daysRemaining === 0 ? 'Expires today!' : `Expired ${Math.abs(daysRemaining)} day${Math.abs(daysRemaining) === 1 ? '' : 's'} ago`;
+        } else if (daysRemaining <= 7) {
+          urgency = 'URGENT'; // <= 1 week before
+          statusText = `Expires in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} (Urgent)`;
+        }
+
+        alerts.push({
+          employeeId: emp.employeeId,
+          employeeMongoId: emp._id,
+          employeeName: emp.name,
+          shopName: emp.assignedShop?.name || '',
+          documentName: docTitle,
+          category,
+          documentId: docId,
+          expiryDate: expDate.toISOString().slice(0, 10),
+          daysRemaining,
+          urgency,
+          statusText
+        });
+      }
+    };
+
+    employees.forEach(emp => {
+      // 1. Right to work / Visa expiry
+      if (emp.visaExpiryDate) {
+        checkExpiry(emp, `Right to Work / Visa (${emp.nationalityType || 'Migrant Worker'})`, emp.visaExpiryDate, 'Visa / Right to Work');
+      }
+      // 2. Passport expiry
+      if (emp.passportExpiryDate) {
+        checkExpiry(emp, 'Passport', emp.passportExpiryDate, 'Passport');
+      }
+      // 3. Document attachments expiry
+      if (Array.isArray(emp.documents)) {
+        emp.documents.forEach(doc => {
+          if (doc.expiryDate) {
+            checkExpiry(emp, doc.title || doc.category || 'Uploaded Document', doc.expiryDate, doc.category, doc._id);
+          }
+        });
+      }
+    });
+
+    // Sort: most urgent / expired first
+    alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+    const counts = {
+      total: alerts.length,
+      expired: alerts.filter(a => a.urgency === 'EXPIRED').length,
+      urgent: alerts.filter(a => a.urgency === 'URGENT').length,
+      warning: alerts.filter(a => a.urgency === 'WARNING').length
+    };
+
+    res.json({
+      success: true,
+      counts,
+      alerts
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to fetch expiring document alerts.');
+  }
+};
+
+/**
+ * Uploads a document to Cloudinary (or local fallback)
+ */
+exports.uploadDocument = async (req, res) => {
+  try {
+    let uploadResult;
+    if (req.file) {
+      uploadResult = await uploadDocumentToCloudinary({
+        buffer: req.file.buffer,
+        filename: req.file.originalname,
+        folder: 'pixx_rota_documents'
+      });
+    } else if (req.body?.base64) {
+      uploadResult = await uploadDocumentToCloudinary({
+        base64: req.body.base64,
+        filename: req.body.filename || 'document.pdf',
+        folder: 'pixx_rota_documents'
+      });
+    } else {
+      return res.status(400).json({ success: false, message: 'No file or document data received.' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Document uploaded successfully.',
+      ...uploadResult
+    });
+  } catch (error) {
+    console.error('Document upload error:', error);
+    return sendServerError(res, error, 'Failed to upload document.');
+  }
+};
+
+/**
+ * Adds an uploaded document to an existing employee
+ */
+exports.addEmployeeDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, category, fileUrl, publicId, format, bytes, expiryDate, notes } = req.body;
+    if (!title || !fileUrl) {
+      return res.status(400).json({ success: false, message: 'Document title and file URL are required.' });
+    }
+    const employee = await Employee.findById(id);
+    if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
+
+    employee.documents.push({
+      title: title.trim(),
+      category: category || 'Proof of Right to Work',
+      fileUrl,
+      publicId: publicId || '',
+      format: format || '',
+      bytes: Number(bytes) || 0,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
+      notes: notes || '',
+      uploadedAt: new Date()
+    });
+
+    await employee.save();
+    res.json({ success: true, message: 'Document attached successfully.', documents: employee.documents });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to add employee document.');
+  }
+};
+
+/**
+ * Removes an uploaded document from an employee
+ */
+exports.deleteEmployeeDocument = async (req, res) => {
+  try {
+    const { id, docId } = req.params;
+    const employee = await Employee.findById(id);
+    if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
+
+    employee.documents = employee.documents.filter(d => String(d._id) !== String(docId));
+    await employee.save();
+    res.json({ success: true, message: 'Document removed successfully.', documents: employee.documents });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to delete employee document.');
+  }
+};
+
+/**
+ * Generates and downloads the Employee Joining Form PDF
+ */
+exports.downloadJoiningFormPDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employee = await Employee.findById(id).populate('assignedShop');
+    if (!employee) return res.status(404).json({ success: false, message: 'Employee not found.' });
+
+    const cleanName = (employee.name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Employee_Joining_Form_${employee.employeeId}_${cleanName}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    buildJoiningFormPDF(employee, res);
+  } catch (error) {
+    console.error('Error generating joining form PDF:', error);
+    return sendServerError(res, error, 'Failed to generate Employee Joining Form PDF.');
   }
 };
