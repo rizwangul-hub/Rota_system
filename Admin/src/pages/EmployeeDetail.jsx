@@ -7,7 +7,7 @@ import { formatTime12Hour } from '../utils/formatTime';
 import {
   ArrowLeft, Download, Banknote, Clock, Award, ShieldAlert,
   FileText, Trash2, Edit, ExternalLink, ShieldCheck, CheckCircle2,
-  AlertTriangle, Building2, User
+  AlertTriangle, Building2, User, Plus, X, Landmark, HandCoins
 } from 'lucide-react';
 import EmployeeJoiningModal from '../components/EmployeeJoiningModal';
 
@@ -59,11 +59,31 @@ export default function EmployeeDetail() {
   const [monthlyReportData, setMonthlyReportData] = useState(null);
   const [monthlyReportError, setMonthlyReportError] = useState('');
   const [downloadingMonthlyExcel, setDownloadingMonthlyExcel] = useState(false);
-  const [activeTab, setActiveTab] = useState('monthly_report'); // 'monthly_report', 'ledger', 'attendance', 'salaries'
+  const [activeTab, setActiveTab] = useState('monthly_report'); // 'monthly_report', 'ledger', 'loan_ledger', 'attendance', 'salaries'
+
+  // Worker Loan & Advances State
+  const [loansData, setLoansData] = useState({ loans: [], totalBorrowed: 0, totalRepaid: 0, remainingBalance: 0, ledgerEvents: [] });
+  const [loadingLoans, setLoadingLoans] = useState(false);
+  const [giveLoanModalOpen, setGiveLoanModalOpen] = useState(false);
+  const [giveLoanAmount, setGiveLoanAmount] = useState('');
+  const [giveLoanDate, setGiveLoanDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [giveLoanReason, setGiveLoanReason] = useState('Personal Advance / Loan');
+  const [giveLoanNotes, setGiveLoanNotes] = useState('');
+  const [givingLoan, setGivingLoan] = useState(false);
+
+  // Direct Repayment Modal State
+  const [repayModalOpen, setRepayModalOpen] = useState(false);
+  const [repayTargetLoan, setRepayTargetLoan] = useState(null);
+  const [repayAmount, setRepayAmount] = useState('');
+  const [repayDate, setRepayDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [repayMethod, setRepayMethod] = useState('Cash');
+  const [repayNotes, setRepayNotes] = useState('');
+  const [recordingRepay, setRecordingRepay] = useState(false);
 
   useEffect(() => {
     fetchProfile();
     fetchMonthlyReport();
+    fetchEmployeeLoans();
   }, [id, reportMonth, reportYear]);
 
   const [error, setError] = useState('');
@@ -95,6 +115,91 @@ export default function EmployeeDetail() {
       }
     } catch (err) {
       setMonthlyReportError(getApiFailureMessage(err, 'Unable to load this monthly report.'));
+    }
+  };
+
+  const fetchEmployeeLoans = async () => {
+    setLoadingLoans(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/loans/employee/${id}`);
+      if (res.data.success) {
+        setLoansData(res.data);
+      }
+    } catch (err) {
+      console.warn('Failed to load employee loans:', err.message);
+    } finally {
+      setLoadingLoans(false);
+    }
+  };
+
+  const handleCreateLoan = async (e) => {
+    e.preventDefault();
+    const amount = Number(giveLoanAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Please enter a valid loan amount greater than £0.');
+      return;
+    }
+    setGivingLoan(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/loans`, {
+        employeeId: id,
+        amount,
+        issueDate: giveLoanDate,
+        reason: giveLoanReason,
+        notes: giveLoanNotes
+      });
+      if (res.data.success) {
+        setGiveLoanModalOpen(false);
+        setGiveLoanAmount('');
+        setGiveLoanNotes('');
+        await fetchEmployeeLoans();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to create loan.');
+    } finally {
+      setGivingLoan(false);
+    }
+  };
+
+  const handleRecordRepayment = async (e) => {
+    e.preventDefault();
+    if (!repayTargetLoan) return;
+    const amount = Number(repayAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Please enter a valid repayment amount greater than £0.');
+      return;
+    }
+    setRecordingRepay(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/loans/${repayTargetLoan._id}/repay`, {
+        amount,
+        repaymentDate: repayDate,
+        repaymentMethod: repayMethod,
+        notes: repayNotes
+      });
+      if (res.data.success) {
+        setRepayModalOpen(false);
+        setRepayTargetLoan(null);
+        setRepayAmount('');
+        setRepayNotes('');
+        await fetchEmployeeLoans();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to record repayment.');
+    } finally {
+      setRecordingRepay(false);
+    }
+  };
+
+  const handleDeleteLoan = async (loanId) => {
+    if (!window.confirm('Are you sure you want to delete this loan record?')) return;
+    try {
+      const res = await axios.delete(`${API_BASE_URL}/loans/${loanId}`);
+      if (res.data.success) {
+        await fetchEmployeeLoans();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete loan.');
     }
   };
 
@@ -503,11 +608,29 @@ export default function EmployeeDetail() {
           📒 Accounting Ledger
         </button>
         <button
+          className={`btn ${activeTab === 'loan_ledger' ? 'btn-primary' : 'btn-outline'} btn-sm`}
+          onClick={() => { setActiveTab('loan_ledger'); fetchEmployeeLoans(); }}
+        >
+          💳 Worker Loan Ledger
+          {Number(loansData.remainingBalance || 0) > 0 && (
+            <span style={{ marginLeft: '6px', background: '#dc2626', color: '#ffffff', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 800 }}>
+              £{Number(loansData.remainingBalance).toFixed(2)}
+            </span>
+          )}
+        </button>
+        <button
           className={`btn ${activeTab === 'attendance' ? 'btn-primary' : 'btn-outline'} btn-sm`}
           onClick={() => setActiveTab('attendance')}
         >
           ⏱️ Attendance History
         </button>
+        <button
+          className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-outline'} btn-sm`}
+          onClick={() => setActiveTab('history')}
+        >
+          📜 Wage History
+        </button>
+      </div>
 
       {/* TAB 0: Unified Joining Record & Right-to-Work Compliance */}
       {activeTab === 'joining_record' && (
@@ -880,14 +1003,6 @@ export default function EmployeeDetail() {
           </div>
         </div>
       )}
-        <button
-          className={`btn ${activeTab === 'history' ? 'btn-primary' : 'btn-outline'} btn-sm`}
-          onClick={() => setActiveTab('history')}
-        >
-          📜 Wage History
-        </button>
-      </div>
-
 
       {/* TAB 1: Single Employee Monthly Statement (Matching User Reference Image 2: Shahab Ahmad) */}
       {activeTab === 'monthly_report' && (
@@ -1205,6 +1320,172 @@ export default function EmployeeDetail() {
         </div>
       )}
 
+      {/* TAB: Worker Loan Ledger & Advance Repayments */}
+      {activeTab === 'loan_ledger' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Summary Stat Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+            <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
+              <div className="stat-lbl" style={{ color: '#2563eb' }}>TOTAL LOANS BORROWED</div>
+              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: '#0f172a' }}>
+                £{Number(loansData.totalBorrowed || 0).toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                Total advances issued to date
+              </div>
+            </div>
+
+            <div className="card" style={{ borderLeft: '4px solid #059669' }}>
+              <div className="stat-lbl" style={{ color: '#059669' }}>TOTAL REPAID</div>
+              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: '#059669' }}>
+                £{Number(loansData.totalRepaid || 0).toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                Collected via salary & direct payments
+              </div>
+            </div>
+
+            <div className="card" style={{ borderLeft: Number(loansData.remainingBalance || 0) > 0 ? '4px solid #dc2626' : '4px solid #10b981' }}>
+              <div className="stat-lbl" style={{ color: Number(loansData.remainingBalance || 0) > 0 ? '#dc2626' : '#10b981' }}>
+                CURRENT OUTSTANDING BALANCE
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: Number(loansData.remainingBalance || 0) > 0 ? '#dc2626' : '#10b981' }}>
+                £{Number(loansData.remainingBalance || 0).toFixed(2)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                {Number(loansData.remainingBalance || 0) > 0 ? 'Worker currently owes this balance' : 'All loans fully settled'}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Toolbar */}
+          <div className="card" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HandCoins size={18} color="#2563eb" /> Worker Loan Ledger & Advance History
+              </h2>
+              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                Track advances given, salary deductions collected during finalization, and cash/bank repayments.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={() => setGiveLoanModalOpen(true)}
+              >
+                <Plus size={14} /> Issue New Loan / Advance
+              </button>
+              {Number(loansData.remainingBalance || 0) > 0 && loansData.loans?.some(l => l.status === 'ACTIVE') && (
+                <button
+                  className="btn btn-outline btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#059669', borderColor: '#a7f3d0', background: '#ecfdf5', fontWeight: 600 }}
+                  onClick={() => {
+                    const activeLoan = loansData.loans.find(l => l.status === 'ACTIVE');
+                    setRepayTargetLoan(activeLoan);
+                    setRepayAmount(activeLoan ? String(activeLoan.remainingBalance) : '');
+                    setRepayModalOpen(true);
+                  }}
+                >
+                  <HandCoins size={14} /> Record Direct Repayment
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Loan Ledger Table */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="table-responsive">
+              <table className="custom-table" style={{ fontSize: '12.5px', marginBottom: 0 }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    <th style={{ padding: '10px 12px' }}>Date</th>
+                    <th style={{ padding: '10px 12px' }}>Transaction Type</th>
+                    <th style={{ padding: '10px 12px' }}>Reference / Details</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Disbursed (£)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Repaid (£)</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800 }}>Loan Balance (£)</th>
+                    <th style={{ padding: '10px 12px' }}>Method / Notes</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingLoans ? (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                        Loading loan ledger...
+                      </td>
+                    </tr>
+                  ) : loansData.ledgerEvents && loansData.ledgerEvents.length > 0 ? (
+                    loansData.ledgerEvents.map((evt, idx) => {
+                      const isDisbursed = evt.type === 'LOAN_DISBURSED';
+                      const isSalaryDed = evt.type === 'SALARY_DEDUCTION';
+                      return (
+                        <tr key={idx} style={{ background: isDisbursed ? '#f8fafc' : '#ffffff' }}>
+                          <td style={{ padding: '10px 12px', fontWeight: 600, color: '#334155' }}>
+                            {evt.date ? new Date(evt.date).toLocaleDateString('en-GB') : '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            {isDisbursed ? (
+                              <span style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                                💸 Loan Given / Advance
+                              </span>
+                            ) : isSalaryDed ? (
+                              <span style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                                📋 Salary Deduction
+                              </span>
+                            ) : (
+                              <span style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                                💵 Direct Repayment
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px', fontWeight: 500, color: '#0f172a' }}>
+                            {evt.reference || '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: isDisbursed ? 700 : 400, color: isDisbursed ? '#2563eb' : '#94a3b8' }}>
+                            {evt.amountBorrowed > 0 ? `£${evt.amountBorrowed.toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: evt.amountRepaid > 0 ? 700 : 400, color: evt.amountRepaid > 0 ? '#059669' : '#94a3b8' }}>
+                            {evt.amountRepaid > 0 ? `£${evt.amountRepaid.toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: evt.runningBalance > 0 ? '#b45309' : '#059669', fontSize: '13.5px' }}>
+                            £{Number(evt.runningBalance || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px' }}>
+                            {evt.notes || evt.repaymentMethod || '—'}
+                            {evt.recordedByName ? ` (${evt.recordedByName})` : ''}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                            {isDisbursed && evt.loanId && (!loansData.loans?.find(l => l._id === evt.loanId)?.repayments?.length) ? (
+                              <button
+                                className="btn btn-outline btn-xs"
+                                style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                                onClick={() => handleDeleteLoan(evt.loanId)}
+                                title="Delete this loan"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                        No loans or cash advances recorded for this worker yet. Click "Issue New Loan / Advance" above.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TAB 3: Attendance History */}
       {activeTab === 'attendance' && (
         <div className="card">
@@ -1296,7 +1577,168 @@ export default function EmployeeDetail() {
               </table>
             </div>
           </div>
+        </div>
+      )}
 
+      {/* Issue New Loan / Advance Modal */}
+      {giveLoanModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 10002 }}>
+          <div className="modal-card" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <div>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <HandCoins size={18} color="#2563eb" /> Issue Loan / Cash Advance
+                </h2>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                  Worker: <strong>{employee?.name}</strong> ({employee?.employeeId})
+                </div>
+              </div>
+              <button onClick={() => setGiveLoanModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateLoan}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Loan / Advance Amount (£) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    className="form-input"
+                    placeholder="e.g. 200.00"
+                    style={{ fontSize: '16px', fontWeight: 700, color: '#2563eb' }}
+                    value={giveLoanAmount}
+                    onChange={(e) => setGiveLoanAmount(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Issue / Disbursed Date *</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={giveLoanDate}
+                    onChange={(e) => setGiveLoanDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Purpose / Reason</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Personal advance, emergency, travel support"
+                    value={giveLoanReason}
+                    onChange={(e) => setGiveLoanReason(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Internal Notes</label>
+                  <textarea
+                    className="form-input"
+                    rows="2"
+                    placeholder="Additional details regarding loan handover..."
+                    value={giveLoanNotes}
+                    onChange={(e) => setGiveLoanNotes(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#1e40af' }}>
+                  ℹ️ This will open an active loan balance for {employee?.name}. You can deduct repayments automatically when finalizing weekly salaries or record direct cash repayments here.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setGiveLoanModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={givingLoan}>
+                  {givingLoan ? 'Issuing Loan...' : 'Confirm & Issue Loan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Direct Loan Repayment Modal */}
+      {repayModalOpen && repayTargetLoan && (
+        <div className="modal-overlay" style={{ zIndex: 10002 }}>
+          <div className="modal-card" style={{ maxWidth: '480px' }}>
+            <div className="modal-header" style={{ background: '#ecfdf5', borderBottom: '1px solid #a7f3d0' }}>
+              <div>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#065f46', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <HandCoins size={18} color="#059669" /> Record Direct Loan Repayment
+                </h2>
+                <div style={{ fontSize: '12px', color: '#047857', marginTop: '2px' }}>
+                  Worker: <strong>{employee?.name}</strong> • Outstanding Balance: <strong>£{repayTargetLoan.remainingBalance?.toFixed(2)}</strong>
+                </div>
+              </div>
+              <button onClick={() => setRepayModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleRecordRepayment}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Repayment Amount (£) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={repayTargetLoan.remainingBalance}
+                    className="form-input"
+                    placeholder="Enter repaid amount"
+                    style={{ fontSize: '16px', fontWeight: 700, color: '#059669' }}
+                    value={repayAmount}
+                    onChange={(e) => setRepayAmount(e.target.value)}
+                    required
+                  />
+                  <span style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                    Maximum outstanding amount on this loan: £{repayTargetLoan.remainingBalance?.toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Payment Method *</label>
+                  <select className="form-select" value={repayMethod} onChange={(e) => setRepayMethod(e.target.value)}>
+                    <option value="Cash">Cash Handover</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Repayment Date *</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={repayDate}
+                    onChange={(e) => setRepayDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600 }}>Notes / Receipt Reference</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Received cash at Camden shop"
+                    value={repayNotes}
+                    onChange={(e) => setRepayNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setRepayModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ background: '#059669', borderColor: '#059669' }} disabled={recordingRepay}>
+                  {recordingRepay ? 'Recording Repayment...' : 'Confirm Repayment'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -26,6 +26,7 @@ import {
   TrendingUp,
   TrendingDown,
   Landmark,
+  HandCoins,
   Maximize2,
   Minimize2
 } from 'lucide-react';
@@ -101,6 +102,7 @@ export default function WeeklySalaryPage() {
   const [deductionTargetSalary, setDeductionTargetSalary] = useState(null);
   const [weeklySalaryAmountInput, setWeeklySalaryAmountInput] = useState('');
   const [deductionAmountInput, setDeductionAmountInput] = useState('');
+  const [loanDeductionInput, setLoanDeductionInput] = useState('');
   const [deductionReasonInput, setDeductionReasonInput] = useState('');
   const [deductionSaving, setDeductionSaving] = useState(false);
 
@@ -355,6 +357,7 @@ export default function WeeklySalaryPage() {
     setDeductionTargetSalary(salary);
     setWeeklySalaryAmountInput(String(salary.weeklySalaryOverride ?? salary.netAttendancePay ?? 0));
     setDeductionAmountInput(salary.manualDeductions ? String(salary.manualDeductions) : '0');
+    setLoanDeductionInput(salary.loanDeduction ? String(salary.loanDeduction) : '0');
     setDeductionReasonInput('Manual deduction adjustment');
     setDeductionModalOpen(true);
   };
@@ -363,6 +366,7 @@ export default function WeeklySalaryPage() {
     e.preventDefault();
     const weeklySalaryAmount = Number(weeklySalaryAmountInput);
     const amount = Number(deductionAmountInput);
+    const loanDed = Number(loanDeductionInput);
     if (!Number.isFinite(weeklySalaryAmount) || weeklySalaryAmount < 0) {
       showNotification('Weekly salary must be 0 or a positive number.', true);
       return;
@@ -371,11 +375,16 @@ export default function WeeklySalaryPage() {
       showNotification('Deduction amount must be 0 or a positive number.', true);
       return;
     }
+    if (!Number.isFinite(loanDed) || loanDed < 0) {
+      showNotification('Loan deduction must be 0 or a positive number.', true);
+      return;
+    }
     setDeductionSaving(true);
     try {
       const res = await axios.put(`${API_BASE_URL}/salaries/${deductionTargetSalary._id}/deduction`, {
         weeklySalaryAmount,
         deductionAmount: amount,
+        loanDeduction: loanDed,
         reason: deductionReasonInput.trim() || 'Manual deduction adjustment'
       });
       if (res.data.success) {
@@ -395,7 +404,12 @@ export default function WeeklySalaryPage() {
 
   const handleFinalizeSalary = async () => {
     if (!detailSalary) return;
-    if (!window.confirm(`Finalize salary for ${detailSalary.employeeName}? This will lock the record.`)) return;
+    const activeLoan = Number(detailSalary.activeLoanBalance || detailData?.activeLoanBalance || 0);
+    const loanDed = Number(detailSalary.loanDeduction || 0);
+    const loanMsg = activeLoan > 0
+      ? ` (Worker owes £${activeLoan.toFixed(2)} loan, deducting £${loanDed.toFixed(2)} from this salary)`
+      : '';
+    if (!window.confirm(`Finalize salary for ${detailSalary.employeeName}?${loanMsg} This will lock the record and apply loan deduction.`)) return;
     setFinalizing(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/salaries/${detailSalary._id}/finalize`);
@@ -774,6 +788,7 @@ export default function WeeklySalaryPage() {
                 <th title="Travel & Other Allowances">Allow.</th>
                 <th title="Commission / Monthly Bonus">Bonus</th>
                 <th title="Manual Deductions">Ded.</th>
+                <th title="Loan Deduction">Loan Ded.</th>
                 <th style={{ fontWeight: 800, color: '#0f172a' }}>Final Salary</th>
                 <th>Paid</th>
                 <th title="Outstanding Balance Remaining">Remaining</th>
@@ -783,7 +798,7 @@ export default function WeeklySalaryPage() {
             </thead>
             <tbody>
               {payableSalaries.map(s => {
-                const hasAdj = (s.travelAllowance || 0) + (s.otherAllowances || 0) + (s.bonus || 0) + (s.manualDeductions || 0) > 0;
+                const hasAdj = (s.travelAllowance || 0) + (s.otherAllowances || 0) + (s.bonus || 0) + (s.manualDeductions || 0) + (s.loanDeduction || 0) > 0;
                 return (
                   <tr key={s._id}>
                     <td className="sticky-col-emp">
@@ -815,6 +830,17 @@ export default function WeeklySalaryPage() {
                     </td>
                     <td style={{ fontSize: '12px', color: '#dc2626', fontWeight: (s.manualDeductions || 0) > 0 ? 600 : 400 }}>
                       {(s.manualDeductions || 0) > 0 ? `-£${s.manualDeductions.toFixed(2)}` : '—'}
+                    </td>
+                    <td style={{ fontSize: '12px', color: '#b91c1c', fontWeight: (s.loanDeduction || 0) > 0 ? 700 : 400 }}>
+                      {(s.loanDeduction || 0) > 0 ? (
+                        <span style={{ background: '#fee2e2', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                          -£{s.loanDeduction.toFixed(2)}
+                        </span>
+                      ) : (s.activeLoanBalance || 0) > 0 ? (
+                        <span title={`Worker owes £${Number(s.activeLoanBalance).toFixed(2)} loan`} style={{ fontSize: '10.5px', color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: '3px' }}>
+                          Bal: £{Number(s.activeLoanBalance).toFixed(2)}
+                        </span>
+                      ) : '—'}
                     </td>
                     <td style={{ fontWeight: 800, fontSize: '14.5px', color: '#0f172a' }}>
                       £{(s.finalSalary || s.netAttendancePay || 0).toFixed(2)}
@@ -1107,6 +1133,35 @@ export default function WeeklySalaryPage() {
                     )}
                   </div>
 
+                  {/* Active Worker Loan Banner if employee owes an active loan */}
+                  {Number(detailData?.activeLoanBalance || activeSalary?.activeLoanBalance || 0) > 0 && (
+                    <div style={{
+                      marginBottom: '12px',
+                      background: '#fffbeb',
+                      border: '1px solid #fde68a',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <HandCoins size={16} color="#d97706" />
+                        <span>Worker has an active loan balance:</span>
+                        <strong style={{ color: '#b45309', fontSize: '14px' }}>
+                          £{Number(detailData?.activeLoanBalance || activeSalary?.activeLoanBalance).toFixed(2)}
+                        </strong>
+                      </div>
+                      <button
+                        className="btn btn-outline btn-xs"
+                        style={{ fontSize: '11px', color: '#b45309', borderColor: '#fde68a', background: '#ffffff', fontWeight: 600 }}
+                        onClick={() => openEditDeductionModal(activeSalary)}
+                      >
+                        Adjust Loan Deduction
+                      </button>
+                    </div>
+                  )}
+
                   {/* Final Salary Calculation Breakdown */}
                   <div style={{
                     background: '#f8fafc',
@@ -1166,6 +1221,12 @@ export default function WeeklySalaryPage() {
                           label: 'Other Deductions',
                           value: (activeSalary?.manualDeductions || 0) > 0 ? `-£${activeSalary.manualDeductions.toFixed(2)}` : '-£0.00',
                           color: '#dc2626'
+                        },
+                        {
+                          icon: <HandCoins size={14} color="#b91c1c" />,
+                          label: 'Loan Deduction',
+                          value: (activeSalary?.loanDeduction || 0) > 0 ? `-£${activeSalary.loanDeduction.toFixed(2)}` : '-£0.00',
+                          color: '#b91c1c'
                         }
                       ].map((row, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px dashed #e2e8f0' }}>
@@ -1620,6 +1681,32 @@ export default function WeeklySalaryPage() {
                 </div>
 
                 <div className="form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label" style={{ fontWeight: 600, color: '#0f172a', margin: 0 }}>
+                      💳 Loan Deduction from Salary (£)
+                    </label>
+                    {Number(deductionTargetSalary.activeLoanBalance || 0) > 0 && (
+                      <span style={{ fontSize: '11px', color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                        Active Loan: £{Number(deductionTargetSalary.activeLoanBalance).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="form-input"
+                    placeholder="Enter loan repayment deduction"
+                    style={{ fontSize: '15px', fontWeight: 700, color: '#b91c1c' }}
+                    value={loanDeductionInput}
+                    onChange={(e) => setLoanDeductionInput(e.target.value)}
+                  />
+                  <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                    Deducted amount reduces net payable salary and is credited to the worker's loan balance.
+                  </span>
+                </div>
+
+                <div className="form-group">
                   <label className="form-label" style={{ fontWeight: 600, color: '#0f172a' }}>
                     Reason / Notes for Deduction
                   </label>
@@ -1637,7 +1724,8 @@ export default function WeeklySalaryPage() {
                   const att = Number(weeklySalaryAmountInput) || 0;
                   const allow = (deductionTargetSalary.travelAllowance || 0) + (deductionTargetSalary.otherAllowances || 0) + (deductionTargetSalary.bonus || 0);
                   const ded = Number(deductionAmountInput) || 0;
-                  const newFinal = Math.max(0, att + allow - ded);
+                  const loanDed = Number(loanDeductionInput) || 0;
+                  const newFinal = Math.max(0, att + allow - ded - loanDed);
                   const paid = deductionTargetSalary.totalPaid || 0;
                   const newRemaining = Math.max(0, newFinal - paid);
 
@@ -1646,7 +1734,7 @@ export default function WeeklySalaryPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontSize: '11px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>New Final Weekly Salary</div>
-                          <div style={{ fontSize: '11px', color: '#047857' }}>Calculated dynamically after deduction</div>
+                          <div style={{ fontSize: '11px', color: '#047857' }}>Calculated dynamically after deductions</div>
                         </div>
                         <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669' }}>
                           £{newFinal.toFixed(2)}

@@ -214,6 +214,7 @@ export default function SalaryDistributor() {
           weeklySalary,
           openingBalance: openingBal,
           bonus,
+          loanDeduction: Number(payModalSalary.loanDeduction || 0),
           totalPayable,
           paymentAmount: amount,
           paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
@@ -788,6 +789,18 @@ export default function SalaryDistributor() {
                         <strong style={{ color: '#dc2626' }}>-£{totalDeductions.toFixed(2)}</strong>
                       </div>
                     )}
+                    {Number(s.loanDeduction || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                        <span style={{ fontWeight: 600 }}>💳 Loan Deduction:</span>
+                        <strong style={{ fontWeight: 700 }}>-£{Number(s.loanDeduction).toFixed(2)}</strong>
+                      </div>
+                    )}
+                    {Number(s.activeLoanBalance || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#92400e', background: '#fef3c7', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
+                        <span>Worker Loan Balance:</span>
+                        <strong>£{Number(s.activeLoanBalance).toFixed(2)}</strong>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#64748b' }}>Weekly Salary:</span>
                       <strong style={{ color: '#0f172a' }}>£{weeklySalary.toFixed(2)}</strong>
@@ -880,6 +893,7 @@ export default function SalaryDistributor() {
                   <th style={{ textAlign: 'center', padding: '8px 4px', width: '50px' }}>Days</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Wage</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '70px' }}>Deduct.</th>
+                  <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Loan Ded.</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Salary</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Opening</th>
                   <th style={{ textAlign: 'right', padding: '8px 6px', minWidth: '75px' }}>Bonus</th>
@@ -935,6 +949,15 @@ export default function SalaryDistributor() {
                         {totalDeductions > 0 ? (
                           <span style={{ color: '#dc2626', fontWeight: 600 }}>
                             -£{totalDeductions.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>£0.00</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px' }}>
+                        {Number(s.loanDeduction || 0) > 0 ? (
+                          <span style={{ color: '#b91c1c', fontWeight: 700, background: '#fee2e2', padding: '2px 5px', borderRadius: '4px', fontSize: '11px' }}>
+                            -£{Number(s.loanDeduction).toFixed(2)}
                           </span>
                         ) : (
                           <span style={{ color: '#94a3b8' }}>£0.00</span>
@@ -1156,6 +1179,18 @@ export default function SalaryDistributor() {
                     <span style={{ color: '#64748b' }}>Weekly Salary:</span>
                     <strong style={{ color: '#0f172a' }}>£{(payModalSalary.weeklySalary || payModalSalary.finalSalary || 0).toFixed(2)}</strong>
                   </div>
+                  {Number(payModalSalary.loanDeduction || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px', color: '#b91c1c', background: '#fee2e2', padding: '3px 8px', borderRadius: '4px' }}>
+                      <span style={{ fontWeight: 600 }}>💳 Loan Deduction:</span>
+                      <strong style={{ fontWeight: 700 }}>-£{Number(payModalSalary.loanDeduction).toFixed(2)}</strong>
+                    </div>
+                  )}
+                  {Number(payModalSalary.activeLoanBalance || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: '#92400e', background: '#fef3c7', padding: '3px 8px', borderRadius: '4px' }}>
+                      <span>Remaining Worker Loan:</span>
+                      <strong>£{Number(payModalSalary.activeLoanBalance).toFixed(2)}</strong>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
                     <span style={{ color: '#64748b' }}>Opening Balance (Owed):</span>
                     <strong style={{ color: '#7c3aed' }}>+£{(payModalSalary.openingBalance || 0).toFixed(2)}</strong>
@@ -1687,6 +1722,12 @@ export default function SalaryDistributor() {
                       <div>• Other Allowances: £{detailModalSalary.otherAllowances?.toFixed(2) || '0.00'}</div>
                       <div style={{ color: '#dc2626' }}>• Manual Deductions: -£{detailModalSalary.manualDeductions?.toFixed(2) || '0.00'}</div>
                       <div style={{ color: '#dc2626' }}>• Late Deductions: -£{detailModalSalary.lateDeductions?.toFixed(2) || '0.00'}</div>
+                      {Number(detailModalSalary.loanDeduction || 0) > 0 && (
+                        <div style={{ color: '#b91c1c', fontWeight: 700 }}>• 💳 Loan Deduction: -£{Number(detailModalSalary.loanDeduction).toFixed(2)}</div>
+                      )}
+                      {Number(detailModalSalary.activeLoanBalance || 0) > 0 && (
+                        <div style={{ color: '#92400e', fontWeight: 600 }}>• Remaining Worker Loan: £{Number(detailModalSalary.activeLoanBalance).toFixed(2)}</div>
+                      )}
                       <div style={{ color: '#db2777', fontWeight: 600 }}>• Commission / Bonus: +£{Number(detailModalSalary.bonus || 0).toFixed(2)}</div>
                       <div style={{ color: '#7c3aed', fontWeight: 600 }}>• Opening Balance (Owed): +£{Number(detailModalSalary.openingBalance || 0).toFixed(2)}</div>
                     </div>
@@ -1791,6 +1832,12 @@ export default function SalaryDistributor() {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b' }}>Commission / Bonus:</span>
                     <span style={{ color: '#db2777' }}>+£{paymentReceipt.bonus?.toFixed(2)}</span>
+                  </div>
+                )}
+                {Boolean(paymentReceipt.loanDeduction) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                    <span style={{ fontWeight: 600 }}>💳 Loan Deduction:</span>
+                    <strong style={{ fontWeight: 700 }}>-£{paymentReceipt.loanDeduction?.toFixed(2)}</strong>
                   </div>
                 )}
                 {paymentReceipt.totalPayable !== undefined && (

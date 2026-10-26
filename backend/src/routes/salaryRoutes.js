@@ -21,6 +21,7 @@ router.post('/:id/adjustments', authenticate, authorize('ADMIN'), salaryControll
 router.put('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), salaryController.updateAdjustment);
 router.delete('/adjustments/:adjustmentId', authenticate, authorize('ADMIN'), salaryController.removeAdjustment);
 router.put('/:id/deduction', authenticate, authorize('ADMIN'), salaryController.updateSalaryDeduction);
+router.patch('/:id/loan-deduction', authenticate, authorize('ADMIN'), salaryController.updateSalaryLoanDeduction);
 
 // Admin finalizes / unfinalizes weekly salary
 router.post('/finalize-all', authenticate, authorize('ADMIN'), salaryController.finalizeAllWeeklySalaries);

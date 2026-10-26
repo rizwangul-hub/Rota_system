@@ -720,7 +720,7 @@ exports.removeAdjustment = async (req, res) => {
 exports.updateSalaryDeduction = async (req, res) => {
   try {
     const { id } = req.params; // weeklySalary id
-    const { deductionAmount, weeklySalaryAmount, reason } = req.body;
+    const { deductionAmount, weeklySalaryAmount, loanDeduction, reason } = req.body;
 
     const salary = await WeeklySalary.findById(id);
     if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
@@ -742,6 +742,10 @@ exports.updateSalaryDeduction = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Weekly salary must be a valid non-negative number.' });
       }
       salary.weeklySalaryOverride = salaryOverrideAmount;
+    }
+
+    if (loanDeduction !== undefined) {
+      salary.loanDeduction = Math.max(0, Number(loanDeduction) || 0);
     }
 
     const adjReason = (reason && reason.trim()) ? reason.trim() : (isFinalized ? 'Admin correction on finalized salary' : 'Manual deduction adjustment');
@@ -779,6 +783,13 @@ exports.updateSalaryDeduction = async (req, res) => {
 
     await recalculateWeeklySalary(salary, isFinalized && req.user?.role === 'ADMIN');
 
+    if (isFinalized) {
+      await revertSalaryLoanDeduction(salary._id);
+      if ((salary.loanDeduction || 0) > 0) {
+        await applySalaryLoanDeduction(salary.employee, salary, salary.loanDeduction, req.user);
+      }
+    }
+
     await logAction({
       user: req.user._id,
       username: req.user.name,
@@ -786,7 +797,7 @@ exports.updateSalaryDeduction = async (req, res) => {
       action: isFinalized ? 'FINALIZED_SALARY_DEDUCTION_UPDATED' : 'SALARY_DEDUCTION_UPDATED',
       recordType: 'WeeklySalary',
       recordId: salary._id,
-      details: `Updated weekly salary${salaryOverrideAmount === undefined ? '' : ` to £${salaryOverrideAmount.toFixed(2)}`} and deduction to £${numAmount.toFixed(2)} (${adjReason}) for ${salary.employeeName} for week ${salary.weekLabel}${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
+      details: `Updated weekly salary${salaryOverrideAmount === undefined ? '' : ` to £${salaryOverrideAmount.toFixed(2)}`} and deduction to £${numAmount.toFixed(2)} (${adjReason}), loan deduction £${(salary.loanDeduction || 0).toFixed(2)} for ${salary.employeeName} for week ${salary.weekLabel}${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
       req
     });
 
@@ -799,6 +810,55 @@ exports.updateSalaryDeduction = async (req, res) => {
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to update salary deduction.');
+  }
+};
+
+/**
+ * Update loan deduction specifically for a weekly salary record
+ */
+exports.updateSalaryLoanDeduction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { loanDeduction } = req.body;
+
+    const salary = await WeeklySalary.findById(id);
+    if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
+
+    const isFinalized = ['FINALIZED', 'PAID', 'PARTIALLY_PAID', 'Finalized', 'Paid', 'Partially Paid'].includes(salary.status);
+    if (isFinalized && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Cannot edit loan deduction on finalized salary without Admin privileges.' });
+    }
+
+    const numLoanDed = Math.max(0, Number(loanDeduction) || 0);
+    salary.loanDeduction = numLoanDed;
+
+    await recalculateWeeklySalary(salary, isFinalized && req.user?.role === 'ADMIN');
+
+    if (isFinalized) {
+      await revertSalaryLoanDeduction(salary._id);
+      if (numLoanDed > 0) {
+        await applySalaryLoanDeduction(salary.employee, salary, numLoanDed, req.user);
+      }
+    }
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: isFinalized ? 'FINALIZED_SALARY_LOAN_DEDUCTION_UPDATED' : 'SALARY_LOAN_DEDUCTION_UPDATED',
+      recordType: 'WeeklySalary',
+      recordId: salary._id,
+      details: `Updated loan deduction to £${numLoanDed.toFixed(2)} for ${salary.employeeName} (${salary.weekLabel})${isFinalized ? ' [FINALIZED OVERRIDE]' : ''}`,
+      req
+    });
+
+    res.json({
+      success: true,
+      message: `Loan deduction updated to £${numLoanDed.toFixed(2)} for ${salary.employeeName}.`,
+      salary
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to update loan deduction.');
   }
 };
 
@@ -833,11 +893,21 @@ async function finalizeSingleSalaryHelper(salary, user, req) {
     otherAllowances: salary.otherAllowances,
     bonus: salary.bonus,
     manualDeductions: salary.manualDeductions,
+    loanDeduction: salary.loanDeduction || 0,
     finalSalary: salary.finalSalary,
     attendanceBreakdown: salary.attendanceBreakdown,
     capturedAt: salary.finalizedAt
   };
   await salary.save();
+
+  // If salary has a loan deduction, record loan repayment in the employee's loan ledger
+  if ((salary.loanDeduction || 0) > 0) {
+    try {
+      await applySalaryLoanDeduction(salary.employee, salary, salary.loanDeduction, user);
+    } catch (loanErr) {
+      console.warn('Salary loan deduction error:', loanErr?.message);
+    }
+  }
 
   // Lock corresponding attendances
   await Attendance.updateMany(
@@ -877,6 +947,7 @@ async function finalizeSingleSalaryHelper(salary, user, req) {
       allowance: (salary.travelAllowance || 0) + (salary.otherAllowances || 0),
       bonus: salary.bonus || 0,
       otherDeduction: salary.manualDeductions || 0,
+      loanDeduction: salary.loanDeduction || 0,
       amountEarned: netEarned,
       amountPaid: 0,
       runningBalance: newBalance,
@@ -894,7 +965,7 @@ async function finalizeSingleSalaryHelper(salary, user, req) {
     recordType: 'WeeklySalary',
     recordId: salary._id,
     action: 'SALARY_FINALIZED',
-    details: `Finalized weekly salary £${salary.finalSalary} for ${salary.employeeName} (${salary.weekLabel})`,
+    details: `Finalized weekly salary £${salary.finalSalary} (Loan deduction: £${(salary.loanDeduction || 0).toFixed(2)}) for ${salary.employeeName} (${salary.weekLabel})`,
     req
   });
 
@@ -911,6 +982,11 @@ exports.finalizeWeeklySalary = async (req, res) => {
     if (!salary) return res.status(404).json({ success: false, message: 'Weekly salary not found.' });
     if (['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'].includes(salary.status)) {
       return res.status(409).json({ success: false, message: 'This salary has already been finalized.' });
+    }
+
+    if (req.body && req.body.loanDeduction !== undefined) {
+      salary.loanDeduction = Math.max(0, Number(req.body.loanDeduction) || 0);
+      await recalculateWeeklySalary(salary);
     }
 
     const finalizedSalary = await finalizeSingleSalaryHelper(salary, req.user, req);
@@ -997,6 +1073,13 @@ exports.unfinalizeWeeklySalary = async (req, res) => {
         success: false,
         message: `Cannot unfinalize salary because £${totalPaid.toFixed(2)} has already been paid. Please reverse payments in Distributor dashboard first, or use "Edit Salary" directly to adjust amounts.`
       });
+    }
+
+    // Revert loan deduction repayments if any were recorded for this salary
+    try {
+      await revertSalaryLoanDeduction(salary._id);
+    } catch (loanErr) {
+      console.warn('Revert salary loan deduction error:', loanErr?.message);
     }
 
     salary.status = 'Generated';

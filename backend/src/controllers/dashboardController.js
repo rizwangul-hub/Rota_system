@@ -4,6 +4,7 @@ const Shop = require('../models/Shop');
 const Attendance = require('../models/Attendance');
 const WeeklySalary = require('../models/WeeklySalary');
 const Bonus = require('../models/Bonus');
+const Loan = require('../models/Loan');
 const { getWeekRange, getUKDateString, formatUKDate } = require('../utils/calc');
 const { attendanceCheckerRecord } = require('../utils/attendanceViews');
 const { getAvailableWeeksList } = require('../utils/weekList');
@@ -331,6 +332,14 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     }
   }
 
+  // Query active loans for these employees
+  const activeLoans = await Loan.find({ employee: { $in: empIds }, status: 'ACTIVE' }).lean();
+  const activeLoanMap = {};
+  activeLoans.forEach(l => {
+    const k = (l.employee || '').toString();
+    if (k) activeLoanMap[k] = Number(((activeLoanMap[k] || 0) + (l.remainingBalance || 0)).toFixed(2));
+  });
+
   const salaries = eligibleSalaries.map(s => {
     const sObj = s.toObject ? s.toObject() : { ...s };
     const empKey = (s.employee?._id || s.employee || '').toString();
@@ -360,6 +369,9 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     sObj.allowance = allowance;
     sObj.travelAllowance = Number(s.travelAllowance || 0);
     sObj.otherAllowances = Number(s.otherAllowances || 0);
+    sObj.manualDeductions = Number(s.manualDeductions || 0);
+    sObj.loanDeduction = Number(s.loanDeduction || 0);
+    sObj.activeLoanBalance = activeLoanMap[empKey] || 0;
     sObj.weeklySalary = attendanceSalary; // Displays attendance wages in the salary field as requested
     sObj.finalSalary = Number(s.finalSalary || 0);
     sObj.openingBalance = bd.openingBalance;
@@ -380,6 +392,7 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
   const totalAllowance = salaries.reduce((sum, s) => sum + (s.allowance || 0), 0);
   const totalOpeningBalance = salaries.reduce((sum, s) => sum + (s.openingBalance || 0), 0);
   const totalCommissionBonus = salaries.reduce((sum, s) => sum + (s.bonus || 0), 0);
+  const totalLoanDeductions = salaries.reduce((sum, s) => sum + (s.loanDeduction || 0), 0);
   const totalPayable = salaries.reduce((sum, s) => sum + (s.totalPayable || 0), 0);
   const totalPaid = salaries.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
   const totalOutstanding = salaries.reduce((sum, s) => sum + (s.balanceRemaining || 0), 0);
@@ -405,6 +418,7 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
       totalAllowance: Number(totalAllowance.toFixed(2)),
       totalOpeningBalance: Number(totalOpeningBalance.toFixed(2)),
       totalCommissionBonus: Number(totalCommissionBonus.toFixed(2)),
+      totalLoanDeductions: Number(totalLoanDeductions.toFixed(2)),
       totalPayable: Number(totalPayable.toFixed(2)),
       totalPaid: Number(totalPaid.toFixed(2)),
       totalOutstanding: Number(totalOutstanding.toFixed(2)),

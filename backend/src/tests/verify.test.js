@@ -207,6 +207,7 @@ assert.deepStrictEqual(phase6, {
   totalAllowances: 30,
   bonus: 0,
   otherDeductions: 15,
+  loanDeduction: 0,
   finalSalary: 252.5
 });
 assert.strictEqual(calculateFinalWeeklySalary({
@@ -214,8 +215,9 @@ assert.strictEqual(calculateFinalWeeklySalary({
   travelAllowance: 20,
   otherAllowances: 10,
   bonus: 200,
-  otherDeductions: 15
-}).finalSalary, 452.5);
+  otherDeductions: 15,
+  loanDeduction: 50
+}).finalSalary, 402.5);
 assert.strictEqual(Number(((10000 * 2) / 100).toFixed(2)), 200);
 assert.strictEqual(
   calculateWeeklySalaryComponents({ netAttendancePay: 100, bonus: 200 }).finalSalary,
