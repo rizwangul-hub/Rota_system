@@ -278,6 +278,13 @@ router.get(
 );
 
 router.get(
+  '/system-backup/zip',
+  authenticate,
+  authorize('ADMIN'),
+  reportController.exportSystemBackupZip
+);
+
+router.get(
   '/system-backup/pdf',
   authenticate,
   authorize('ADMIN'),

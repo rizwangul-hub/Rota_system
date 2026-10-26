@@ -12,6 +12,9 @@ const { recalculateEmployeeLedger } = require('../utils/ledgerHelper');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const archiver = require('archiver');
+const { EJSON } = require('bson');
 const {
   generateWhatsAppAttendanceText,
   formatTime12Hour,
@@ -3303,5 +3306,93 @@ exports.exportSystemBackupExcel = async (req, res) => {
     res.end();
   } catch (error) {
     return sendServerError(res, error, 'Failed to export system database backup Excel.');
+  }
+};
+
+exports.exportSystemBackupZip = async (req, res) => {
+  try {
+    const { month, year, scope } = req.query;
+    const now = new Date();
+    let targetYear = year ? Number(year) : now.getFullYear();
+    let targetMonth;
+    const isAllTime = scope === 'all';
+
+    const monthsMap = {
+      jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+      jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
+    };
+
+    if (month === 'last') {
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      targetMonth = lastMonthDate.getMonth() + 1;
+      targetYear = lastMonthDate.getFullYear();
+    } else if (month && monthsMap[String(month).toLowerCase().slice(0, 3)]) {
+      targetMonth = monthsMap[String(month).toLowerCase().slice(0, 3)];
+    } else if (month && !isNaN(Number(month))) {
+      targetMonth = Number(month);
+    } else {
+      targetMonth = now.getMonth() + 1;
+    }
+
+    const monthName = new Date(Date.UTC(targetYear, targetMonth - 1, 1)).toLocaleString('en-US', { timeZone: 'UTC', month: 'short' });
+    const backupMonthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+    const filenameLabel = isAllTime ? 'Full_System' : (month === 'last' ? 'Last_Month' : `${monthName}_${targetYear}`);
+    const filename = `Pixx_System_Database_Backup_${filenameLabel}.zip`;
+
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    const validCollections = collections.filter(c => !c.name.startsWith('system.'));
+
+    const manifest = {
+      application: 'Pixx Technologies UK Rota & Workforce Payroll System',
+      backupType: isAllTime ? 'full' : 'monthly',
+      backupMonth: backupMonthStr,
+      backupVersion: '1.0.0',
+      schemaVersion: '1.0.0',
+      createdAt: new Date().toISOString(),
+      createdBy: req.user?.name || 'Fahad Rasheed',
+      createdById: req.user?._id ? String(req.user._id) : undefined,
+      createdByRole: req.user?.role || 'ADMIN',
+      description: `${isAllTime ? 'Full Lifetime' : monthName + ' ' + targetYear} Database Master & Financial Ledger Backup`,
+      database: 'MongoDB',
+      serializationFormat: 'BSON-EJSON-v2',
+      collections: validCollections.map(c => c.name),
+      documentCounts: {},
+      totalDocuments: 0,
+      checksum: ''
+    };
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    archive.pipe(res);
+
+    let totalDocs = 0;
+    const hash = crypto.createHash('sha256');
+
+    for (const col of validCollections) {
+      const docs = await mongoose.connection.db.collection(col.name).find({}).toArray();
+      manifest.documentCounts[col.name] = docs.length;
+      totalDocs += docs.length;
+      const jsonStr = EJSON.stringify(docs, null, 2);
+      hash.update(jsonStr);
+      archive.append(jsonStr, { name: `backup/${col.name}.json` });
+    }
+
+    manifest.totalDocuments = totalDocs;
+    manifest.checksum = hash.digest('hex');
+    archive.append(JSON.stringify(manifest, null, 2), { name: 'backup/manifest.json' });
+
+    await logAction({
+      user: req.user,
+      action: 'SYSTEM_DATABASE_BACKUP_ZIP',
+      recordType: 'SystemBackup',
+      details: `Generated complete system database backup ZIP for ${filenameLabel} (${totalDocs} documents across ${validCollections.length} collections)`,
+      req
+    });
+
+    archive.finalize();
+  } catch (error) {
+    console.error('Error generating backup ZIP:', error);
+    return sendServerError(res, error, 'Failed to generate system database backup ZIP.');
   }
 };

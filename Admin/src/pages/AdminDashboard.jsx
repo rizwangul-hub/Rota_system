@@ -51,7 +51,7 @@ export default function AdminDashboard() {
   const [downloadingBackup, setDownloadingBackup] = useState('');
   const isMounted = useRef(true);
 
-  const handleDownloadBackup = async (format = 'pdf', month = 'last', scope = 'month') => {
+  const handleDownloadBackup = async (format = 'zip', month = 'last', scope = 'month') => {
     const key = `${format}_${month}_${scope}`;
     setDownloadingBackup(key);
     try {
@@ -62,7 +62,8 @@ export default function AdminDashboard() {
       } else if (month !== 'last') {
         filenameLabel = `${now.toLocaleString('en-US', { month: 'short' })}_${now.getFullYear()}`;
       }
-      const filename = `Pixx_System_Database_Backup_${filenameLabel}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      const ext = format === 'zip' ? 'zip' : format === 'excel' ? 'xlsx' : 'pdf';
+      const filename = `Pixx_System_Database_Backup_${filenameLabel}.${ext}`;
       await downloadReportFile(`/reports/system-backup/${format}`, {
         month,
         year: now.getFullYear(),
@@ -246,7 +247,7 @@ export default function AdminDashboard() {
               fontWeight: 600
             }}
           >
-            <Database size={14} color="#38bdf8" /> Database Backup (PDF)
+            <Database size={14} color="#38bdf8" /> Database Backup (ZIP)
           </button>
           <Link to="/attendance-checker" className="btn btn-outline btn-sm">
             Pending Attendance ({pendingAttendanceCount})
@@ -571,10 +572,10 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>
-                    System Database Backup
+                    System Database Backup (.zip)
                   </h3>
                   <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
-                    Instant PDF Archive & Audit Export
+                    JSON Collections & Manifest Archive (backup.zip)
                   </div>
                 </div>
               </div>
@@ -589,7 +590,7 @@ export default function AdminDashboard() {
             {/* Modal Content */}
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: '1.5' }}>
-                Choose the backup scope below to download an official, multi-page landscape PDF containing all system database records:
+                Download a complete database backup archive (<strong>.zip</strong>) containing all MongoDB collections formatted as JSON, with <code>manifest.json</code> and checksum ready for backup storage or database restoration:
               </p>
 
               {/* Option 1: Last Month Backup */}
@@ -604,15 +605,15 @@ export default function AdminDashboard() {
               }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
-                    📦 Last Month Database Backup
+                    📦 Last Month Database Backup (.zip)
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                    Complete archive of the previous completed month
+                    Full JSON collection files + manifest for previous month
                   </div>
                 </div>
                 <button
                   className="btn btn-sm"
-                  onClick={() => handleDownloadBackup('pdf', 'last')}
+                  onClick={() => handleDownloadBackup('zip', 'last')}
                   disabled={Boolean(downloadingBackup)}
                   style={{
                     background: '#2563eb',
@@ -624,8 +625,8 @@ export default function AdminDashboard() {
                     gap: '6px'
                   }}
                 >
-                  <FileText size={14} />
-                  {downloadingBackup === 'pdf_last_month' ? 'Generating...' : 'Download PDF'}
+                  <Download size={14} />
+                  {downloadingBackup === 'zip_last_month' ? 'Creating ZIP...' : 'Download ZIP'}
                 </button>
               </div>
 
@@ -641,15 +642,15 @@ export default function AdminDashboard() {
               }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
-                    📅 Current Month Database Backup
+                    📅 Current Month Database Backup (.zip)
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                    All logs, attendance & salaries up to today
+                    All collections, attendance & salaries up to today in JSON archive
                   </div>
                 </div>
                 <button
                   className="btn btn-sm"
-                  onClick={() => handleDownloadBackup('pdf', new Date().getMonth() + 1)}
+                  onClick={() => handleDownloadBackup('zip', new Date().getMonth() + 1)}
                   disabled={Boolean(downloadingBackup)}
                   style={{
                     background: '#059669',
@@ -661,8 +662,8 @@ export default function AdminDashboard() {
                     gap: '6px'
                   }}
                 >
-                  <FileText size={14} />
-                  {downloadingBackup.startsWith('pdf_') && !downloadingBackup.includes('last') && !downloadingBackup.includes('all') ? 'Generating...' : 'Download PDF'}
+                  <Download size={14} />
+                  {downloadingBackup.startsWith('zip_') && !downloadingBackup.includes('last') && !downloadingBackup.includes('all') ? 'Creating ZIP...' : 'Download ZIP'}
                 </button>
               </div>
 
@@ -678,15 +679,15 @@ export default function AdminDashboard() {
               }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
-                    🌐 Lifetime System Database Backup
+                    🌐 Lifetime System Database Backup (.zip)
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                    Entire historical database archive since inception
+                    Complete database dump of all collections since inception
                   </div>
                 </div>
                 <button
                   className="btn btn-sm"
-                  onClick={() => handleDownloadBackup('pdf', null, 'all')}
+                  onClick={() => handleDownloadBackup('zip', null, 'all')}
                   disabled={Boolean(downloadingBackup)}
                   style={{
                     background: '#7c3aed',
@@ -698,28 +699,38 @@ export default function AdminDashboard() {
                     gap: '6px'
                   }}
                 >
-                  <FileText size={14} />
-                  {downloadingBackup === 'pdf_null_all' ? 'Generating...' : 'Download PDF'}
+                  <Download size={14} />
+                  {downloadingBackup === 'zip_null_all' ? 'Creating ZIP...' : 'Download ZIP'}
                 </button>
               </div>
 
-              {/* Footer link to Reports center */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '14px', borderTop: '1px solid #e2e8f0' }}>
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => handleDownloadBackup('excel', 'last')}
-                  disabled={Boolean(downloadingBackup)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-                >
-                  <Download size={13} /> Export Excel (.xlsx)
-                </button>
+              {/* Footer links */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '14px', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => handleDownloadBackup('pdf', 'last')}
+                    disabled={Boolean(downloadingBackup)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+                  >
+                    <FileText size={13} /> PDF Report
+                  </button>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => handleDownloadBackup('excel', 'last')}
+                    disabled={Boolean(downloadingBackup)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+                  >
+                    <Download size={13} /> Excel (.xlsx)
+                  </button>
+                </div>
                 <Link
                   to="/reports"
                   className="btn btn-outline btn-sm"
                   onClick={() => setShowBackupModal(false)}
                   style={{ fontSize: '12px', fontWeight: 600, color: '#2563eb', borderColor: '#bfdbfe' }}
                 >
-                  Advanced Backup Center →
+                  Advanced Reports →
                 </Link>
               </div>
             </div>
