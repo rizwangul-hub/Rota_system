@@ -3,9 +3,10 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import {
   Users, Store, Clock, AlertCircle, Banknote, Award, ArrowUpRight,
-  TrendingUp, BarChart2, CheckCircle2, ShieldAlert
+  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { downloadReportFile } from '../utils/downloadReportFile';
 
 // Module-level cache — survives React navigation (component unmount/remount)
 // Data is kept until the page is fully refreshed in the browser
@@ -44,7 +45,33 @@ export default function AdminDashboard() {
   const [summaryData, setSummaryData] = useState(_cache.summaryData);
   const [loading, setLoading]       = useState(!_cache.data); // false if already cached
   const [error, setError]           = useState('');
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [downloadingBackup, setDownloadingBackup] = useState('');
   const isMounted = useRef(true);
+
+  const handleDownloadBackup = async (format = 'pdf', month = 'last', scope = 'month') => {
+    const key = `${format}_${month}_${scope}`;
+    setDownloadingBackup(key);
+    try {
+      const now = new Date();
+      let filenameLabel = 'Last_Month';
+      if (scope === 'all') {
+        filenameLabel = 'Full';
+      } else if (month !== 'last') {
+        filenameLabel = `${now.toLocaleString('en-US', { month: 'short' })}_${now.getFullYear()}`;
+      }
+      const filename = `Pixx_System_Database_Backup_${filenameLabel}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      await downloadReportFile(`/reports/system-backup/${format}`, {
+        month,
+        year: now.getFullYear(),
+        scope
+      }, filename);
+    } catch (err) {
+      alert(err.message || 'Failed to download database backup.');
+    } finally {
+      setDownloadingBackup('');
+    }
+  };
 
   useEffect(() => {
     isMounted.current = true;
@@ -156,6 +183,21 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => setShowBackupModal(true)}
+            className="btn btn-sm"
+            style={{
+              background: '#0f172a',
+              color: '#ffffff',
+              border: '1px solid #1e293b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 600
+            }}
+          >
+            <Database size={14} color="#38bdf8" /> Database Backup (PDF)
+          </button>
           <Link to="/attendance-checker" className="btn btn-outline btn-sm">
             Pending Attendance ({pendingAttendanceCount})
           </Link>
@@ -408,6 +450,206 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
+
+      {/* System Database Backup Modal */}
+      {showBackupModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '540px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+              padding: '20px 24px',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: '10px',
+                  padding: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Database size={20} color="#38bdf8" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>
+                    System Database Backup
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                    Instant PDF Archive & Audit Export
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBackupModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: '1.5' }}>
+                Choose the backup scope below to download an official, multi-page landscape PDF containing all system database records:
+              </p>
+
+              {/* Option 1: Last Month Backup */}
+              <div style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
+                    📦 Last Month Database Backup
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                    Complete archive of the previous completed month
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => handleDownloadBackup('pdf', 'last')}
+                  disabled={Boolean(downloadingBackup)}
+                  style={{
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <FileText size={14} />
+                  {downloadingBackup === 'pdf_last_month' ? 'Generating...' : 'Download PDF'}
+                </button>
+              </div>
+
+              {/* Option 2: Current Month Backup */}
+              <div style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
+                    📅 Current Month Database Backup
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                    All logs, attendance & salaries up to today
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => handleDownloadBackup('pdf', new Date().getMonth() + 1)}
+                  disabled={Boolean(downloadingBackup)}
+                  style={{
+                    background: '#059669',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <FileText size={14} />
+                  {downloadingBackup.startsWith('pdf_') && !downloadingBackup.includes('last') && !downloadingBackup.includes('all') ? 'Generating...' : 'Download PDF'}
+                </button>
+              </div>
+
+              {/* Option 3: Full Lifetime Backup */}
+              <div style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
+                    🌐 Lifetime System Database Backup
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                    Entire historical database archive since inception
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => handleDownloadBackup('pdf', null, 'all')}
+                  disabled={Boolean(downloadingBackup)}
+                  style={{
+                    background: '#7c3aed',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <FileText size={14} />
+                  {downloadingBackup === 'pdf_null_all' ? 'Generating...' : 'Download PDF'}
+                </button>
+              </div>
+
+              {/* Footer link to Reports center */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '14px', borderTop: '1px solid #e2e8f0' }}>
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => handleDownloadBackup('excel', 'last')}
+                  disabled={Boolean(downloadingBackup)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+                >
+                  <Download size={13} /> Export Excel (.xlsx)
+                </button>
+                <Link
+                  to="/reports"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setShowBackupModal(false)}
+                  style={{ fontSize: '12px', fontWeight: 600, color: '#2563eb', borderColor: '#bfdbfe' }}
+                >
+                  Advanced Backup Center →
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

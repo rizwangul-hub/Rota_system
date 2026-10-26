@@ -1615,6 +1615,319 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {/* 9. TAB: SYSTEM DATABASE BACKUP & MONTH-END ARCHIVE */}
+      {activeTab === 'database_backup' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Hero Banner */}
+          <div style={{
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            color: '#ffffff',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.15)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                background: 'rgba(56, 189, 248, 0.15)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                borderRadius: '12px',
+                padding: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Database size={32} color="#38bdf8" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: '#ffffff' }}>
+                    System Database Backup & Month-End Archive
+                  </h2>
+                  <span style={{
+                    background: '#059669',
+                    color: '#ffffff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: '20px',
+                    letterSpacing: '0.5px'
+                  }}>
+                    LIVE DATABASE CONNECTED
+                  </span>
+                </div>
+                <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#94a3b8', maxWidth: '650px', lineHeight: '1.5' }}>
+                  Export an official, comprehensive legal backup of all database records in PDF format at the end of each month. Includes Shops, Employees, Attendance Logs, Weekly Payroll Sheets, Payouts & Adjustments, and Worker Closing Ledgers.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-sm"
+                onClick={() => handleDownloadBackup('pdf')}
+                disabled={Boolean(downloadingBackup)}
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '9px 18px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)'
+                }}
+              >
+                <FileText size={16} />
+                {downloadingBackup.includes('backup_pdf_selected') ? 'Generating PDF Backup...' : `Download ${selectedMonth} ${selectedYear} Backup (PDF)`}
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => handleDownloadBackup('excel')}
+                disabled={Boolean(downloadingBackup)}
+                style={{
+                  background: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '9px 16px',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Download size={16} />
+                {downloadingBackup.includes('backup_excel_selected') ? 'Generating Excel...' : 'Export Excel'}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick 1-Click Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+            {/* Card 1: Last Month Backup */}
+            <div className="card" style={{ padding: '18px', borderLeft: '4px solid #2563eb', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    1-Click Recommended
+                  </span>
+                  <Archive size={18} color="#2563eb" />
+                </div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px 0', color: '#0f172a' }}>
+                  Last Month Database Backup
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px 0', lineHeight: '1.4' }}>
+                  Instantly archive the previous completed month with all finalized weekly salaries, attendance records, and payouts in an official PDF.
+                </p>
+              </div>
+              <button
+                className="btn btn-sm"
+                onClick={() => handleDownloadBackup('pdf', 'last')}
+                disabled={Boolean(downloadingBackup)}
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  fontWeight: 600,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <FileText size={14} />
+                {downloadingBackup.includes('last') ? 'Preparing Last Month...' : 'Download Last Month Backup (PDF)'}
+              </button>
+            </div>
+
+            {/* Card 2: Current Month Backup */}
+            <div className="card" style={{ padding: '18px', borderLeft: '4px solid #059669', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Active Period
+                  </span>
+                  <Clock size={18} color="#059669" />
+                </div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px 0', color: '#0f172a' }}>
+                  Current Month Database Backup
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px 0', lineHeight: '1.4' }}>
+                  Export all data recorded for the current month ({new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}) to date.
+                </p>
+              </div>
+              <button
+                className="btn btn-sm"
+                onClick={() => handleDownloadBackup('pdf', new Date().getMonth() + 1)}
+                disabled={Boolean(downloadingBackup)}
+                style={{
+                  background: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  fontWeight: 600,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <FileText size={14} />
+                Download Current Month Backup (PDF)
+              </button>
+            </div>
+
+            {/* Card 3: Lifetime Database Backup */}
+            <div className="card" style={{ padding: '18px', borderLeft: '4px solid #7c3aed', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Complete Archive
+                  </span>
+                  <HardDrive size={18} color="#7c3aed" />
+                </div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px 0', color: '#0f172a' }}>
+                  Full Lifetime System Backup
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px 0', lineHeight: '1.4' }}>
+                  Export the entire database history (all historical attendance, payroll sheets, and ledger balances) into a single master PDF.
+                </p>
+              </div>
+              <button
+                className="btn btn-sm"
+                onClick={() => handleDownloadBackup('pdf', null, 'all')}
+                disabled={Boolean(downloadingBackup)}
+                style={{
+                  background: '#7c3aed',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  fontWeight: 600,
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <FileText size={14} />
+                Download Lifetime System Backup (PDF)
+              </button>
+            </div>
+          </div>
+
+          {/* Database Metrics Preview */}
+          {backupData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  Database Overview & Verification ({backupData.period?.monthLabel || `${selectedMonth} ${selectedYear}`})
+                </h3>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  Archive Date Range: <strong style={{ color: '#0f172a' }}>{backupData.period?.startStr}</strong> to <strong style={{ color: '#0f172a' }}>{backupData.period?.endStr}</strong>
+                </span>
+              </div>
+
+              <div className="stat-grid">
+                <div className="stat-card" style={{ borderLeft: '4px solid #0f172a' }}>
+                  <div className="stat-lbl">Staff Registered</div>
+                  <div className="stat-val" style={{ color: '#0f172a' }}>
+                    {backupData.summary?.totalEmployees || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#059669', marginTop: '4px' }}>
+                    {backupData.summary?.activeEmployees || 0} Active Staff
+                  </div>
+                </div>
+
+                <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
+                  <div className="stat-lbl">Operating Shops</div>
+                  <div className="stat-val" style={{ color: '#2563eb' }}>
+                    {backupData.summary?.totalShops || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    {backupData.summary?.activeShops || 0} Active Locations
+                  </div>
+                </div>
+
+                <div className="stat-card" style={{ borderLeft: '4px solid #0284c7' }}>
+                  <div className="stat-lbl">Attendance Logs</div>
+                  <div className="stat-val" style={{ color: '#0284c7' }}>
+                    {backupData.summary?.totalAttendanceRecords || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    Shifts Logged in Period
+                  </div>
+                </div>
+
+                <div className="stat-card" style={{ borderLeft: '4px solid #059669' }}>
+                  <div className="stat-lbl">Total Wages Earned</div>
+                  <div className="stat-val" style={{ color: '#059669' }}>
+                    £{(backupData.summary?.totalWagesEarned || 0).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    Gross Attendance Wages
+                  </div>
+                </div>
+
+                <div className="stat-card" style={{ borderLeft: '4px solid #d97706' }}>
+                  <div className="stat-lbl">Total Disbursed</div>
+                  <div className="stat-val" style={{ color: '#d97706' }}>
+                    £{(backupData.summary?.totalPaid || 0).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    Cash: £{(backupData.summary?.cashTotal || 0).toFixed(2)} | Bank: £{(backupData.summary?.bankTotal || 0).toFixed(2)}
+                  </div>
+                </div>
+
+                <div className="stat-card" style={{ borderLeft: '4px solid #dc2626' }}>
+                  <div className="stat-lbl">Closing Liability</div>
+                  <div className="stat-val" style={{ color: (backupData.summary?.totalRemaining || 0) > 0 ? '#dc2626' : '#059669' }}>
+                    £{(backupData.summary?.totalRemaining || 0).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                    Ledger Statement Balance
+                  </div>
+                </div>
+              </div>
+
+              {/* Security & Verification Card */}
+              <div className="card" style={{ padding: '16px 20px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <CheckCircle size={22} color="#059669" />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>
+                      Official Audit Archive & Data Integrity Seal
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                      Certified by System Administrator: <strong>Fahad Rasheed</strong>. Generates an official, multi-page landscape PDF compliant with company accounting standards.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => handleDownloadBackup('pdf')}
+                  disabled={Boolean(downloadingBackup)}
+                  style={{ fontWeight: 600, borderColor: '#0f172a', color: '#0f172a' }}
+                >
+                  <FileText size={14} style={{ marginRight: '6px' }} />
+                  Re-Download PDF
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
