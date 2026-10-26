@@ -260,8 +260,24 @@ export default function Employees() {
             <tbody>
               {employees.map(emp => (
                 <tr key={emp._id}>
-                  <td style={{ fontWeight: 600, color: '#2563eb' }}>{emp.employeeId}</td>
-                  <td style={{ fontWeight: 600 }}>{emp.name}</td>
+                  <td>
+                    <Link
+                      to={`/employees/${emp._id}`}
+                      className="table-link-primary"
+                      title={`Open ${emp.name}'s Profile (${emp.employeeId})`}
+                    >
+                      {emp.employeeId}
+                    </Link>
+                  </td>
+                  <td>
+                    <Link
+                      to={`/employees/${emp._id}`}
+                      className="table-link-name"
+                      title={`Open ${emp.name}'s Profile`}
+                    >
+                      {emp.name}
+                    </Link>
+                  </td>
                   <td style={{ fontWeight: 600 }}>£{emp.dailyWage?.toFixed(2)}</td>
                   <td style={{ fontWeight: 600, color: (emp.openingBalance || 0) !== 0 ? '#7c3aed' : '#94a3b8' }}>
                     {(emp.openingBalance || 0) !== 0 ? `£${Number(emp.openingBalance).toFixed(2)}` : '£0.00'}

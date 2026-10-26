@@ -220,6 +220,32 @@ body {
   background-color: #f8fafc;
 }
 
+.table-link-primary {
+  color: #2563eb;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s, text-decoration 0.15s;
+}
+
+.table-link-primary:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.table-link-name {
+  color: #0f172a;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s, text-decoration 0.15s;
+}
+
+.table-link-name:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
 /* Badges */
 .badge {
   display: inline-flex;
