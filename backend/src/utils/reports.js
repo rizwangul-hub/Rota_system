@@ -14,6 +14,18 @@ function formatTime12Hour(value) {
   return `${hours % 12 || 12}:${match[2]} ${period}`;
 }
 
+function getShopSequenceRank(shopName) {
+  if (!shopName) return 999;
+  const s = String(shopName).trim().toLowerCase();
+  if (s.includes('station')) return 1;
+  if (s.includes('camden')) return 2;
+  if (s.includes('chelsea')) return 3;
+  if (s.includes('edgware')) return 4;
+  if (s.includes('southwark')) return 5;
+  if (s.includes('leebridge') || s.includes('leabridge') || s.includes('labridge') || s.includes('labidge') || s.includes('lea bridge')) return 6;
+  return 100;
+}
+
 /**
  * Format daily attendance as clean WhatsApp message text
  */
@@ -42,7 +54,16 @@ function generateWhatsAppAttendanceText(dateStr, records, shopName = 'All Shops'
   let totalHalf = 0;
   let totalAbsent = absentList.length;
 
-  for (const [shop, staffList] of Object.entries(grouped)) {
+  // Sort shops by defined sequence: Station -> Camden -> Chelsea -> Edgware -> Southwark -> Leebridge
+  const sortedShopKeys = Object.keys(grouped).sort((a, b) => {
+    const rankA = getShopSequenceRank(a);
+    const rankB = getShopSequenceRank(b);
+    if (rankA !== rankB) return rankA - rankB;
+    return a.localeCompare(b);
+  });
+
+  for (const shop of sortedShopKeys) {
+    const staffList = grouped[shop];
     text += `🏬 *${shop.toUpperCase()}*\n`;
     staffList.forEach((r, idx) => {
       totalStaff++;
@@ -178,10 +199,17 @@ function sortDailyAttendanceRecords(records) {
     const bAbsent = b.status === 'Absent';
     if (aAbsent && !bAbsent) return 1;
     if (!aAbsent && bAbsent) return -1;
-    if (!aAbsent && !bAbsent) {
-      const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
-      if (sDiff !== 0) return sDiff;
+    if (aAbsent && bAbsent) {
+      const rankA = getShopSequenceRank(a.shopName);
+      const rankB = getShopSequenceRank(b.shopName);
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.employeeName || '').localeCompare(b.employeeName || '');
     }
+    const rankA = getShopSequenceRank(a.shopName);
+    const rankB = getShopSequenceRank(b.shopName);
+    if (rankA !== rankB) return rankA - rankB;
+    const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
+    if (sDiff !== 0) return sDiff;
     return (a.employeeName || '').localeCompare(b.employeeName || '');
   });
 }
@@ -327,6 +355,9 @@ async function buildDailyAttendanceExcel(records, dateStr) {
   const shopOrder = Object.keys(shopGroups).sort((a, b) => {
     if (a === 'ABSENT / OFF') return 1;
     if (b === 'ABSENT / OFF') return -1;
+    const rankA = getShopSequenceRank(a);
+    const rankB = getShopSequenceRank(b);
+    if (rankA !== rankB) return rankA - rankB;
     return a.localeCompare(b);
   });
 
@@ -3016,5 +3047,6 @@ module.exports = {
   buildSystemBackupExcel,
   SHOP_COLORS,
   getShopColor,
+  getShopSequenceRank,
   sortDailyAttendanceRecords
 };

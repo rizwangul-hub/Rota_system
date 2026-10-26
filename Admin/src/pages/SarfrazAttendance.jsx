@@ -29,13 +29,25 @@ import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 const _attendanceCache = new Map();
 
 const SHOP_COLORS = {
+  Station: { bg: '#f0f9ff', color: '#0369a1', border: '#7dd3fc' },
   Camden: { bg: '#f0fdfa', color: '#0f766e', border: '#5eead4' },
   Chelsea: { bg: '#eef2ff', color: '#3730a3', border: '#a5b4fc' },
   Edgware: { bg: '#faf5ff', color: '#6b21a8', border: '#d8b4fe' },
   Southwark: { bg: '#fffbeb', color: '#92400e', border: '#fcd34d' },
-  Station: { bg: '#f0f9ff', color: '#0369a1', border: '#7dd3fc' },
   Leebridge: { bg: '#fff1f2', color: '#9f1239', border: '#fda4af' },
 };
+
+function getShopSequenceRank(shopName) {
+  if (!shopName) return 999;
+  const s = String(shopName).trim().toLowerCase();
+  if (s.includes('station')) return 1;
+  if (s.includes('camden')) return 2;
+  if (s.includes('chelsea')) return 3;
+  if (s.includes('edgware')) return 4;
+  if (s.includes('southwark')) return 5;
+  if (s.includes('leebridge') || s.includes('leabridge') || s.includes('labridge') || s.includes('labidge') || s.includes('lea bridge')) return 6;
+  return 100;
+}
 
 function getShopBadgeStyle(shopName) {
   if (!shopName) return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
@@ -127,7 +139,15 @@ export default function SarfrazAttendance() {
   const [approvalStatusFilter, setApprovalStatusFilter] = useState('All');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [shops, setShops] = useState(() => getCachedShopsSync());
+  const [shops, setShops] = useState(() => {
+    const list = getCachedShopsSync();
+    return [...list].sort((a, b) => {
+      const rA = getShopSequenceRank(a.name);
+      const rB = getShopSequenceRank(b.name);
+      if (rA !== rB) return rA - rB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  });
 
   const currentCacheKey = `date:${selectedDate}_shop:${selectedShop}_appr:${approvalStatusFilter}_att:${attendanceStatusFilter}_q:${searchQuery}`;
 
@@ -142,7 +162,13 @@ export default function SarfrazAttendance() {
   const fetchShops = async () => {
     try {
       const shopList = await getCachedShops();
-      setShops(shopList);
+      const sorted = [...shopList].sort((a, b) => {
+        const rA = getShopSequenceRank(a.name);
+        const rB = getShopSequenceRank(b.name);
+        if (rA !== rB) return rA - rB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      setShops(sorted);
     } catch (err) {
       console.error('Error fetching shops:', err);
     }
@@ -645,10 +671,17 @@ export default function SarfrazAttendance() {
                 const bAbsent = b.status === 'Absent';
                 if (aAbsent && !bAbsent) return 1;
                 if (!aAbsent && bAbsent) return -1;
-                if (!aAbsent && !bAbsent) {
-                  const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
-                  if (sDiff !== 0) return sDiff;
+                if (aAbsent && bAbsent) {
+                  const rankA = getShopSequenceRank(a.shopName);
+                  const rankB = getShopSequenceRank(b.shopName);
+                  if (rankA !== rankB) return rankA - rankB;
+                  return (a.employeeName || '').localeCompare(b.employeeName || '');
                 }
+                const rankA = getShopSequenceRank(a.shopName);
+                const rankB = getShopSequenceRank(b.shopName);
+                if (rankA !== rankB) return rankA - rankB;
+                const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
+                if (sDiff !== 0) return sDiff;
                 return (a.employeeName || '').localeCompare(b.employeeName || '');
               }).map(r => {
                 const isChecked = ['Checked', 'Finalized'].includes(r.approvalStatus);

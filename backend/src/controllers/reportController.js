@@ -39,6 +39,7 @@ const {
   buildSystemBackupPDF,
   buildSystemBackupExcel,
   getShopColor,
+  getShopSequenceRank,
   sortDailyAttendanceRecords
 } = require('../utils/reports');
 const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, calculateWeeklySalaryComponents, safeObjectId, getDayOfWeekUK, resolveDailyWage } = require('../utils/calc');
@@ -323,6 +324,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     const sortedShopNames = Object.keys(shopGroups).sort((a, b) => {
       if (a === 'ABSENT / OFF') return 1;
       if (b === 'ABSENT / OFF') return -1;
+      const rankA = getShopSequenceRank(a);
+      const rankB = getShopSequenceRank(b);
+      if (rankA !== rankB) return rankA - rankB;
       return a.localeCompare(b);
     });
 
