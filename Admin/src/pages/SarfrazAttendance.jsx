@@ -23,6 +23,10 @@ import {
   ShieldCheck,
   Info
 } from 'lucide-react';
+import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
+
+// Module-level cache for attendance reports across tab navigation
+const _attendanceCache = new Map();
 
 const SHOP_COLORS = {
   Camden: { bg: '#f0fdfa', color: '#0f766e', border: '#5eead4' },
@@ -116,7 +120,6 @@ export default function SarfrazAttendance() {
 
   // Filters
   const [selectedDate, setSelectedDate] = useState(() => {
-    // Current UK date representation
     const d = new Date();
     return d.toISOString().split('T')[0];
   });
@@ -124,7 +127,9 @@ export default function SarfrazAttendance() {
   const [approvalStatusFilter, setApprovalStatusFilter] = useState('All');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [shops, setShops] = useState([]);
+  const [shops, setShops] = useState(() => getCachedShopsSync());
+
+  const currentCacheKey = `date:${selectedDate}_shop:${selectedShop}_appr:${approvalStatusFilter}_att:${attendanceStatusFilter}_q:${searchQuery}`;
 
   useEffect(() => {
     fetchShops();
@@ -136,17 +141,18 @@ export default function SarfrazAttendance() {
 
   const fetchShops = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/shops`);
-      if (res.data.success) {
-        setShops(res.data.shops || []);
-      }
+      const shopList = await getCachedShops();
+      setShops(shopList);
     } catch (err) {
       console.error('Error fetching shops:', err);
     }
   };
 
   const fetchAttendanceData = async () => {
-    setLoading(true);
+    const cached = _attendanceCache.get(currentCacheKey);
+    if (!cached && records.length === 0) {
+      setLoading(true);
+    }
     try {
       const params = {};
       if (selectedDate) params.date = selectedDate;
@@ -157,14 +163,23 @@ export default function SarfrazAttendance() {
 
       const res = await axios.get(`${API_BASE_URL}/reports/daily-attendance`, { params });
       if (res.data.success) {
-        setRecords(res.data.records || []);
-        if (res.data.summary) {
-          setSummary(res.data.summary);
+        const recordsList = res.data.records || [];
+        const summaryObj = res.data.summary || null;
+        const whatsApp = res.data.whatsAppText || '';
+        setRecords(recordsList);
+        if (summaryObj) {
+          setSummary(summaryObj);
         }
-        if (res.data.whatsAppText) {
-          setWhatsAppText(res.data.whatsAppText);
+        if (whatsApp) {
+          setWhatsAppText(whatsApp);
         }
         setSelectedIds([]);
+        _attendanceCache.set(currentCacheKey, {
+          records: recordsList,
+          summary: summaryObj,
+          whatsAppText: whatsApp,
+          fetchedAt: Date.now()
+        });
       }
     } catch (err) {
       console.error('Error fetching attendance report:', err);
@@ -221,6 +236,7 @@ export default function SarfrazAttendance() {
     try {
       const res = await axios.post(`${API_BASE_URL}/attendance/approve`, { ids: targetIds });
       if (res.data.success) {
+        _attendanceCache.clear();
         showNotification(res.data.message || `Successfully checked and approved ${targetIds.length} record(s).`);
         fetchAttendanceData();
       }
@@ -306,6 +322,7 @@ export default function SarfrazAttendance() {
       const res = await axios.put(`${API_BASE_URL}/attendance/${editModalRecord._id}`, payload);
       if (res.data.success) {
         setEditModalRecord(null);
+        _attendanceCache.clear();
         showNotification('Attendance and shop location updated successfully.');
         fetchAttendanceData();
       }

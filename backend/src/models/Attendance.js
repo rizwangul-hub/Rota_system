@@ -128,6 +128,8 @@ const AttendanceSchema = new mongoose.Schema({
 AttendanceSchema.index({ employee: 1, dateString: 1 }, { unique: true });
 AttendanceSchema.index({ shop: 1, dateString: 1 });
 AttendanceSchema.index({ approvalStatus: 1 });
+AttendanceSchema.index({ dateString: 1 });
+AttendanceSchema.index({ date: 1 });
 
 module.exports = mongoose.model('Attendance', AttendanceSchema);
 

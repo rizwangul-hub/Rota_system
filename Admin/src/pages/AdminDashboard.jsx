@@ -11,6 +11,7 @@ import { downloadReportFile } from '../utils/downloadReportFile';
 // Module-level cache — survives React navigation (component unmount/remount)
 // Caches per selected week
 const _cache = new Map();
+const _inFlight = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // Re-fetch in background after 5 minutes
 
 function loadDashboardData(weekLabel = '') {
@@ -20,8 +21,12 @@ function loadDashboardData(weekLabel = '') {
     return Promise.resolve(cached);
   }
 
+  if (_inFlight.has(cacheKey)) {
+    return _inFlight.get(cacheKey);
+  }
+
   const params = weekLabel ? { weekLabel } : {};
-  return Promise.all([
+  const promise = Promise.all([
     axios.get(`${API_BASE_URL}/dashboard/admin`, { params }),
     axios.get(`${API_BASE_URL}/reports/summary`, { params })
   ]).then(([dashRes, sumRes]) => {
@@ -34,17 +39,41 @@ function loadDashboardData(weekLabel = '') {
       summaryData: sumRes.data,
       fetchedAt: Date.now()
     };
+
+    const actualWeek = result.summaryData?.currentWeek || result.data?.weekLabel;
     _cache.set(cacheKey, result);
+    if (actualWeek) {
+      _cache.set(actualWeek, result);
+    }
+    if (!weekLabel && actualWeek) {
+      _cache.set('default', result);
+    }
+    _inFlight.delete(cacheKey);
     return result;
+  }).catch(err => {
+    _inFlight.delete(cacheKey);
+    throw err;
   });
+
+  _inFlight.set(cacheKey, promise);
+  return promise;
 }
 
+const getInitialDashboardCache = () => {
+  if (_cache.has('default')) return _cache.get('default');
+  for (const item of _cache.values()) {
+    if (item?.data) return item;
+  }
+  return null;
+};
+
 export default function AdminDashboard() {
-  const [data, setData]                         = useState(null);
-  const [summaryData, setSummaryData]           = useState(null);
-  const [availableWeeks, setAvailableWeeks]     = useState([]);
-  const [selectedWeek, setSelectedWeek]         = useState('');
-  const [loading, setLoading]                   = useState(true);
+  const initialCache = getInitialDashboardCache();
+  const [data, setData]                         = useState(() => initialCache?.data || null);
+  const [summaryData, setSummaryData]           = useState(() => initialCache?.summaryData || null);
+  const [availableWeeks, setAvailableWeeks]     = useState(() => initialCache?.summaryData?.availableWeeks || initialCache?.data?.availableWeeks || []);
+  const [selectedWeek, setSelectedWeek]         = useState(() => initialCache?.data?.weekLabel || initialCache?.summaryData?.currentWeek || '');
+  const [loading, setLoading]                   = useState(() => !initialCache);
   const [isFetchingWeek, setIsFetchingWeek]     = useState(false);
   const [error, setError]                       = useState('');
   const [showBackupModal, setShowBackupModal]   = useState(false);
@@ -95,8 +124,10 @@ export default function AdminDashboard() {
       const weeks = result.summaryData?.availableWeeks || result.data?.availableWeeks || [];
       if (weeks.length > 0) {
         setAvailableWeeks(weeks);
-        if (!weekToFetch) {
-          const defaultWeek = result.summaryData?.currentWeek || result.data?.weekLabel || weeks[0];
+      }
+      if (!weekToFetch) {
+        const defaultWeek = result.summaryData?.currentWeek || result.data?.weekLabel || weeks[0];
+        if (defaultWeek && defaultWeek !== selectedWeek) {
           setSelectedWeek(defaultWeek);
         }
       }

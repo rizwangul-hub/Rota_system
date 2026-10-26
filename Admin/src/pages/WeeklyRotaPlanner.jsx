@@ -70,12 +70,18 @@ function getDefaultTimesForDateKey(dateKey, workerName = '') {
   return { startTime: '09:00', endTime: '19:00' }; // Monday to Friday
 }
 
+// Module-level cache for week rotas to make navigation instant with no loading spinners
+const _rotaCache = new Map();
+
 export default function WeeklyRotaPlanner() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
-  const [weekStart, setWeekStart] = useState(() => getSundayOf(new Date().toISOString().slice(0, 10)));
-  const [loading, setLoading] = useState(true);
+  const initialWeek = getSundayOf(new Date().toISOString().slice(0, 10));
+  const cachedInitial = _rotaCache.get(initialWeek);
+
+  const [weekStart, setWeekStart] = useState(initialWeek);
+  const [loading, setLoading] = useState(() => !cachedInitial);
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [error, setError] = useState('');
@@ -85,7 +91,7 @@ export default function WeeklyRotaPlanner() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const rotaPageRef = useRef(null);
   const [viewMode, setViewMode] = useState('SHEET'); // 'SHEET' (Unified Excel Rota), 'GRID' (Cards matrix), or 'BOARD' (Daily board)
-  const [selectedDailyDate, setSelectedDailyDate] = useState(() => weekStart);
+  const [selectedDailyDate, setSelectedDailyDate] = useState(() => initialWeek);
 
   // Pick & Drop active state: { employeeId, sourceShopId, dateKey, employeeName, sourceShopName }
   const [pickedWorker, setPickedWorker] = useState(null);
@@ -94,16 +100,16 @@ export default function WeeklyRotaPlanner() {
   const [dragOverTarget, setDragOverTarget] = useState(null); // 'shopId:dateKey' or 'OFF:dateKey'
 
   // Data from backend
-  const [shops, setShops] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [currentRota, setCurrentRota] = useState(null);
-  const [availabilities, setAvailabilities] = useState([]);
+  const [shops, setShops] = useState(() => cachedInitial?.activeShops || []);
+  const [employees, setEmployees] = useState(() => cachedInitial?.activeEmployees || []);
+  const [currentRota, setCurrentRota] = useState(() => cachedInitial?.rota || null);
+  const [availabilities, setAvailabilities] = useState(() => cachedInitial?.availabilities || []);
 
   // Shop Roster: { [shopId]: [employeeId1, employeeId2, ...] }
-  const [shopRosters, setShopRosters] = useState({});
+  const [shopRosters, setShopRosters] = useState(() => cachedInitial?.shopRosters || {});
 
   // Cells: { [`${shopId}:${employeeId}:${dateKey}`]: { status: 'AVAILABLE'|'OFF'|'LOANED'|'CUSTOM', targetShopId, targetShopName, note } }
-  const [cells, setCells] = useState({});
+  const [cells, setCells] = useState(() => cachedInitial?.cells || {});
 
   // Active popover state
   const [activeCell, setActiveCell] = useState(null); // { shopId, employeeId, dateKey, rect }
@@ -180,7 +186,18 @@ export default function WeeklyRotaPlanner() {
 
   // Load week rota from backend
   const loadWeek = useCallback(async (targetWeek) => {
-    setLoading(true);
+    const cached = _rotaCache.get(targetWeek);
+    if (cached) {
+      setShops(cached.activeShops || []);
+      setEmployees(cached.activeEmployees || []);
+      setCurrentRota(cached.rota || null);
+      setAvailabilities(cached.availabilities || []);
+      setShopRosters(cached.shopRosters || {});
+      setCells(cached.cells || {});
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError('');
     setActiveCell(null);
     setPickedWorker(null);
@@ -238,7 +255,7 @@ export default function WeeklyRotaPlanner() {
         const dKey = String(a.dateKey).slice(0, 10);
         const isLoaned = a.status === 'LOANED' || rawHomeId !== rawShopId;
         const cellKey = `${rawHomeId}:${eId}:${dKey}`;
-        const empObj = (employees || []).find(e => String(e._id) === eId);
+        const empObj = (activeEmployees || []).find(e => String(e._id) === eId);
         const defTimes = getDefaultTimesForDateKey(dKey, empObj?.name || a.employeeName);
         newCells[cellKey] = {
           status: a.status || 'AVAILABLE',
@@ -251,6 +268,17 @@ export default function WeeklyRotaPlanner() {
       });
 
       setCells(newCells);
+
+      // Cache the loaded week
+      _rotaCache.set(targetWeek, {
+        activeShops,
+        activeEmployees,
+        rota,
+        availabilities: availRes?.data?.availability || [],
+        shopRosters: rosters,
+        cells: newCells,
+        fetchedAt: Date.now()
+      });
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to load rota.');
     } finally {
@@ -997,6 +1025,14 @@ export default function WeeklyRotaPlanner() {
       const res = await axios.put(`${API}/week/${weekStart}/draft`, payload);
       if (res.data?.rota) {
         setCurrentRota(res.data.rota);
+        const existing = _rotaCache.get(weekStart) || {};
+        _rotaCache.set(weekStart, {
+          ...existing,
+          rota: res.data.rota,
+          cells,
+          shopRosters,
+          fetchedAt: Date.now()
+        });
       }
       setNotice('Weekly Rota draft saved successfully!');
     } catch (err) {

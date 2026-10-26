@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import { Plus, Download, RefreshCw, X, Trash2, Edit, FileText } from 'lucide-react';
+import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 
 export default function BonusPage() {
   const [bonuses, setBonuses] = useState([]);
@@ -10,7 +11,7 @@ export default function BonusPage() {
   const [month, setMonth] = useState('Aug');
   const [year, setYear] = useState('2026');
   const [employees, setEmployees] = useState([]);
-  const [shops, setShops] = useState([]);
+  const [shops, setShops] = useState(() => getCachedShopsSync());
 
   // Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -28,12 +29,12 @@ export default function BonusPage() {
 
   const fetchEmployeesAndShops = async () => {
     try {
-      const [empRes, shopRes] = await Promise.all([
+      const [empRes, shopList] = await Promise.all([
         axios.get(`${API_BASE_URL}/employees`),
-        axios.get(`${API_BASE_URL}/shops`)
+        getCachedShops()
       ]);
       if (empRes.data.success) setEmployees(empRes.data.employees);
-      if (shopRes.data.success) setShops(shopRes.data.shops);
+      setShops(shopList);
     } catch (err) {
       console.error(err);
     }

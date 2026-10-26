@@ -5,9 +5,15 @@ import { Search, Edit, Eye, UserPlus, X, ArrowUpRight, UserCheck, UserX, ArrowUp
 import { Link } from 'react-router-dom';
 
 
+// Module-level cache for employee list across tab navigation
+const _employeesCache = new Map();
+
 export default function Employees() {
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const defaultCacheKey = 'status:_search:_sort:name_asc';
+  const initialCached = _employeesCache.get(defaultCacheKey);
+
+  const [employees, setEmployees] = useState(() => initialCached?.employees || []);
+  const [loading, setLoading] = useState(() => !initialCached);
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -18,20 +24,29 @@ export default function Employees() {
   const [editModalEmployee, setEditModalEmployee] = useState(null);
   const [nextEmployeeId, setNextEmployeeId] = useState('');
 
+  const currentCacheKey = `status:${selectedStatus}_search:${search}_sort:${sortBy}_${sortOrder}`;
 
   useEffect(() => {
     fetchEmployees();
   }, [selectedStatus, search, sortBy, sortOrder]);
 
   const fetchEmployees = async () => {
-    setLoading(true);
+    const cached = _employeesCache.get(currentCacheKey);
+    // If not cached, or if we have no employees at all, show initial loading
+    if (!cached && employees.length === 0) {
+      setLoading(true);
+    }
     try {
       const params = { sortBy, sortOrder };
       if (selectedStatus) params.status = selectedStatus;
       if (search) params.search = search;
 
       const res = await axios.get(`${API_BASE_URL}/employees`, { params });
-      if (res.data.success) setEmployees(res.data.employees);
+      if (res.data.success) {
+        const list = res.data.employees || [];
+        setEmployees(list);
+        _employeesCache.set(currentCacheKey, { employees: list, fetchedAt: Date.now() });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -45,6 +60,7 @@ export default function Employees() {
     try {
       const res = await axios.patch(`${API_BASE_URL}/employees/${employee._id}/toggle-status`);
       if (res.data.success) {
+        _employeesCache.clear();
         fetchEmployees();
       }
     } catch (err) {
@@ -59,6 +75,7 @@ export default function Employees() {
     try {
       const res = await axios.delete(`${API_BASE_URL}/employees/${employee._id}`);
       if (res.data.success) {
+        _employeesCache.clear();
         alert(res.data.message || `Worker ${employee.name} deleted successfully.`);
         fetchEmployees();
       }
@@ -126,6 +143,7 @@ export default function Employees() {
           openingBalanceDate: ''
         });
         setNextEmployeeId('');
+        _employeesCache.clear();
         fetchEmployees();
       }
     } catch (err) {
@@ -155,6 +173,7 @@ export default function Employees() {
       });
       if (res.data.success) {
         setEditModalEmployee(null);
+        _employeesCache.clear();
         fetchEmployees();
       }
     } catch (err) {

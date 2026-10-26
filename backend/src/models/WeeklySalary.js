@@ -157,5 +157,8 @@ const WeeklySalarySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 WeeklySalarySchema.index({ employee: 1, weekLabel: 1 }, { unique: true });
+WeeklySalarySchema.index({ weekLabel: 1 });
+WeeklySalarySchema.index({ status: 1, weekLabel: 1 });
+WeeklySalarySchema.index({ weekStartDateString: 1 });
 
 module.exports = mongoose.model('WeeklySalary', WeeklySalarySchema);

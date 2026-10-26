@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import { Store, Clock, Shield, Plus, Save, Check } from 'lucide-react';
+import { clearShopCache } from '../utils/shopCache';
 
 export default function SettingsPage() {
   const [shops, setShops] = useState([]);
@@ -56,6 +57,7 @@ export default function SettingsPage() {
         phone: newShopPhone
       });
       if (res.data.success) {
+        clearShopCache();
         setNewShopName('');
         setNewShopAddress('');
         setNewShopPhone('');
@@ -72,6 +74,7 @@ export default function SettingsPage() {
     try {
       const res = await axios.patch(`${API_BASE_URL}/shops/${shop._id}/toggle-status`);
       if (res.data.success) {
+        clearShopCache();
         fetchSettings();
       }
     } catch (err) {

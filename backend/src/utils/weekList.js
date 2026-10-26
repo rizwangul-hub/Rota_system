@@ -3,11 +3,19 @@ const WeeklySalary = require('../models/WeeklySalary');
 const Attendance = require('../models/Attendance');
 const { getWeekRange, getUKDateString } = require('./calc');
 
+let _cachedWeeks = null;
+let _cachedWeeksAt = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
 /**
  * Returns a sorted, descending list of all available rota week labels (e.g. "18/10/2026 – 24/10/2026").
  * Always includes the current rota week, and aggregates historical weeks from WeeklySalary and Attendance records.
  */
-async function getAvailableWeeksList() {
+async function getAvailableWeeksList(force = false) {
+  if (!force && _cachedWeeks && (Date.now() - _cachedWeeksAt < CACHE_TTL_MS)) {
+    return _cachedWeeks;
+  }
+
   let salaryWeeks = [];
   let attendanceDates = [];
 
@@ -49,7 +57,7 @@ async function getAvailableWeeksList() {
     }
   }
 
-  return Array.from(weekSet).sort((a, b) => {
+  const result = Array.from(weekSet).sort((a, b) => {
     const parseStart = (str) => {
       const part = String(str || '').split(/[–—-]|to/)[0].trim();
       const parts = part.split('/');
@@ -61,8 +69,18 @@ async function getAvailableWeeksList() {
     };
     return parseStart(b) - parseStart(a);
   });
+
+  _cachedWeeks = result;
+  _cachedWeeksAt = Date.now();
+  return result;
+}
+
+function invalidateWeeksListCache() {
+  _cachedWeeks = null;
+  _cachedWeeksAt = 0;
 }
 
 module.exports = {
-  getAvailableWeeksList
+  getAvailableWeeksList,
+  invalidateWeeksListCache
 };

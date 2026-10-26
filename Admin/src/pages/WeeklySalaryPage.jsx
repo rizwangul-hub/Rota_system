@@ -30,6 +30,7 @@ import {
   Minimize2
 } from 'lucide-react';
 import './WeeklySalaryPage.css';
+import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 
 const ADJUSTMENT_TYPES = [
   { value: 'TRAVEL_ALLOWANCE', label: 'Travel Allowance', color: '#2563eb' },
@@ -80,7 +81,7 @@ export default function WeeklySalaryPage() {
   const [selectedShop, setSelectedShop] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [shops, setShops] = useState([]);
+  const [shops, setShops] = useState(() => getCachedShopsSync());
 
   // Detail Modal
   const [detailSalary, setDetailSalary] = useState(null);
@@ -193,8 +194,8 @@ export default function WeeklySalaryPage() {
 
   const fetchShops = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/shops`);
-      if (res.data.success) setShops(res.data.shops || []);
+      const shopList = await getCachedShops();
+      setShops(shopList);
     } catch (err) {
       console.error('Error fetching shops:', err);
     }

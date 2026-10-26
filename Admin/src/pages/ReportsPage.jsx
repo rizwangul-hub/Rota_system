@@ -8,6 +8,7 @@ import {
   RefreshCw, Calendar, Banknote, CreditCard, Building, CheckCircle,
   AlertCircle, ChevronRight, TrendingUp, Layers, Database, Archive, HardDrive
 } from 'lucide-react';
+import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 
 const SHOP_COLORS = {
   Camden: { bg: '#f0fdfa', color: '#0f766e', border: '#5eead4' },
@@ -75,7 +76,7 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState('');
 
   // Dropdown options
-  const [shops, setShops] = useState([]);
+  const [shops, setShops] = useState(() => getCachedShopsSync());
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
   const [downloadingMonthlyReport, setDownloadingMonthlyReport] = useState('');
@@ -108,11 +109,11 @@ export default function ReportsPage() {
 
   const fetchShopsAndEmployees = async () => {
     try {
-      const [shopsRes, empRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/shops`),
+      const [shopList, empRes] = await Promise.all([
+        getCachedShops(),
         axios.get(`${API_BASE_URL}/employees`)
       ]);
-      if (shopsRes.data.success) setShops(shopsRes.data.shops || []);
+      setShops(shopList);
       if (empRes.data.success) setEmployees(empRes.data.employees || []);
     } catch (err) {
       console.error('Error fetching metadata:', err);

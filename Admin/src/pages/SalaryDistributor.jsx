@@ -31,18 +31,25 @@ import {
   Download
 } from 'lucide-react';
 import { downloadReportFile } from '../utils/downloadReportFile';
+import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
+
+// Module-level cache for distributor data
+const _distributorCache = new Map();
 
 export default function SalaryDistributor() {
-  const [salaries, setSalaries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const defaultCacheKey = 'week:default_shop:all';
+  const initialCached = _distributorCache.get(defaultCacheKey);
+
+  const [salaries, setSalaries] = useState(() => initialCached?.salaries || []);
+  const [loading, setLoading] = useState(() => !initialCached);
   const [exportingPdf, setExportingPdf] = useState(false);
-  const [availableWeeks, setAvailableWeeks] = useState([]);
+  const [availableWeeks, setAvailableWeeks] = useState(() => initialCached?.availableWeeks || []);
   const [selectedWeek, setSelectedWeek] = useState('');
   const [selectedShop, setSelectedShop] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [shops, setShops] = useState([]);
-  const [metrics, setMetrics] = useState({});
+  const [shops, setShops] = useState(() => getCachedShopsSync());
+  const [metrics, setMetrics] = useState(() => initialCached?.metrics || {});
   const [viewMode, setViewMode] = useState(typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table');
 
   // Pay Modal state
@@ -79,17 +86,22 @@ export default function SalaryDistributor() {
     fetchDistributorData();
   }, [selectedWeek, selectedShop]);
 
+  const currentCacheKey = `week:${selectedWeek || 'default'}_shop:${selectedShop || 'all'}`;
+
   const fetchShops = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/shops`);
-      if (res.data.success) setShops(res.data.shops);
+      const shopList = await getCachedShops();
+      setShops(shopList);
     } catch (err) {
       console.error('Failed to load shops:', err);
     }
   };
 
   const fetchDistributorData = async () => {
-    setLoading(true);
+    const cached = _distributorCache.get(currentCacheKey);
+    if (!cached && salaries.length === 0) {
+      setLoading(true);
+    }
     try {
       const params = {};
       if (selectedWeek && selectedWeek !== 'All') params.weekLabel = selectedWeek;
@@ -97,10 +109,27 @@ export default function SalaryDistributor() {
 
       const res = await axios.get(`${API_BASE_URL}/dashboard/distributor`, { params });
       if (res.data.success) {
-        setSalaries(res.data.salaries || []);
-        setMetrics(res.data.metrics || {});
-        if (Array.isArray(res.data.availableWeeks)) {
-          setAvailableWeeks(res.data.availableWeeks);
+        const salariesList = res.data.salaries || [];
+        const metricsObj = res.data.metrics || {};
+        const weeksList = Array.isArray(res.data.availableWeeks) ? res.data.availableWeeks : [];
+        setSalaries(salariesList);
+        setMetrics(metricsObj);
+        if (weeksList.length > 0) {
+          setAvailableWeeks(weeksList);
+        }
+        _distributorCache.set(currentCacheKey, {
+          salaries: salariesList,
+          metrics: metricsObj,
+          availableWeeks: weeksList,
+          fetchedAt: Date.now()
+        });
+        if (!selectedWeek && !selectedShop) {
+          _distributorCache.set('week:default_shop:all', {
+            salaries: salariesList,
+            metrics: metricsObj,
+            availableWeeks: weeksList,
+            fetchedAt: Date.now()
+          });
         }
       }
     } catch (err) {
