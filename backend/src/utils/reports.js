@@ -1435,7 +1435,27 @@ async function buildWeeklySalaryPDF(res, salaries, weekLabel, totals = {}, gener
  */
 async function buildEmployeeMonthlyPDF(res, employeeName, employeeId, shopName, monthLabel, attendanceSummary = {}, weeklyBreakdowns = [], grandTotal = {}, balancePayable = 0, generatedBy = 'Admin', dailyRecords = []) {
   const doc = new PDFDocument({ margin: 25, size: 'A4', layout: 'landscape' });
-  drawPdfBanner(doc, `Employee Monthly Statement`, `${employeeName} • ${shopName}`, `Period: ${monthLabel}`, true);
+  const margin = 25;
+  const contentWidth = 791.89;
+
+  // Dedicated Top Header Banner with Worker Name Prominently on Top
+  doc.rect(margin, 18, contentWidth, 48).fillAndStroke('#ffffff', '#cbd5e1');
+
+  // Left side: System Branding
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(14).text('PIXX ROTA', margin + 14, 25);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(8.5).text('PixxTechnologies UK • Monthly Employee Statement', margin + 14, 43);
+
+  // Right side: WORKER NAME BOLD & CRYSTAL CLEAR ON TOP
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(15).text(
+    `WORKER: ${(employeeName || '').toUpperCase()}`,
+    margin + 240, 23, { width: contentWidth - 255, align: 'right', lineBreak: false }
+  );
+
+  const subLine = `${employeeId ? `ID: ${employeeId}   •   ` : ''}Shop: ${shopName || 'Pixx Shop'}   •   Period: ${monthLabel}`;
+  doc.fillColor('#2563eb').font('Helvetica-Bold').fontSize(9.5).text(
+    subLine,
+    margin + 240, 43, { width: contentWidth - 255, align: 'right', lineBreak: false }
+  );
 
   const kpiY = 75;
   drawKpiCard(doc, 25, kpiY, 125, 'WORK DAYS', String(attendanceSummary.workingDays || 0), '#2563eb');
