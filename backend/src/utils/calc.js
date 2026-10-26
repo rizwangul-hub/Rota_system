@@ -388,14 +388,15 @@ function getWeekRange(dateInput = new Date()) {
 
 /**
  * Centralized calculation service for Final Weekly Salary (Phase 6)
- * Formula: Net Attendance Pay + Travel Allowance + Other Allowance + Bonus - Other Deductions
+ * Formula: Net Attendance Pay + Travel Allowance + Other Allowance + Bonus - Other Deductions - Loan Deduction
  */
 function calculateFinalWeeklySalary({
   netAttendancePay = 0,
   travelAllowance = 0,
   otherAllowances = 0,
   bonus = 0,
-  otherDeductions = 0
+  otherDeductions = 0,
+  loanDeduction = 0
 }) {
   const attendance = Number(Number(netAttendancePay || 0).toFixed(2));
   const travel = Number(Number(travelAllowance || 0).toFixed(2));
@@ -403,9 +404,10 @@ function calculateFinalWeeklySalary({
   const totalAllowances = Number((travel + other).toFixed(2));
   const bonusAmt = Number(Number(bonus || 0).toFixed(2));
   const deductions = Number(Number(otherDeductions || 0).toFixed(2));
+  const loanDed = Number(Number(loanDeduction || 0).toFixed(2));
 
-  // Net Attendance Pay + Allowances + Bonus - Other Deductions
-  const finalSalary = Number(Math.max(0, attendance + travel + other + bonusAmt - deductions).toFixed(2));
+  // Net Attendance Pay + Allowances + Bonus - Other Deductions - Loan Deduction
+  const finalSalary = Number(Math.max(0, attendance + travel + other + bonusAmt - deductions - loanDed).toFixed(2));
 
   return {
     netAttendancePay: attendance,
@@ -414,6 +416,7 @@ function calculateFinalWeeklySalary({
     totalAllowances,
     bonus: bonusAmt,
     otherDeductions: deductions,
+    loanDeduction: loanDed,
     finalSalary
   };
 }
@@ -425,7 +428,8 @@ function calculateFinalWeeklySalary({
 function calculateWeeklySalaryComponents({
   netAttendancePay = 0,
   adjustments = [],
-  bonus = 0
+  bonus = 0,
+  loanDeduction = 0
 }) {
   const totals = adjustments.reduce((result, adjustment) => {
     const amount = Number(Number(adjustment.amount || 0).toFixed(2));
@@ -442,14 +446,16 @@ function calculateWeeklySalaryComponents({
     travelAllowance: totals.travelAllowance,
     otherAllowances: totals.otherAllowances,
     bonus,
-    otherDeductions: totals.otherDeductions
+    otherDeductions: totals.otherDeductions,
+    loanDeduction
   });
 
   return {
     ...calculation,
     travelAllowance: Number(totals.travelAllowance.toFixed(2)),
     otherAllowances: Number(totals.otherAllowances.toFixed(2)),
-    otherDeductions: Number(totals.otherDeductions.toFixed(2))
+    otherDeductions: Number(totals.otherDeductions.toFixed(2)),
+    loanDeduction: Number(Number(loanDeduction || 0).toFixed(2))
   };
 }
 

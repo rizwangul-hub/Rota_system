@@ -85,6 +85,11 @@ const WeeklySalarySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  loanDeduction: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   bonus: {
     type: Number,
     default: 0

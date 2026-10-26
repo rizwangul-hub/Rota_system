@@ -20,6 +20,8 @@ const LedgerTransactionSchema = new mongoose.Schema({
       'SALARY_PAYMENT',      // Paid to worker (Cash/Bank)
       'BONUS_CREDIT',        // Monthly sales bonus credited
       'WAGE_INCREASE',       // Employee daily wage increase / adjustment
+      'LOAN_DISBURSED',      // Loan/advance given to worker
+      'LOAN_REPAYMENT',      // Loan repaid by worker or deducted from salary
       'MANUAL_ADJUSTMENT'    // Explicit ledger balance correction
     ],
     required: true
@@ -30,7 +32,7 @@ const LedgerTransactionSchema = new mongoose.Schema({
   },
   referenceType: {
     type: String,
-    enum: ['WeeklySalary', 'SalaryPayment', 'Bonus', 'Manual', 'OpeningBalance', 'WageHistory'],
+    enum: ['WeeklySalary', 'SalaryPayment', 'Bonus', 'Manual', 'OpeningBalance', 'WageHistory', 'Loan'],
     required: true
   },
   referenceId: {
@@ -43,6 +45,7 @@ const LedgerTransactionSchema = new mongoose.Schema({
   allowance: { type: Number, default: 0 },
   bonus: { type: Number, default: 0 },
   otherDeduction: { type: Number, default: 0 },
+  loanDeduction: { type: Number, default: 0 },
   breakdown: { type: mongoose.Schema.Types.Mixed, default: {} },
   // Accounting debit/credit
   amountEarned: { type: Number, default: 0 }, // Increases what company owes employee

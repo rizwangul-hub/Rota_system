@@ -8,6 +8,8 @@ const SalaryAdjustment = require('../models/SalaryAdjustment');
 const SalaryPayment = require('../models/SalaryPayment');
 const Bonus = require('../models/Bonus');
 const LedgerTransaction = require('../models/LedgerTransaction');
+const Loan = require('../models/Loan');
+const { applySalaryLoanDeduction, revertSalaryLoanDeduction } = require('./loanController');
 const { getWeekRange, formatUKDate, calculateWeeklySalaryComponents, calculateAttendanceRecord, safeObjectId, resolveDailyWage } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
 const { validatePaymentAmount, calculatePaymentState, getSalaryFinancialBreakdown } = require('../utils/payment');
@@ -31,11 +33,13 @@ async function recalculateWeeklySalary(salaryDoc, allowFinalized = false) {
     netAttendancePay: salaryDoc.weeklySalaryOverride ?? salaryDoc.netAttendancePay,
     adjustments,
     bonus: salaryDoc.bonus,
+    loanDeduction: salaryDoc.loanDeduction || 0,
   });
   salaryDoc.netAttendancePay = calc.netAttendancePay;
   salaryDoc.travelAllowance = calc.travelAllowance;
   salaryDoc.otherAllowances = calc.otherAllowances;
   salaryDoc.manualDeductions = calc.otherDeductions;
+  salaryDoc.loanDeduction = calc.loanDeduction;
   salaryDoc.finalSalary = calc.finalSalary;
 
   // Compute payments (if any from Phase 7)
@@ -60,6 +64,7 @@ async function recalculateWeeklySalary(salaryDoc, allowFinalized = false) {
       salaryDoc.finalizationSnapshot.otherAllowances = salaryDoc.otherAllowances;
       salaryDoc.finalizationSnapshot.bonus = salaryDoc.bonus;
       salaryDoc.finalizationSnapshot.manualDeductions = salaryDoc.manualDeductions;
+      salaryDoc.finalizationSnapshot.loanDeduction = salaryDoc.loanDeduction || 0;
       salaryDoc.finalizationSnapshot.finalSalary = salaryDoc.finalSalary;
       salaryDoc.finalizationSnapshot.updatedAt = new Date();
       if (typeof salaryDoc.markModified === 'function') {
@@ -86,6 +91,7 @@ async function recalculateWeeklySalary(salaryDoc, allowFinalized = false) {
           allowance: (salaryDoc.travelAllowance || 0) + (salaryDoc.otherAllowances || 0),
           bonus: salaryDoc.bonus || 0,
           otherDeduction: salaryDoc.manualDeductions || 0,
+          loanDeduction: salaryDoc.loanDeduction || 0,
           amountEarned: salaryDoc.finalSalary,
           amountPaid: 0
         },
@@ -485,6 +491,22 @@ exports.getWeeklySalaries = async (req, res) => {
       return true;
     });
 
+    // Query active loans for all relevant employees
+    const empIds = [...new Set(salaries.map(s => (s.employee?._id || s.employee || '').toString()).filter(Boolean))];
+    const activeLoans = await Loan.find({ employee: { $in: empIds }, status: 'ACTIVE' }).lean();
+    const loanMap = {};
+    activeLoans.forEach(l => {
+      const k = (l.employee || '').toString();
+      if (k) loanMap[k] = Number(((loanMap[k] || 0) + (l.remainingBalance || 0)).toFixed(2));
+    });
+
+    const enrichedSalaries = salaries.map(s => {
+      const sObj = s.toObject ? s.toObject() : { ...s };
+      const eId = (s.employee?._id || s.employee || '').toString();
+      sObj.activeLoanBalance = loanMap[eId] || 0;
+      return sObj;
+    });
+
     // Aggregate totals for the week
     const totals = {
       totalEmployees: salaries.length,
@@ -493,15 +515,16 @@ exports.getWeeklySalaries = async (req, res) => {
       totalActualHours: Number(salaries.reduce((sum, s) => sum + (s.actualHours || 0), 0).toFixed(2)),
       grossAttendanceWages: Number(salaries.reduce((sum, s) => sum + (s.grossDailyWages || 0), 0).toFixed(2)),
       totalLateDeductions: Number(salaries.reduce((sum, s) => sum + (s.lateDeductions || 0), 0).toFixed(2)),
-      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2))
+      totalAttendancePay: Number(salaries.reduce((sum, s) => sum + (s.netAttendancePay || 0), 0).toFixed(2)),
+      totalLoanDeductions: Number(salaries.reduce((sum, s) => sum + (s.loanDeduction || 0), 0).toFixed(2))
     };
 
     res.json({
       success: true,
-      count: salaries.length,
+      count: enrichedSalaries.length,
       week: resolvedWeek,
       totals,
-      salaries
+      salaries: enrichedSalaries
     });
   } catch (error) {
     return sendServerError(res, error, 'Failed to fetch weekly salaries.');
@@ -528,9 +551,14 @@ exports.getWeeklySalaryById = async (req, res) => {
     const attendances = await Attendance.find({ weeklySalary: id }).sort({ date: 1 });
     const bonuses = await Bonus.find({ assignedWeeklySalary: id });
 
+    const activeLoans = await Loan.find({ employee: salary.employee, status: 'ACTIVE' }).lean();
+    const activeLoanBalance = Number(activeLoans.reduce((sum, l) => sum + (l.remainingBalance || 0), 0).toFixed(2));
+
     res.json({
       success: true,
       salary,
+      activeLoanBalance,
+      activeLoans,
       adjustments,
       payments,
       attendances,
