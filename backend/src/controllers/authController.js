@@ -15,6 +15,9 @@ exports.login = async (req, res) => {
     const user = await User.findOne({
       $or: [
         { username: cleanUsername },
+        { email: cleanUsername },
+        ...(cleanUsername === 'rizwan' ? [{ username: 'rizwan@gmail.com' }, { email: 'rizwan@gmail.com' }] : []),
+        ...(cleanUsername === 'rizwan@gmail.com' ? [{ username: 'rizwan' }] : []),
         ...(cleanUsername === 'arsalan' ? [{ username: 'distributor' }, { name: { $regex: /arsalan/i } }] : []),
         ...(cleanUsername === 'distributor' ? [{ username: 'arsalan' }] : [])
       ]
