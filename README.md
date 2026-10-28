@@ -190,4 +190,5 @@ npm run lint
 
 Keep production configuration and deployment credentials outside the applications' public source.
 #   R o t a _ s y s t e m  
+ #   P i x x - T e c h -  
  
