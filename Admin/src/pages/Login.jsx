@@ -48,18 +48,19 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const handleBackToPortal = () => {
-    const portalUrl = 'https://pixx-tech.vercel.app';
+    const PORTAL_URL = 'https://pixxtech.vercel.app';
+
+    // If inside Central Portal iframe, notify parent portal and redirect the main window
     if (window.top && window.top !== window.self) {
       try {
         window.top.postMessage('PIXXTECH_RETURN', '*');
-      } catch (e) {}
-      try {
-        window.top.location.href = portalUrl;
+        window.top.location.href = PORTAL_URL;
       } catch (e) {
-        window.location.href = portalUrl;
+        window.location.href = PORTAL_URL;
       }
     } else {
-      window.location.href = portalUrl;
+      // If opened directly in a browser tab
+      window.location.href = PORTAL_URL;
     }
   };
 

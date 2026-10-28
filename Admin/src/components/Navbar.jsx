@@ -49,21 +49,19 @@ export default function Navbar({ setMobileOpen }) {
   };
 
   const handleBackToPortal = () => {
-    const portalUrl = 'https://pixx-tech.vercel.app'; // Central Portal URL
-    // If opened inside Central Portal iframe, notify parent or redirect top window
+    const PORTAL_URL = 'https://pixxtech.vercel.app';
+
+    // If inside Central Portal iframe, notify parent portal and redirect the main window
     if (window.top && window.top !== window.self) {
       try {
         window.top.postMessage('PIXXTECH_RETURN', '*');
+        window.top.location.href = PORTAL_URL;
       } catch (e) {
-        // ignore cross-origin error
-      }
-      try {
-        window.top.location.href = portalUrl;
-      } catch (e) {
-        window.location.href = portalUrl;
+        window.location.href = PORTAL_URL;
       }
     } else {
-      window.location.href = portalUrl;
+      // If opened directly in a browser tab
+      window.location.href = PORTAL_URL;
     }
   };
 

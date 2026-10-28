@@ -635,9 +635,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   background: linear-gradient(0deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.12)), #0f172a;
-  border: 1px solid rgba(56, 189, 248, 0.35);
+  border: 1px solid rgba(56, 189, 248, 0.4);
   color: #38bdf8;
   border-radius: 8px;
   font-size: 12px;
@@ -660,6 +660,5 @@ body {
 
 .portal-back-btn:active {
   transform: translateY(0);
-  background: #0f172a;
 }
 
