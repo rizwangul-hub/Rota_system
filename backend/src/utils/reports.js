@@ -27,6 +27,49 @@ function getShopSequenceRank(shopName) {
 }
 
 /**
+ * Dedicated sequence specifically for Daily Attendance PDF Report:
+ * 1. CAMDEN CYCLES
+ * 2. CHELSEA CYCLES
+ * 3. STATION CYCLES (placed at #3 between Chelsea and Edgware)
+ * 4. EDGWARE CYCLES
+ * 5. SOUTHWARK CYCLES
+ * 6. LEEBRIDGE CYCLES
+ */
+function getDailyAttendancePdfShopSequenceRank(shopName) {
+  if (!shopName) return 999;
+  const s = String(shopName).trim().toLowerCase();
+  if (s.includes('camden')) return 1;
+  if (s.includes('chelsea')) return 2;
+  if (s.includes('station')) return 3;
+  if (s.includes('edgware')) return 4;
+  if (s.includes('southwark')) return 5;
+  if (s.includes('leebridge') || s.includes('leabridge') || s.includes('labridge') || s.includes('labidge') || s.includes('lea bridge')) return 6;
+  return 100;
+}
+
+function sortDailyAttendancePdfRecords(records) {
+  if (!Array.isArray(records)) return [];
+  return [...records].sort((a, b) => {
+    const aAbsent = a.status === 'Absent';
+    const bAbsent = b.status === 'Absent';
+    if (aAbsent && !bAbsent) return 1;
+    if (!aAbsent && bAbsent) return -1;
+    if (aAbsent && bAbsent) {
+      const rankA = getDailyAttendancePdfShopSequenceRank(a.shopName);
+      const rankB = getDailyAttendancePdfShopSequenceRank(b.shopName);
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.employeeName || '').localeCompare(b.employeeName || '');
+    }
+    const rankA = getDailyAttendancePdfShopSequenceRank(a.shopName);
+    const rankB = getDailyAttendancePdfShopSequenceRank(b.shopName);
+    if (rankA !== rankB) return rankA - rankB;
+    const sDiff = (a.shopName || '').localeCompare(b.shopName || '');
+    if (sDiff !== 0) return sDiff;
+    return (a.employeeName || '').localeCompare(b.employeeName || '');
+  });
+}
+
+/**
  * Format daily attendance as clean WhatsApp message text
  */
 function generateWhatsAppAttendanceText(dateStr, records, shopName = 'All Shops') {
@@ -3048,5 +3091,7 @@ module.exports = {
   SHOP_COLORS,
   getShopColor,
   getShopSequenceRank,
-  sortDailyAttendanceRecords
+  sortDailyAttendanceRecords,
+  getDailyAttendancePdfShopSequenceRank,
+  sortDailyAttendancePdfRecords
 };

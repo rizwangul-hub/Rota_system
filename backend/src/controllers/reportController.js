@@ -40,7 +40,9 @@ const {
   buildSystemBackupExcel,
   getShopColor,
   getShopSequenceRank,
-  sortDailyAttendanceRecords
+  sortDailyAttendanceRecords,
+  getDailyAttendancePdfShopSequenceRank,
+  sortDailyAttendancePdfRecords
 } = require('../utils/reports');
 const { getWeekRange, formatUKDate, getUKDateString, calculateAttendanceRecord, calculateWeeklySalaryComponents, safeObjectId, getDayOfWeekUK, resolveDailyWage } = require('../utils/calc');
 const { logAction } = require('../utils/audit');
@@ -310,8 +312,9 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     const sarfrazSign = findAsset('sarfrazsign.png');
     const adeelSign = findAsset('adeel.png') || findAsset('adeelsign.png');
 
-    // Sort records: real shops first, absent records at the bottom
-    const sortedRecords = sortDailyAttendanceRecords(records);
+    // Sort records specifically for Daily Attendance PDF:
+    // 1. Camden Cycles -> 2. Chelsea Cycles -> 3. Station Cycles -> 4. Edgware Cycles -> 5. Southwark Cycles -> 6. Leebridge Cycles
+    const sortedRecords = sortDailyAttendancePdfRecords(records);
 
     // Group records by shop
     const shopGroups = {};
@@ -324,8 +327,8 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     const sortedShopNames = Object.keys(shopGroups).sort((a, b) => {
       if (a === 'ABSENT / OFF') return 1;
       if (b === 'ABSENT / OFF') return -1;
-      const rankA = getShopSequenceRank(a);
-      const rankB = getShopSequenceRank(b);
+      const rankA = getDailyAttendancePdfShopSequenceRank(a);
+      const rankB = getDailyAttendancePdfShopSequenceRank(b);
       if (rankA !== rankB) return rankA - rankB;
       return a.localeCompare(b);
     });
@@ -444,9 +447,14 @@ exports.exportDailyAttendancePDF = async (req, res) => {
       doc.roundedRect(MARGIN_LEFT, curY, PAGE_W, sectionHeaderH, 3).fillAndStroke(headerBg, headerBorder);
       doc.circle(MARGIN_LEFT + 10, curY + 11, 3).fill(dotColor);
 
+      const rawUpper = (shopName || '').trim().toUpperCase();
+      const shopTitle = isAbsentGroup
+        ? 'ABSENT / OFF DUTY'
+        : (rawUpper.endsWith('CYCLES') ? rawUpper : `${rawUpper} CYCLES`);
+
       doc.fillColor(headerText).font('Helvetica-Bold').fontSize(10)
          .text(
-           isAbsentGroup ? 'ABSENT / OFF DUTY' : `${shopName.toUpperCase()} CYCLES`,
+           shopTitle,
            MARGIN_LEFT + 18,
            curY + 5.5,
            { lineBreak: false }
