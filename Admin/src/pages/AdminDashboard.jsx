@@ -3,7 +3,8 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import {
   Users, Store, Clock, AlertCircle, Banknote, Award, ArrowUpRight,
-  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar
+  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar,
+  Eye, EyeOff
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { downloadReportFile } from '../utils/downloadReportFile';
@@ -80,7 +81,24 @@ export default function AdminDashboard() {
   const [error, setError]                       = useState('');
   const [showBackupModal, setShowBackupModal]   = useState(false);
   const [downloadingBackup, setDownloadingBackup] = useState('');
+  const [isDashboardHidden, setIsDashboardHidden] = useState(() => {
+    try {
+      return localStorage.getItem('pixx_dashboard_hidden') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const isMounted = useRef(true);
+
+  const toggleDashboardVisibility = () => {
+    setIsDashboardHidden(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pixx_dashboard_hidden', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const handleDownloadBackup = async (format = 'zip', month = 'last', scope = 'month') => {
     const key = `${format}_${month}_${scope}`;
@@ -208,7 +226,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="page-container">
+    <div className="page-container" style={isDashboardHidden ? { minHeight: 'calc(100vh - 120px)', overflow: 'hidden' } : {}}>
       {/* Title & Quick Actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -221,6 +239,28 @@ export default function AdminDashboard() {
                 Updating...
               </span>
             )}
+            {/* Quick Status Pill */}
+            <button
+              type="button"
+              onClick={toggleDashboardVisibility}
+              style={{
+                background: isDashboardHidden ? '#f1f5f9' : '#eff6ff',
+                border: isDashboardHidden ? '1px solid #cbd5e1' : '1px solid #bfdbfe',
+                color: isDashboardHidden ? '#64748b' : '#2563eb',
+                borderRadius: '6px',
+                padding: '3px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title={isDashboardHidden ? 'Click to show dashboard' : 'Click to hide dashboard'}
+            >
+              {isDashboardHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+              {isDashboardHidden ? 'Dashboard Hidden' : 'Dashboard Visible'}
+            </button>
           </div>
           <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0 0 0' }}>
             PixxTechnologies UK Rota, Attendance & Labour Economics
@@ -228,6 +268,41 @@ export default function AdminDashboard() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Hide / Show Dashboard Primary Button */}
+          <button
+            type="button"
+            onClick={toggleDashboardVisibility}
+            className="btn btn-sm"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              fontSize: '12.5px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              background: isDashboardHidden ? '#2563eb' : '#ffffff',
+              color: isDashboardHidden ? '#ffffff' : '#0f172a',
+              border: isDashboardHidden ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
+              boxShadow: isDashboardHidden ? '0 2px 4px rgba(37,99,235,0.25)' : '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+            title={isDashboardHidden ? 'Show full executive dashboard' : 'Hide dashboard contents (no scrolling)'}
+          >
+            {isDashboardHidden ? (
+              <>
+                <Eye size={15} color="#ffffff" />
+                <span>Show Dashboard</span>
+              </>
+            ) : (
+              <>
+                <EyeOff size={15} color="#64748b" />
+                <span>Hide Dashboard</span>
+              </>
+            )}
+          </button>
+
           {/* Week Selector Dropdown */}
           <div style={{
             display: 'flex',
@@ -294,8 +369,65 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Compliance Expiry Banner (1 Month and 1 Week Alerts for Visas/Passports/Documents) */}
-      <ComplianceExpiryBanner onEditEmployee={(empId, tab) => navigate('/employees')} />
+      {/* Dynamic View: Hidden (Compact, Zero-Scroll) vs Visible (Full Dashboard) */}
+      {isDashboardHidden ? (
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '24px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '10px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <EyeOff size={22} color="#64748b" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                  Dashboard is Hidden
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                  Zero Scroll Active
+                </span>
+              </div>
+              <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '2px' }}>
+                Executive statistics, charts, and shop tables are collapsed. Selected Week: <strong>{selectedWeek || summaryData?.currentWeek || weekLabel || 'Current'}</strong>.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={toggleDashboardVisibility}
+              className="btn btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '7px 16px' }}
+            >
+              <Eye size={15} /> Show Dashboard
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Compliance Expiry Banner (1 Month and 1 Week Alerts for Visas/Passports/Documents) */}
+          <ComplianceExpiryBanner onEditEmployee={(empId, tab) => navigate('/employees')} />
 
       {/* Section 19: Comprehensive Management Summary Cards */}
       <div className="stat-grid" style={{ marginBottom: '24px' }}>
@@ -563,6 +695,8 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* System Database Backup Modal */}
       {showBackupModal && (
