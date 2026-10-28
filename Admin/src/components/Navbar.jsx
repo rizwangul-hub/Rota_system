@@ -48,6 +48,25 @@ export default function Navbar({ setMobileOpen }) {
     navigate('/login');
   };
 
+  const handleBackToPortal = () => {
+    const portalUrl = 'https://pixx-tech.vercel.app'; // Central Portal URL
+    // If opened inside Central Portal iframe, notify parent or redirect top window
+    if (window.top && window.top !== window.self) {
+      try {
+        window.top.postMessage('PIXXTECH_RETURN', '*');
+      } catch (e) {
+        // ignore cross-origin error
+      }
+      try {
+        window.top.location.href = portalUrl;
+      } catch (e) {
+        window.location.href = portalUrl;
+      }
+    } else {
+      window.location.href = portalUrl;
+    }
+  };
+
   const currentRouteInfo = ROUTE_TITLES[location.pathname] || {
     title: location.pathname.startsWith('/employees/') ? 'Employee Profile' : 'PIXX ROTA',
     parent: 'Staff',
@@ -95,6 +114,16 @@ export default function Navbar({ setMobileOpen }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+        {/* Sleek Central Portal Navigation Button */}
+        <button
+          type="button"
+          onClick={handleBackToPortal}
+          className="portal-back-btn"
+          title="Return to PixxTech Central Portal"
+        >
+          ← PixxTech Portal
+        </button>
+
         {complianceCounts.total > 0 && (
           <Link
             to="/employees"
