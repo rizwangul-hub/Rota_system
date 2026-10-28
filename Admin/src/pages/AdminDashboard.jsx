@@ -3,12 +3,12 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import {
   Users, Store, Clock, AlertCircle, Banknote, Award, ArrowUpRight,
-  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar,
-  Eye, EyeOff
+  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { downloadReportFile } from '../utils/downloadReportFile';
 import ComplianceExpiryBanner from '../components/ComplianceExpiryBanner';
+import { useLayout } from '../context/LayoutContext';
 
 // Module-level cache — survives React navigation (component unmount/remount)
 // Caches per selected week
@@ -71,6 +71,7 @@ const getInitialDashboardCache = () => {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { hideNavbar, toggleNavbar, hideSidebar, toggleSidebar } = useLayout();
   const initialCache = getInitialDashboardCache();
   const [data, setData]                         = useState(() => initialCache?.data || null);
   const [summaryData, setSummaryData]           = useState(() => initialCache?.summaryData || null);
@@ -81,24 +82,7 @@ export default function AdminDashboard() {
   const [error, setError]                       = useState('');
   const [showBackupModal, setShowBackupModal]   = useState(false);
   const [downloadingBackup, setDownloadingBackup] = useState('');
-  const [isDashboardHidden, setIsDashboardHidden] = useState(() => {
-    try {
-      return localStorage.getItem('pixx_dashboard_hidden') === 'true';
-    } catch {
-      return false;
-    }
-  });
   const isMounted = useRef(true);
-
-  const toggleDashboardVisibility = () => {
-    setIsDashboardHidden(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem('pixx_dashboard_hidden', String(next));
-      } catch {}
-      return next;
-    });
-  };
 
   const handleDownloadBackup = async (format = 'zip', month = 'last', scope = 'month') => {
     const key = `${format}_${month}_${scope}`;
@@ -226,12 +210,12 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="page-container" style={isDashboardHidden ? { minHeight: 'calc(100vh - 120px)', overflow: 'hidden' } : {}}>
+    <div className={`page-container ${hideSidebar ? 'no-scroll-dashboard' : ''}`}>
       {/* Title & Quick Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: hideSidebar ? '12px' : '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+            <h1 style={{ fontSize: hideSidebar ? '20px' : '24px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
               Executive Dashboard
             </h1>
             {isFetchingWeek && (
@@ -239,69 +223,68 @@ export default function AdminDashboard() {
                 Updating...
               </span>
             )}
-            {/* Quick Status Pill */}
-            <button
-              type="button"
-              onClick={toggleDashboardVisibility}
-              style={{
-                background: isDashboardHidden ? '#f1f5f9' : '#eff6ff',
-                border: isDashboardHidden ? '1px solid #cbd5e1' : '1px solid #bfdbfe',
-                color: isDashboardHidden ? '#64748b' : '#2563eb',
-                borderRadius: '6px',
-                padding: '3px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-              title={isDashboardHidden ? 'Click to show dashboard' : 'Click to hide dashboard'}
-            >
-              {isDashboardHidden ? <EyeOff size={12} /> : <Eye size={12} />}
-              {isDashboardHidden ? 'Dashboard Hidden' : 'Dashboard Visible'}
-            </button>
           </div>
-          <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0 0 0' }}>
+          <p style={{ color: '#64748b', fontSize: '12px', margin: '2px 0 0 0' }}>
             PixxTechnologies UK Rota, Attendance & Labour Economics
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Hide / Show Dashboard Primary Button */}
-          <button
-            type="button"
-            onClick={toggleDashboardVisibility}
-            className="btn btn-sm"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              fontWeight: 600,
-              fontSize: '12.5px',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              background: isDashboardHidden ? '#2563eb' : '#ffffff',
-              color: isDashboardHidden ? '#ffffff' : '#0f172a',
-              border: isDashboardHidden ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-              boxShadow: isDashboardHidden ? '0 2px 4px rgba(37,99,235,0.25)' : '0 1px 2px rgba(0,0,0,0.05)'
-            }}
-            title={isDashboardHidden ? 'Show full executive dashboard' : 'Hide dashboard contents (no scrolling)'}
-          >
-            {isDashboardHidden ? (
-              <>
-                <Eye size={15} color="#ffffff" />
-                <span>Show Dashboard</span>
-              </>
-            ) : (
-              <>
-                <EyeOff size={15} color="#64748b" />
-                <span>Hide Dashboard</span>
-              </>
-            )}
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* View Toggles: Navbar & Sidebar */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: '#ffffff',
+            padding: '3px 6px',
+            borderRadius: '8px',
+            border: '1px solid #cbd5e1',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+          }}>
+            <button
+              type="button"
+              onClick={toggleNavbar}
+              style={{
+                background: hideNavbar ? '#eff6ff' : '#f8fafc',
+                color: hideNavbar ? '#2563eb' : '#334155',
+                border: `1px solid ${hideNavbar ? '#3b82f6' : '#cbd5e1'}`,
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 600,
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              title={hideNavbar ? 'Show top navbar' : 'Hide top navbar for more screen space'}
+            >
+              {hideNavbar ? '🔽 Show Navbar' : '🔼 Hide Navbar'}
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              style={{
+                background: hideSidebar ? '#eff6ff' : '#f8fafc',
+                color: hideSidebar ? '#2563eb' : '#334155',
+                border: `1px solid ${hideSidebar ? '#3b82f6' : '#cbd5e1'}`,
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 600,
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              title={hideSidebar ? 'Show sidebar menu' : 'Hide sidebar for wide no-scroll view'}
+            >
+              {hideSidebar ? '▶ Show Sidebar' : '◀ Hide Sidebar (No-Scroll View)'}
+            </button>
+          </div>
 
           {/* Week Selector Dropdown */}
           <div style={{
@@ -369,68 +352,11 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Dynamic View: Hidden (Compact, Zero-Scroll) vs Visible (Full Dashboard) */}
-      {isDashboardHidden ? (
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
-          padding: '24px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '24px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '10px',
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <EyeOff size={22} color="#64748b" />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
-                  Dashboard is Hidden
-                </span>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
-                  Zero Scroll Active
-                </span>
-              </div>
-              <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '2px' }}>
-                Executive statistics, charts, and shop tables are collapsed. Selected Week: <strong>{selectedWeek || summaryData?.currentWeek || weekLabel || 'Current'}</strong>.
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={toggleDashboardVisibility}
-              className="btn btn-primary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '7px 16px' }}
-            >
-              <Eye size={15} /> Show Dashboard
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Compliance Expiry Banner (1 Month and 1 Week Alerts for Visas/Passports/Documents) */}
-          <ComplianceExpiryBanner onEditEmployee={(empId, tab) => navigate('/employees')} />
+      {/* Compliance Expiry Banner (1 Month and 1 Week Alerts for Visas/Passports/Documents) */}
+      <ComplianceExpiryBanner onEditEmployee={(empId, tab) => navigate('/employees')} />
 
       {/* Section 19: Comprehensive Management Summary Cards */}
-      <div className="stat-grid" style={{ marginBottom: '24px' }}>
+      <div className={`stat-grid ${hideSidebar ? 'no-scroll-stat-grid' : ''}`} style={{ marginBottom: hideSidebar ? '12px' : '24px' }}>
         <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
           <div className="stat-lbl">Finalized Salary</div>
           <div className="stat-val" style={{ color: '#2563eb' }}>
@@ -503,7 +429,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Section 20: Visual Analytics & Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+      <div className={`dashboard-charts-grid ${hideSidebar ? 'no-scroll-charts-grid' : ''}`} style={{ marginBottom: hideSidebar ? '12px' : '24px' }}>
         {/* Chart 1: Salary by Shop */}
         <div className="card">
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>
@@ -663,7 +589,7 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-        <div className="table-responsive">
+        <div className={`table-responsive ${hideSidebar ? 'no-scroll-table-container' : ''}`}>
           <table className="custom-table">
             <thead>
               <tr>
@@ -695,8 +621,6 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
-      </>
-      )}
 
       {/* System Database Backup Modal */}
       {showBackupModal && (
