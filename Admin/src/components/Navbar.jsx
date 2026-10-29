@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Menu, LogOut, UserCircle, ShieldAlert } from 'lucide-react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
-import { useLayout } from '../context/LayoutContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 const ROUTE_TITLES = {
@@ -20,7 +19,6 @@ const ROUTE_TITLES = {
 
 export default function Navbar({ setMobileOpen }) {
   const { user, logout } = useAuth();
-  const { toggleNavbar } = useLayout();
   const navigate = useNavigate();
   const location = useLocation();
   const [complianceCounts, setComplianceCounts] = useState({ total: 0, expired: 0, urgent: 0 });
@@ -148,28 +146,6 @@ export default function Navbar({ setMobileOpen }) {
           </Link>
         )}
         {user && getRoleBadge(user.role)}
-
-        {/* Hide Navbar Shortcut */}
-        <button
-          type="button"
-          onClick={toggleNavbar}
-          className="btn btn-outline btn-sm"
-          style={{
-            padding: '5px 10px',
-            fontSize: '11px',
-            fontWeight: 600,
-            color: '#475569',
-            borderColor: '#cbd5e1',
-            borderRadius: '8px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-          title="Hide top navigation bar to expand dashboard view"
-        >
-          🔼 Hide Navbar
-        </button>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', padding: '4px 10px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
           <UserCircle size={18} color="#64748b" />
           <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>

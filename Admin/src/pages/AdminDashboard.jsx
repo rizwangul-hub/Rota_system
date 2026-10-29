@@ -8,7 +8,6 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { downloadReportFile } from '../utils/downloadReportFile';
 import ComplianceExpiryBanner from '../components/ComplianceExpiryBanner';
-import { useLayout } from '../context/LayoutContext';
 
 // Module-level cache — survives React navigation (component unmount/remount)
 // Caches per selected week
@@ -71,7 +70,6 @@ const getInitialDashboardCache = () => {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { hideNavbar, toggleNavbar, hideSidebar, toggleSidebar } = useLayout();
   const initialCache = getInitialDashboardCache();
   const [data, setData]                         = useState(() => initialCache?.data || null);
   const [summaryData, setSummaryData]           = useState(() => initialCache?.summaryData || null);
@@ -210,12 +208,12 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className={`page-container ${hideSidebar ? 'no-scroll-dashboard' : ''}`}>
+    <div className="page-container">
       {/* Title & Quick Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: hideSidebar ? '12px' : '24px', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: hideSidebar ? '20px' : '24px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
               Executive Dashboard
             </h1>
             {isFetchingWeek && (
@@ -224,68 +222,12 @@ export default function AdminDashboard() {
               </span>
             )}
           </div>
-          <p style={{ color: '#64748b', fontSize: '12px', margin: '2px 0 0 0' }}>
+          <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0 0 0' }}>
             PixxTechnologies UK Rota, Attendance & Labour Economics
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* View Toggles: Navbar & Sidebar */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: '#ffffff',
-            padding: '3px 6px',
-            borderRadius: '8px',
-            border: '1px solid #cbd5e1',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-          }}>
-            <button
-              type="button"
-              onClick={toggleNavbar}
-              style={{
-                background: hideNavbar ? '#eff6ff' : '#f8fafc',
-                color: hideNavbar ? '#2563eb' : '#334155',
-                border: `1px solid ${hideNavbar ? '#3b82f6' : '#cbd5e1'}`,
-                padding: '4px 8px',
-                fontSize: '11px',
-                fontWeight: 600,
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              title={hideNavbar ? 'Show top navbar' : 'Hide top navbar for more screen space'}
-            >
-              {hideNavbar ? '🔽 Show Navbar' : '🔼 Hide Navbar'}
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              style={{
-                background: hideSidebar ? '#eff6ff' : '#f8fafc',
-                color: hideSidebar ? '#2563eb' : '#334155',
-                border: `1px solid ${hideSidebar ? '#3b82f6' : '#cbd5e1'}`,
-                padding: '4px 8px',
-                fontSize: '11px',
-                fontWeight: 600,
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              title={hideSidebar ? 'Show sidebar menu' : 'Hide sidebar for wide no-scroll view'}
-            >
-              {hideSidebar ? '▶ Show Sidebar' : '◀ Hide Sidebar (No-Scroll View)'}
-            </button>
-          </div>
-
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {/* Week Selector Dropdown */}
           <div style={{
             display: 'flex',
@@ -356,7 +298,7 @@ export default function AdminDashboard() {
       <ComplianceExpiryBanner onEditEmployee={(empId, tab) => navigate('/employees')} />
 
       {/* Section 19: Comprehensive Management Summary Cards */}
-      <div className={`stat-grid ${hideSidebar ? 'no-scroll-stat-grid' : ''}`} style={{ marginBottom: hideSidebar ? '12px' : '24px' }}>
+      <div className="stat-grid" style={{ marginBottom: '24px' }}>
         <div className="stat-card" style={{ borderLeft: '4px solid #2563eb' }}>
           <div className="stat-lbl">Finalized Salary</div>
           <div className="stat-val" style={{ color: '#2563eb' }}>
@@ -429,7 +371,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Section 20: Visual Analytics & Charts */}
-      <div className={`dashboard-charts-grid ${hideSidebar ? 'no-scroll-charts-grid' : ''}`} style={{ marginBottom: hideSidebar ? '12px' : '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         {/* Chart 1: Salary by Shop */}
         <div className="card">
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>
@@ -589,7 +531,7 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-        <div className={`table-responsive ${hideSidebar ? 'no-scroll-table-container' : ''}`}>
+        <div className="table-responsive">
           <table className="custom-table">
             <thead>
               <tr>
