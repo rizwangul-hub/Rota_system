@@ -50,23 +50,6 @@ export default function Navbar() {
     navigate('/login');
   };
 
-  const handleBackToPortal = () => {
-    const PORTAL_URL = 'https://pixxtech.vercel.app';
-
-    // If inside Central Portal iframe, notify parent portal and redirect the main window
-    if (window.top && window.top !== window.self) {
-      try {
-        window.top.postMessage('PIXXTECH_RETURN', '*');
-        window.top.location.href = PORTAL_URL;
-      } catch (e) {
-        window.location.href = PORTAL_URL;
-      }
-    } else {
-      // If opened directly in a browser tab
-      window.location.href = PORTAL_URL;
-    }
-  };
-
   const currentRouteInfo = ROUTE_TITLES[location.pathname] || {
     title: location.pathname.startsWith('/employees/') ? 'Employee Profile' : 'PIXX ROTA',
     parent: 'Staff',
@@ -88,25 +71,26 @@ export default function Navbar() {
 
   return (
     <header className="top-navbar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
         <button
           onClick={toggleSidebar}
           className="btn btn-outline btn-sm sidebar-toggle-btn"
           style={{
             padding: '6px 10px',
-            border: `1px solid ${sidebarCollapsed ? '#2563eb' : '#cbd5e1'}`,
+            border: `1.5px solid ${sidebarCollapsed ? '#2563eb' : '#cbd5e1'}`,
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
             background: sidebarCollapsed ? '#eff6ff' : '#ffffff',
             color: sidebarCollapsed ? '#2563eb' : '#334155',
             fontWeight: 600,
-            borderRadius: '8px'
+            borderRadius: '8px',
+            flexShrink: 0
           }}
           title={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar for wider view'}
           aria-label={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar'}
         >
-          {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           <span className="sidebar-toggle-text" style={{ fontSize: '12px' }}>
             {sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
           </span>
@@ -127,17 +111,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-        {/* Sleek Central Portal Navigation Button */}
-        <button
-          type="button"
-          onClick={handleBackToPortal}
-          className="portal-back-btn"
-          title="Return to PixxTech Central Portal"
-        >
-          ← PixxTech Portal
-        </button>
-
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         {complianceCounts.total > 0 && (
           <Link
             to="/employees"

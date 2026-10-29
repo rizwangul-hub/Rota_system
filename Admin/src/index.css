@@ -626,45 +626,23 @@ body {
     align-items: stretch;
   }
   .top-navbar {
-    padding: 0 14px;
+    padding: 0 12px;
   }
-  .portal-back-btn {
-    padding: 5px 8px;
-    font-size: 11px;
+  .sidebar-toggle-btn {
+    padding: 6px 8px !important;
+    min-width: 38px;
+    height: 38px;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0 !important;
   }
-}
-
-/* Sleek Central Portal Navigation Button */
-.portal-back-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: linear-gradient(0deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.12)), #0f172a;
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  text-decoration: none;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  user-select: none;
-}
-
-.portal-back-btn:hover {
-  background: linear-gradient(0deg, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0.22)), #0f172a;
-  border-color: #38bdf8;
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
-  transform: translateY(-1px);
-}
-
-.portal-back-btn:active {
-  transform: translateY(0);
+  .sidebar-toggle-text {
+    display: none !important;
+  }
+  .breadcrumbs {
+    display: none !important;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────

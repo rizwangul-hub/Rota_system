@@ -47,23 +47,6 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleBackToPortal = () => {
-    const PORTAL_URL = 'https://pixxtech.vercel.app';
-
-    // If inside Central Portal iframe, notify parent portal and redirect the main window
-    if (window.top && window.top !== window.self) {
-      try {
-        window.top.postMessage('PIXXTECH_RETURN', '*');
-        window.top.location.href = PORTAL_URL;
-      } catch (e) {
-        window.location.href = PORTAL_URL;
-      }
-    } else {
-      // If opened directly in a browser tab
-      window.location.href = PORTAL_URL;
-    }
-  };
-
   useEffect(() => {
     const isRunningInstalled = () =>
       window.matchMedia('(display-mode: standalone)').matches ||
@@ -153,17 +136,6 @@ export default function Login() {
         padding: '36px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '16px' }}>
-          <button
-            type="button"
-            onClick={handleBackToPortal}
-            className="portal-back-btn"
-            title="Return to PixxTech Central Portal"
-          >
-            ← PixxTech Portal
-          </button>
-        </div>
-
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div style={{
