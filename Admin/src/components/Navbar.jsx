@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Menu, LogOut, UserCircle, ShieldAlert } from 'lucide-react';
+import { Menu, LogOut, UserCircle, ShieldAlert, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import { useSidebar } from '../context/SidebarContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 const ROUTE_TITLES = {
@@ -17,8 +18,9 @@ const ROUTE_TITLES = {
   '/audit': { title: 'Audit Trail', parent: 'System', parentPath: '/audit' }
 };
 
-export default function Navbar({ setMobileOpen }) {
+export default function Navbar() {
   const { user, logout } = useAuth();
+  const { sidebarCollapsed, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const [complianceCounts, setComplianceCounts] = useState({ total: 0, expired: 0, urgent: 0 });
@@ -88,12 +90,26 @@ export default function Navbar({ setMobileOpen }) {
     <header className="top-navbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
         <button
-          onClick={() => setMobileOpen(prev => !prev)}
-          className="btn btn-outline btn-sm"
-          style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}
-          aria-label="Toggle navigation menu"
+          onClick={toggleSidebar}
+          className="btn btn-outline btn-sm sidebar-toggle-btn"
+          style={{
+            padding: '6px 10px',
+            border: `1px solid ${sidebarCollapsed ? '#2563eb' : '#cbd5e1'}`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: sidebarCollapsed ? '#eff6ff' : '#ffffff',
+            color: sidebarCollapsed ? '#2563eb' : '#334155',
+            fontWeight: 600,
+            borderRadius: '8px'
+          }}
+          title={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar for wider view'}
+          aria-label={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar'}
         >
-          <Menu size={18} color="#334155" />
+          {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          <span className="sidebar-toggle-text" style={{ fontSize: '12px' }}>
+            {sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+          </span>
         </button>
 
         {/* Breadcrumb & Current Title */}

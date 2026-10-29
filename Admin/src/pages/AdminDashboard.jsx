@@ -3,9 +3,11 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import {
   Users, Store, Clock, AlertCircle, Banknote, Award, ArrowUpRight,
-  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar
+  TrendingUp, BarChart2, CheckCircle2, ShieldAlert, Database, FileText, Download, X, Calendar,
+  PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useSidebar } from '../context/SidebarContext';
 import { downloadReportFile } from '../utils/downloadReportFile';
 import ComplianceExpiryBanner from '../components/ComplianceExpiryBanner';
 
@@ -70,6 +72,7 @@ const getInitialDashboardCache = () => {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { sidebarCollapsed, toggleSidebar } = useSidebar();
   const initialCache = getInitialDashboardCache();
   const [data, setData]                         = useState(() => initialCache?.data || null);
   const [summaryData, setSummaryData]           = useState(() => initialCache?.summaryData || null);
@@ -228,6 +231,32 @@ export default function AdminDashboard() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Toggle Sidebar Button for Dashboard View */}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="btn btn-sm dashboard-sidebar-toggle-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: sidebarCollapsed ? '#eff6ff' : '#ffffff',
+              border: `1.5px solid ${sidebarCollapsed ? '#2563eb' : '#cbd5e1'}`,
+              color: sidebarCollapsed ? '#2563eb' : '#334155',
+              fontWeight: 600,
+              borderRadius: '8px',
+              padding: '7px 12px',
+              cursor: 'pointer',
+              boxShadow: sidebarCollapsed ? '0 0 0 2px rgba(37,99,235,0.12)' : 'none',
+              transition: 'all 0.2s ease'
+            }}
+            title={sidebarCollapsed ? 'Show Sidebar navigation menu' : 'Hide Sidebar to expand Dashboard into Full-Width View'}
+            aria-label={sidebarCollapsed ? 'Show Sidebar navigation menu' : 'Hide Sidebar'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            <span>{sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}</span>
+          </button>
+
           {/* Week Selector Dropdown */}
           <div style={{
             display: 'flex',
@@ -371,7 +400,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Section 20: Visual Analytics & Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+      <div className="dashboard-charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         {/* Chart 1: Salary by Shop */}
         <div className="card">
           <h2 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 16px 0', color: '#1e293b' }}>

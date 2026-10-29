@@ -12,12 +12,18 @@ import {
   ShieldCheck,
   LogOut,
   Clock,
-  CalendarDays
+  CalendarDays,
+  PanelLeftClose
 } from 'lucide-react';
 import logo from '../assets/logo.jpg';
+import { useSidebar } from '../context/SidebarContext';
 
-export default function Sidebar({ mobileOpen, setMobileOpen }) {
+export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: propSetMobileOpen }) {
   const { user, logout } = useAuth();
+  const sidebarContext = useSidebar();
+  const mobileOpen = propMobileOpen !== undefined ? propMobileOpen : sidebarContext.mobileOpen;
+  const setMobileOpen = propSetMobileOpen || sidebarContext.setMobileOpen;
+  const { toggleSidebar } = sidebarContext;
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -33,12 +39,21 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
         <div style={{ background: '#ffffff', padding: '4px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
           <img src={logo} alt="Pixx Rota" style={{ width: '48px', height: '34px', objectFit: 'contain' }} />
         </div>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div className="brand-title" style={{ letterSpacing: '0.2px' }}>PIXX ROTA</div>
           <div className="brand-sub" style={{ fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Attendance • Payroll • Workforce
           </div>
         </div>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="sidebar-hide-btn"
+          title="Hide sidebar menu"
+          aria-label="Hide sidebar menu"
+        >
+          <PanelLeftClose size={16} />
+        </button>
       </div>
 
       <ul className="nav-menu">

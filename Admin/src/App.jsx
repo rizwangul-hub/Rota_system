@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SidebarProvider, useSidebar } from './context/SidebarContext';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 
@@ -20,7 +21,7 @@ import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
 
 function ProtectedLayout({ children, allowedRoles }) {
   const { user, loading } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { sidebarCollapsed, mobileOpen, setMobileOpen } = useSidebar();
 
   if (loading) {
     return (
@@ -46,15 +47,15 @@ function ProtectedLayout({ children, allowedRoles }) {
   }
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <div
         className={`sidebar-backdrop ${mobileOpen ? 'active' : ''}`}
         onClick={() => setMobileOpen(false)}
         aria-hidden="true"
       />
-      <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <Sidebar />
       <div className="main-content">
-        <Navbar setMobileOpen={setMobileOpen} />
+        <Navbar />
         {children}
       </div>
     </div>
@@ -73,8 +74,9 @@ function RoleDefaultRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <SidebarProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<Login />} />
 
           {/* Admin Dashboard */}
@@ -189,6 +191,7 @@ export default function App() {
           <Route path="*" element={<RoleDefaultRedirect />} />
         </Routes>
       </BrowserRouter>
+      </SidebarProvider>
     </AuthProvider>
   );
 }
