@@ -10,10 +10,13 @@ createRoot(document.getElementById('root')).render(
 )
 
 // Register Service Worker for PWA installability on mobile (Android & iOS)
-if ('serviceWorker' in navigator) {
+// Only register in top-level window (never inside embedded iframes or simulators where service workers are disallowed by browser security)
+if ('serviceWorker' in navigator && window.self === window.top) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('Service worker registration note:', err);
+      if (err?.name !== 'SecurityError') {
+        console.warn('Service worker registration note:', err);
+      }
     });
   });
 }
