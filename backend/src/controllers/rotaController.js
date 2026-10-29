@@ -1361,9 +1361,12 @@ exports.exportPdf = async (req, res) => {
       const ROW_H   = 14;
       const HEAD_H  = 16;
       const TOTAL_H = 13;
-      const shopBlockH = HEAD_H + ROW_H + ROW_H + roster.employees.length * ROW_H + TOTAL_H;
+      const GAP_H   = 8;
+      const shopBlockH = HEAD_H + ROW_H + ROW_H + roster.employees.length * ROW_H + TOTAL_H + GAP_H;
 
-      if (y + shopBlockH > PAGE_H - MARGIN - 25) {
+      // Keep entire shop block together on the same page (no splitting workers across pages)
+      const isFreshPage = y <= MARGIN + 55;
+      if (!isFreshPage && (y + shopBlockH > PAGE_H - MARGIN - 20)) {
         doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
         y = MARGIN;
         drawPageHeader();
@@ -1400,10 +1403,33 @@ exports.exportPdf = async (req, res) => {
 
       const shopWorkersByDay = Array.from({ length: 7 }, () => new Set());
       roster.employees.forEach(emp => {
-        if (y + ROW_H > PAGE_H - MARGIN - 40) {
+        if (y + ROW_H > PAGE_H - MARGIN - 15) {
           doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
           y = MARGIN;
           drawPageHeader();
+          // Continuation header for exceptionally large shops that exceed a full page
+          fillRect(MARGIN, y, usableW, HEAD_H, palette.pdfHex);
+          drawCellBorder(MARGIN, y, usableW, HEAD_H, palette.border || '#cbd5e1', 0.7);
+          doc.font('Helvetica-Bold').fontSize(10).fillColor(palette.text || '#0f172a')
+             .text(`${roster.shopName} (Cont.)`, MARGIN + 8, y + 3.5, { width: usableW - 16, align: 'left', lineBreak: false });
+          y += HEAD_H;
+          fillRect(MARGIN, y, usableW, ROW_H, subheadBg);
+          drawCellBorder(MARGIN, y, NAME_COL, ROW_H, '#cbd5e1', 0.5);
+          cellText('Name', MARGIN + 4, y, NAME_COL - 6, ROW_H, '#1e293b', 6.5, true, 'left');
+          for (let i = 0; i < 7; i++) {
+            const x = MARGIN + NAME_COL + i * DAY_COL;
+            drawCellBorder(x, y, DAY_COL, ROW_H, '#cbd5e1', 0.5);
+            cellText(weekDates[i].formatted.replace(/ \d{4}$/, ''), x, y, DAY_COL, ROW_H, '#1e293b', 6, false);
+          }
+          y += ROW_H;
+          fillRect(MARGIN, y, usableW, ROW_H, subheadBg);
+          drawCellBorder(MARGIN, y, NAME_COL, ROW_H, '#cbd5e1', 0.5);
+          for (let i = 0; i < 7; i++) {
+            const x = MARGIN + NAME_COL + i * DAY_COL;
+            drawCellBorder(x, y, DAY_COL, ROW_H, '#cbd5e1', 0.5);
+            cellText(weekDates[i].dayLabel, x, y, DAY_COL, ROW_H, '#1e293b', 6, true);
+          }
+          y += ROW_H;
         }
 
         // PURE WHITE ROW BACKGROUND - OTHER SHOP BACKGROUND REMOVED
@@ -1451,7 +1477,7 @@ exports.exportPdf = async (req, res) => {
         drawCellBorder(x, y, DAY_COL, TOTAL_H, '#cbd5e1', 0.6);
         cellText(String(totals[i]), x, y, DAY_COL, TOTAL_H, palette.text || '#0f172a', 7, true, 'center');
       }
-      y += TOTAL_H + 8;
+      y += TOTAL_H + GAP_H;
     }
 
     const GRAND_H = 15;
