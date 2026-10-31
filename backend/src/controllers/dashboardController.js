@@ -217,7 +217,7 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
   };
   if (status && status !== 'All') {
     if (/^finalized$/i.test(status)) {
-      query.status = { $in: ['FINALIZED', 'Finalized', 'Generated'] };
+      query.status = { $in: ['FINALIZED', 'Finalized'] };
     } else if (/^partially[_\s]?paid$/i.test(status)) {
       query.status = { $in: ['PARTIALLY_PAID', 'Partially Paid'] };
     } else if (/^paid$/i.test(status)) {
@@ -226,7 +226,7 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
       query.status = status;
     }
   } else {
-    query.status = { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid', 'Generated'] };
+    query.status = { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] };
   }
 
   if (weekLabel && weekLabel !== 'All') {
@@ -404,15 +404,17 @@ async function getDistributorDataInternal({ weekLabel, shopId, status }) {
     shopName = shopDoc ? shopDoc.name : '';
   }
 
-  const allWeeksList = await getAvailableWeeksList(true);
-  const availableWeeks = allWeeksList.filter(w => {
-    const dmy = w.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (dmy) {
-      const d = new Date(`${dmy[3]}-${dmy[2]}-${dmy[1]}`);
-      return d >= new Date('2026-10-11T00:00:00.000Z');
-    }
-    return true;
-  });
+  const distinctWeeks = await WeeklySalary.aggregate([
+    {
+      $match: {
+        weekStartDate: { $gte: new Date('2026-10-11T00:00:00.000Z') },
+        status: { $in: ['FINALIZED', 'PARTIALLY_PAID', 'PAID', 'Finalized', 'Partially Paid', 'Paid'] }
+      }
+    },
+    { $group: { _id: '$weekLabel', weekStartDate: { $first: '$weekStartDate' } } },
+    { $sort: { weekStartDate: -1 } }
+  ]);
+  const availableWeeks = distinctWeeks.map(w => w._id);
 
   return {
     currentWeek,
