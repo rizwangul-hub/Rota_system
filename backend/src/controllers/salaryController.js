@@ -1404,6 +1404,7 @@ exports.recordSalaryPayment = async (req, res) => {
         shopName: salary.shopName,
         weekLabel: salary.weekLabel,
         weeklySalary: salary.finalSalary,
+        allowance: Number(((salary.travelAllowance || 0) + (salary.otherAllowances || 0)).toFixed(2)),
         openingBalance: openingBal,
         bonus: commissionBonus,
         totalPayable: totalPayable,
