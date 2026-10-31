@@ -587,7 +587,7 @@ export default function SalaryDistributor() {
               value={selectedWeek}
               onChange={(e) => setSelectedWeek(e.target.value)}
             >
-              <option value="">All Finalized Weeks</option>
+              <option value="">All Weeks</option>
               {availableWeeks.map(w => (
                 <option key={w} value={w}>{w}</option>
               ))}

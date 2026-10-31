@@ -1196,8 +1196,8 @@ exports.recordSalaryPayment = async (req, res) => {
         return;
       }
 
-      if (!['FINALIZED', 'PARTIALLY_PAID', 'Finalized', 'Partially Paid'].includes(salary.status)) {
-        outcome = { status: 400, message: 'Only finalized salaries can receive payments or deductions.' };
+      if (!['FINALIZED', 'PARTIALLY_PAID', 'Finalized', 'Partially Paid', 'Generated'].includes(salary.status)) {
+        outcome = { status: 400, message: 'Only finalized or generated salaries can receive payments or deductions.' };
         return;
       }
 
@@ -1351,6 +1351,10 @@ exports.recordSalaryPayment = async (req, res) => {
       balanceRemaining = Number(Math.max(0, totalPayable - totalPaid).toFixed(2));
       salary.totalPaid = totalPaid;
       salary.balanceRemaining = balanceRemaining;
+      if (salary.status === 'Generated') {
+        salary.finalizedAt = salary.finalizedAt || new Date();
+        salary.finalizedBy = salary.finalizedBy || req.user?._id;
+      }
       salary.status = balanceRemaining === 0 ? 'PAID' : (totalPaid > 0 ? 'PARTIALLY_PAID' : 'FINALIZED');
       await salary.save({ session });
     });
