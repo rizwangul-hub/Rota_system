@@ -22,7 +22,7 @@ import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
 
 function ProtectedLayout({ children, allowedRoles }) {
   const { user, loading } = useAuth();
-  const { sidebarCollapsed, mobileOpen, setMobileOpen } = useSidebar();
+  const { sidebarCollapsed, mobileOpen, setMobileOpen, toggleSidebar } = useSidebar();
 
   if (loading) {
     return (
