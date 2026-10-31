@@ -12,12 +12,21 @@ export function SidebarProvider({ children }) {
   });
 
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
 
   useEffect(() => {
     try {
       localStorage.setItem('rota_sidebar_collapsed', String(sidebarCollapsed));
     } catch {}
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const toggleSidebar = () => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -27,8 +36,23 @@ export function SidebarProvider({ children }) {
     }
   };
 
-  const closeSidebar = () => setSidebarCollapsed(true);
-  const openSidebar = () => setSidebarCollapsed(false);
+  const closeSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setMobileOpen(false);
+    } else {
+      setSidebarCollapsed(true);
+    }
+  };
+
+  const openSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setMobileOpen(true);
+    } else {
+      setSidebarCollapsed(false);
+    }
+  };
+
+  const isSidebarHidden = isMobile ? !mobileOpen : sidebarCollapsed;
 
   return (
     <SidebarContext.Provider
@@ -39,7 +63,9 @@ export function SidebarProvider({ children }) {
         closeSidebar,
         openSidebar,
         mobileOpen,
-        setMobileOpen
+        setMobileOpen,
+        isMobile,
+        isSidebarHidden
       }}
     >
       {children}

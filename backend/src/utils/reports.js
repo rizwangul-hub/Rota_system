@@ -990,19 +990,21 @@ function drawPdfSignatures(doc, yPos, isLandscape = true) {
     y = 40;
   }
 
+  // Card 1: Manager Approval (FAHAD RASHEED)
   doc.rect(margin, y, cardWidth, 52).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('USMAN AHMAD', margin + 10, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Attendance Taker • Roster Entry & Logged Hours', margin + 10, y + 21);
-  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ RECORDED & SUBMITTED', margin + 10, y + 35);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('FAHAD RASHEED', margin + 10, y + 8);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('General Manager • Operations & Management Approval', margin + 10, y + 21);
+  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUDITED, APPROVED & AUTHORIZED', margin + 10, y + 35);
 
+  // Card 2: Executive Management Sign-off
   const box2X = margin + cardWidth + gap;
   doc.rect(box2X, y, cardWidth, 52).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('SARFRAZ KHAN', box2X + 10, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Attendance Checker • Verification & Approval Audit', box2X + 10, y + 21);
-  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUDITED & APPROVED', box2X + 10, y + 35);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('EXECUTIVE MANAGEMENT SIGN-OFF', box2X + 10, y + 8);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('PixxTechnologies UK • Corporate Payroll & Operations Audit', box2X + 10, y + 21);
+  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ OFFICIAL CERTIFIED RECORD', box2X + 10, y + 35);
 
   doc.fillColor('#94a3b8').font('Helvetica').fontSize(7.5).text(
-    `PIXX ROTA • Official Business Record • Generated on ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`,
+    `PIXX ROTA • Official Business Record • Authorized by Fahad Rasheed (General Manager) • Generated on ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`,
     margin, y + 60, { align: 'center', width: width - margin * 2 }
   );
 }
@@ -2173,11 +2175,11 @@ function drawDistributorSignatures(doc, yPos, isLandscape = true, distributorNam
   doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Salary Disbursement & Reconciliation Audit', margin + 12, y + 21);
   doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ DISBURSED & RECONCILED', margin + 12, y + 34);
 
-  // Card 2: Management / Payroll Auditor
+  // Card 2: Executive Management Sign-off
   const box2X = margin + cardWidth + gap;
   doc.rect(box2X, y, cardWidth, 50).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('SARFRAZ AHMAD / MANAGEMENT', box2X + 12, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Payroll Auditor • Verification & Business Approval', box2X + 12, y + 21);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('EXECUTIVE MANAGEMENT SIGN-OFF', box2X + 12, y + 8);
+  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('PixxTechnologies UK • Corporate Payroll Authorization', box2X + 12, y + 21);
   doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUDITED & AUTHORIZED', box2X + 12, y + 34);
 
   // Official Document Footer

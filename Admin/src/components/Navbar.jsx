@@ -20,7 +20,7 @@ const ROUTE_TITLES = {
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const { sidebarCollapsed, toggleSidebar } = useSidebar();
+  const { sidebarCollapsed, toggleSidebar, isSidebarHidden } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const [complianceCounts, setComplianceCounts] = useState({ total: 0, expired: 0, urgent: 0 });
@@ -77,24 +77,24 @@ export default function Navbar() {
           className="btn btn-sm sidebar-toggle-btn"
           style={{
             padding: '7px 12px',
-            border: sidebarCollapsed ? '1.5px solid #1d4ed8' : '1.5px solid #cbd5e1',
+            border: isSidebarHidden ? '1.5px solid #1d4ed8' : '1.5px solid #cbd5e1',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '7px',
-            background: sidebarCollapsed ? '#2563eb' : '#ffffff',
-            color: sidebarCollapsed ? '#ffffff' : '#334155',
+            background: isSidebarHidden ? '#2563eb' : '#ffffff',
+            color: isSidebarHidden ? '#ffffff' : '#334155',
             fontWeight: 700,
             borderRadius: '8px',
             flexShrink: 0,
-            boxShadow: sidebarCollapsed ? '0 2px 8px rgba(37,99,235,0.3)' : 'none',
+            boxShadow: isSidebarHidden ? '0 2px 8px rgba(37,99,235,0.3)' : 'none',
             cursor: 'pointer'
           }}
-          title={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar for wider view'}
-          aria-label={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar'}
+          title={isSidebarHidden ? 'Show navigation sidebar' : 'Hide navigation sidebar for wider view'}
+          aria-label={isSidebarHidden ? 'Show navigation sidebar' : 'Hide navigation sidebar'}
         >
-          {sidebarCollapsed ? <PanelLeftOpen size={18} color="#ffffff" /> : <PanelLeftClose size={18} color="#334155" />}
+          {isSidebarHidden ? <PanelLeftOpen size={18} color="#ffffff" /> : <PanelLeftClose size={18} color="#334155" />}
           <span className="sidebar-toggle-text" style={{ fontSize: '13px' }}>
-            {sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+            {isSidebarHidden ? 'Show Sidebar' : 'Hide Sidebar'}
           </span>
         </button>
 

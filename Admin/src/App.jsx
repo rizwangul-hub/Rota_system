@@ -22,7 +22,7 @@ import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
 
 function ProtectedLayout({ children, allowedRoles }) {
   const { user, loading } = useAuth();
-  const { sidebarCollapsed, mobileOpen, setMobileOpen, toggleSidebar } = useSidebar();
+  const { sidebarCollapsed, mobileOpen, setMobileOpen, toggleSidebar, isSidebarHidden } = useSidebar();
 
   if (loading) {
     return (
@@ -61,7 +61,7 @@ function ProtectedLayout({ children, allowedRoles }) {
       </div>
 
       {/* Persistent floating button to easily restore sidebar from any page */}
-      {sidebarCollapsed && (
+      {isSidebarHidden && (
         <button
           type="button"
           onClick={toggleSidebar}
