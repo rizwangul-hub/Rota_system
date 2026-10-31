@@ -1089,7 +1089,14 @@ export default function SarfrazAttendance() {
                 {/* Actual Arrival & Departure */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label">Actual Arrival (Time Reached)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label">Actual Arrival (Time Reached)</label>
+                      {editModalRecord.timeReached && (
+                        <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                          {formatTime12Hour(editModalRecord.timeReached)}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="time"
                       lang="en-US"
@@ -1101,13 +1108,34 @@ export default function SarfrazAttendance() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Actual Leave (Worker End Time)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label">Actual Leave (Worker End Time)</label>
+                      {editModalRecord.workerEndTime && (
+                        <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                          {formatTime12Hour(editModalRecord.workerEndTime)}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="time"
                       lang="en-US"
                       className="form-input"
                       value={editModalRecord.workerEndTime || ''}
-                      onChange={(e) => setEditModalRecord({ ...editModalRecord, workerEndTime: e.target.value })}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (val && editModalRecord.shiftEnd && editModalRecord.shiftEnd >= '12:00') {
+                          const parts = val.split(':');
+                          const h = parseInt(parts[0], 10);
+                          if (h < 12 && h >= 1 && h <= 11) {
+                            const pmH = h + 12;
+                            const endH = parseInt(editModalRecord.shiftEnd.split(':')[0], 10);
+                            if (Math.abs(pmH - endH) <= 4) {
+                              val = `${String(pmH).padStart(2, '0')}:${parts[1]}`;
+                            }
+                          }
+                        }
+                        setEditModalRecord({ ...editModalRecord, workerEndTime: val });
+                      }}
                       required={editModalRecord.status !== 'Absent'}
                       disabled={editModalRecord.status === 'Absent'}
                     />

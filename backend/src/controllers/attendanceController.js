@@ -109,7 +109,7 @@ exports.saveAttendance = async (req, res) => {
       shiftStart: start,
       shiftEnd: end,
       timeReached: reached,
-      workerEndTime: left,
+      workerEndTime: calcResult.workerEndTime || left,
       scheduledHours: isAbsent ? 0 : calcResult.scheduledHours,
       actualHours: calcResult.actualHours,
       lateMinutes: calcResult.lateMinutes,
@@ -256,7 +256,7 @@ exports.saveAttendanceBatch = async (req, res) => {
         shiftStart: start,
         shiftEnd: end,
         timeReached: reached,
-        workerEndTime: left,
+        workerEndTime: calcResult.workerEndTime || left,
         scheduledHours: isAbsent ? 0 : calcResult.scheduledHours,
         actualHours: calcResult.actualHours,
         lateMinutes: calcResult.lateMinutes,
@@ -504,7 +504,7 @@ exports.updateAttendanceRecord = async (req, res) => {
     record.shiftStart = finalShiftStart;
     record.shiftEnd = finalShiftEnd;
     record.timeReached = finalTimeReached;
-    record.workerEndTime = finalWorkerEndTime;
+    record.workerEndTime = calcResult.workerEndTime || finalWorkerEndTime;
     record.scheduledHours = isAbsent ? 0 : calcResult.scheduledHours;
     record.actualHours = calcResult.actualHours;
     record.lateMinutes = calcResult.lateMinutes;

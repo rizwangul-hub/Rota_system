@@ -151,6 +151,7 @@ function calculateAttendanceRecord({
   status = 'Present',
   gracePeriodMinutes = 15,
 }) {
+  const normWorkerEndTime = autoNormalizeWorkerEndTime(timeReached, workerEndTime, shiftEnd);
   const wage = (dailyWage !== undefined && dailyWage !== null && dailyWage !== '' && !isNaN(Number(dailyWage)))
     ? Math.max(0, Number(dailyWage))
     : 50;
@@ -158,9 +159,9 @@ function calculateAttendanceRecord({
   const hourlyWage = (scheduledHours > 0 && wage > 0) ? Number((wage / scheduledHours).toFixed(4)) : 0;
 
   if (status === 'Absent' || wage === 0) {
-    const actualHours = (status === 'Absent') ? 0 : calculateWorkedHours(timeReached, workerEndTime, scheduledHours, status);
+    const actualHours = (status === 'Absent') ? 0 : calculateWorkedHours(timeReached, normWorkerEndTime, scheduledHours, status);
     const lateMinutes = (status === 'Absent') ? 0 : calculateLateMinutes(shiftStart, timeReached);
-    const earlyLeaveMinutes = (status === 'Absent') ? 0 : calculateEarlyLeaveMinutes(shiftEnd, workerEndTime);
+    const earlyLeaveMinutes = (status === 'Absent') ? 0 : calculateEarlyLeaveMinutes(shiftEnd, normWorkerEndTime);
     let computedStatus = status;
     if (status !== 'Absent') {
       if (!status || status === 'Present' || status === 'Late') {
@@ -177,12 +178,13 @@ function calculateAttendanceRecord({
       arrivalDeduction: 0,
       earlyLeaveDeduction: 0,
       attendancePay: 0,
+      workerEndTime: normWorkerEndTime,
       status: computedStatus || 'Present'
     };
   }
 
   const lateMinutes = calculateLateMinutes(shiftStart, timeReached);
-  const earlyLeaveMinutes = calculateEarlyLeaveMinutes(shiftEnd, workerEndTime);
+  const earlyLeaveMinutes = calculateEarlyLeaveMinutes(shiftEnd, normWorkerEndTime);
 
   let computedStatus = status;
   if (!status || status === 'Present' || status === 'Late') {
@@ -210,7 +212,7 @@ function calculateAttendanceRecord({
       // Deduction from missing hours already equals or exceeds a half day's wage:
       // Worker receives daily wage minus the lateness/missing hours deduction
       attendancePay = Number(Math.max(0, wage - totalDeduction).toFixed(2));
-      finalLateDeduction = totalDeduction;
+      finalLateDeduction = Math.min(wage, totalDeduction);
     } else {
       // Half day with partial or no lateness: worker receives half day pay minus any lateness
       attendancePay = Number(Math.max(0, halfDayWage - totalDeduction).toFixed(2));
@@ -218,10 +220,10 @@ function calculateAttendanceRecord({
     }
   } else {
     attendancePay = Number(Math.max(0, wage - totalDeduction).toFixed(2));
-    finalLateDeduction = totalDeduction;
+    finalLateDeduction = Number(Math.min(wage, totalDeduction).toFixed(2));
   }
 
-  const actualHours = calculateWorkedHours(timeReached, workerEndTime, scheduledHours, computedStatus);
+  const actualHours = calculateWorkedHours(timeReached, normWorkerEndTime, scheduledHours, computedStatus);
 
   return {
     scheduledHours,
@@ -233,6 +235,7 @@ function calculateAttendanceRecord({
     arrivalDeduction,
     earlyLeaveDeduction,
     attendancePay,
+    workerEndTime: normWorkerEndTime,
     status: computedStatus
   };
 }
@@ -498,6 +501,7 @@ module.exports = {
   calculateWorkedHours,
   calculateLateMinutes,
   calculateEarlyLeaveMinutes,
+  autoNormalizeWorkerEndTime,
   calculateAttendanceRecord,
   getDefaultShiftTimesForDate,
   getDayOfWeekUK,
