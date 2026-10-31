@@ -981,8 +981,8 @@ function drawKpiCard(doc, x, y, width, label, value, color = '#2563eb') {
 function drawPdfSignatures(doc, yPos, isLandscape = true) {
   const width = isLandscape ? 841.89 : 595.28;
   const margin = 25;
-  const cardWidth = isLandscape ? 385 : 260;
-  const gap = isLandscape ? 20 : 25;
+  const contentWidth = width - margin * 2;
+  const cardWidth = isLandscape ? 380 : 340;
 
   let y = yPos;
   if (y > (isLandscape ? 470 : 690)) {
@@ -990,22 +990,23 @@ function drawPdfSignatures(doc, yPos, isLandscape = true) {
     y = 40;
   }
 
-  // Card 1: Manager Approval (FAHAD RASHEED)
-  doc.rect(margin, y, cardWidth, 52).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('FAHAD RASHEED', margin + 10, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('General Manager • Operations & Management Approval', margin + 10, y + 21);
-  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUDITED, APPROVED & AUTHORIZED', margin + 10, y + 35);
+  // Single Focused Manager Card: Manager Account Fahad Rasheed
+  const cardX = margin + (contentWidth - cardWidth) / 2;
+  doc.rect(cardX, y, cardWidth, 54).fillAndStroke('#f8fafc', '#cbd5e1');
+  doc.rect(cardX, y, cardWidth, 16).fill('#f1f5f9');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
+     .text('MANAGER ACCOUNT APPROVAL', cardX + 12, y + 4, { lineBreak: false });
 
-  // Card 2: Executive Management Sign-off
-  const box2X = margin + cardWidth + gap;
-  doc.rect(box2X, y, cardWidth, 52).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('EXECUTIVE MANAGEMENT SIGN-OFF', box2X + 10, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('PixxTechnologies UK • Corporate Payroll & Operations Audit', box2X + 10, y + 21);
-  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ OFFICIAL CERTIFIED RECORD', box2X + 10, y + 35);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
+     .text('FAHAD RASHEED', cardX + 12, y + 22, { lineBreak: false });
+  doc.fillColor('#64748b').font('Helvetica').fontSize(8)
+     .text('Manager Account • Operations & Financial Authorization', cardX + 12, y + 36, { lineBreak: false });
+  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8)
+     .text('✓ AUDITED & AUTHORIZED', cardX + cardWidth - 160, y + 25, { width: 148, align: 'right' });
 
   doc.fillColor('#94a3b8').font('Helvetica').fontSize(7.5).text(
-    `PIXX ROTA • Official Business Record • Authorized by Fahad Rasheed (General Manager) • Generated on ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`,
-    margin, y + 60, { align: 'center', width: width - margin * 2 }
+    `PIXX ROTA • Official Business Record • Authorized by Manager Account: Fahad Rasheed • Generated on ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`,
+    margin, y + 64, { align: 'center', width: contentWidth }
   );
 }
 
@@ -2155,8 +2156,8 @@ async function buildPaymentsPDF(res, payments, periodLabel = '', totals = {}, ca
 function drawDistributorSignatures(doc, yPos, isLandscape = true, distributorName = 'Fahad Rasheed') {
   const width = isLandscape ? 841.89 : 595.28;
   const margin = 25;
-  const cardWidth = isLandscape ? 385 : 260;
-  const gap = isLandscape ? 21 : 25;
+  const contentWidth = width - margin * 2;
+  const cardWidth = isLandscape ? 380 : 340;
 
   let y = yPos;
   if (y > (isLandscape ? 470 : 690)) {
@@ -2169,23 +2170,24 @@ function drawDistributorSignatures(doc, yPos, isLandscape = true, distributorNam
     signerName = 'Fahad Rasheed';
   }
 
-  // Card 1: Salary Distributor / Authorized Signer (Fahad Rasheed)
-  doc.rect(margin, y, cardWidth, 50).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text(signerName.toUpperCase(), margin + 12, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('Salary Disbursement & Reconciliation Audit', margin + 12, y + 21);
-  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ DISBURSED & RECONCILED', margin + 12, y + 34);
+  // Single Focused Manager Card: Manager Account Fahad Rasheed
+  const cardX = margin + (contentWidth - cardWidth) / 2;
+  doc.rect(cardX, y, cardWidth, 54).fillAndStroke('#f8fafc', '#cbd5e1');
+  doc.rect(cardX, y, cardWidth, 16).fill('#f1f5f9');
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(8)
+     .text('MANAGER ACCOUNT APPROVAL', cardX + 12, y + 4, { lineBreak: false });
 
-  // Card 2: Executive Management Sign-off
-  const box2X = margin + cardWidth + gap;
-  doc.rect(box2X, y, cardWidth, 50).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9).text('EXECUTIVE MANAGEMENT SIGN-OFF', box2X + 12, y + 8);
-  doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text('PixxTechnologies UK • Corporate Payroll Authorization', box2X + 12, y + 21);
-  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8).text('✓ AUDITED & AUTHORIZED', box2X + 12, y + 34);
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10)
+     .text(signerName.toUpperCase(), cardX + 12, y + 22, { lineBreak: false });
+  doc.fillColor('#64748b').font('Helvetica').fontSize(8)
+     .text('Manager Account • Salary Disbursement & Reconciliation Audit', cardX + 12, y + 36, { lineBreak: false });
+  doc.fillColor('#059669').font('Helvetica-Bold').fontSize(8)
+     .text('✓ DISBURSED & RECONCILED', cardX + cardWidth - 160, y + 25, { width: 148, align: 'right' });
 
   // Official Document Footer
   doc.fillColor('#94a3b8').font('Helvetica').fontSize(7.5).text(
-    `PIXX ROTA • Official Payroll Disbursement Record • Generated on ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} • Confidential Business Document`,
-    margin, y + 58, { align: 'center', width: width - margin * 2 }
+    `PIXX ROTA • Official Payroll Disbursement Record • Authorized by Manager Account: ${signerName} • Generated on ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} • Confidential Business Document`,
+    margin, y + 64, { align: 'center', width: contentWidth }
   );
 }
 
