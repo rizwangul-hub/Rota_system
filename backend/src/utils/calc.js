@@ -69,6 +69,37 @@ function calculateLateMinutes(shiftStart, timeReached) {
 }
 
 /**
+ * Automatically detects and corrects accidental AM inputs for evening shifts (e.g. "06:40" instead of "18:40")
+ */
+function autoNormalizeWorkerEndTime(timeReached, workerEndTime, shiftEnd) {
+  if (!workerEndTime || typeof workerEndTime !== 'string') return workerEndTime;
+  const parts = workerEndTime.trim().split(':');
+  if (parts.length < 2) return workerEndTime;
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(minutes)) return workerEndTime;
+
+  if (hours < 12) {
+    const reachedMin = timeToMinutes(timeReached);
+    const currMin = hours * 60 + minutes;
+    const pmMin = (hours + 12) * 60 + minutes;
+    const endMin = timeToMinutes(shiftEnd);
+
+    // 1. If leaving time is earlier than arrival time (e.g. 06:40 vs 09:34 arrival), worker cannot leave before arriving!
+    if (reachedMin > 0 && currMin < reachedMin) {
+      return `${String(hours + 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+    // 2. If scheduled shift ends in evening (>= 12:00) and PM time is much closer to shift end:
+    if (endMin >= 720 && Math.abs(pmMin - endMin) < Math.abs(currMin - endMin) && currMin < 720) {
+      if (Math.abs(pmMin - endMin) <= 240) {
+        return `${String(hours + 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+    }
+  }
+  return workerEndTime;
+}
+
+/**
  * Calculate early departure in minutes (leaving before shiftEnd)
  */
 function calculateEarlyLeaveMinutes(shiftEnd, workerEndTime) {
