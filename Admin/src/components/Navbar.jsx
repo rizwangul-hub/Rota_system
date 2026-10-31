@@ -74,24 +74,26 @@ export default function Navbar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
         <button
           onClick={toggleSidebar}
-          className="btn btn-outline btn-sm sidebar-toggle-btn"
+          className="btn btn-sm sidebar-toggle-btn"
           style={{
-            padding: '6px 10px',
-            border: `1.5px solid ${sidebarCollapsed ? '#2563eb' : '#cbd5e1'}`,
+            padding: '7px 12px',
+            border: sidebarCollapsed ? '1.5px solid #1d4ed8' : '1.5px solid #cbd5e1',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
-            background: sidebarCollapsed ? '#eff6ff' : '#ffffff',
-            color: sidebarCollapsed ? '#2563eb' : '#334155',
-            fontWeight: 600,
+            gap: '7px',
+            background: sidebarCollapsed ? '#2563eb' : '#ffffff',
+            color: sidebarCollapsed ? '#ffffff' : '#334155',
+            fontWeight: 700,
             borderRadius: '8px',
-            flexShrink: 0
+            flexShrink: 0,
+            boxShadow: sidebarCollapsed ? '0 2px 8px rgba(37,99,235,0.3)' : 'none',
+            cursor: 'pointer'
           }}
           title={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar for wider view'}
           aria-label={sidebarCollapsed ? 'Show navigation sidebar' : 'Hide navigation sidebar'}
         >
-          {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          <span className="sidebar-toggle-text" style={{ fontSize: '12px' }}>
+          {sidebarCollapsed ? <PanelLeftOpen size={18} color="#ffffff" /> : <PanelLeftClose size={18} color="#334155" />}
+          <span className="sidebar-toggle-text" style={{ fontSize: '13px' }}>
             {sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
           </span>
         </button>

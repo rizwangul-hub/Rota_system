@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { PanelLeftOpen } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider, useSidebar } from './context/SidebarContext';
 import Sidebar from './components/Sidebar';
@@ -58,6 +59,20 @@ function ProtectedLayout({ children, allowedRoles }) {
         <Navbar />
         {children}
       </div>
+
+      {/* Persistent floating button to easily restore sidebar from any page */}
+      {sidebarCollapsed && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="floating-show-sidebar-btn"
+          title="Click to show sidebar menu"
+          aria-label="Click to show sidebar menu"
+        >
+          <PanelLeftOpen size={18} color="#38bdf8" />
+          <span>Show Sidebar</span>
+        </button>
+      )}
     </div>
   );
 }
