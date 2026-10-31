@@ -107,7 +107,7 @@ exports.saveAttendance = async (req, res) => {
       shop: shop ? shop._id : null,
       shopName: shop ? shop.name : 'Absent',
       shiftStart: start,
-      shiftEnd: end,
+      shiftEnd: calcResult.shiftEnd || end,
       timeReached: reached,
       workerEndTime: calcResult.workerEndTime || left,
       scheduledHours: isAbsent ? 0 : calcResult.scheduledHours,
@@ -254,7 +254,7 @@ exports.saveAttendanceBatch = async (req, res) => {
         shop: shop ? shop._id : null,
         shopName: shop ? shop.name : 'Absent',
         shiftStart: start,
-        shiftEnd: end,
+        shiftEnd: calcResult.shiftEnd || end,
         timeReached: reached,
         workerEndTime: calcResult.workerEndTime || left,
         scheduledHours: isAbsent ? 0 : calcResult.scheduledHours,
@@ -502,7 +502,7 @@ exports.updateAttendanceRecord = async (req, res) => {
 
     record.dailyWage = dailyWage;
     record.shiftStart = finalShiftStart;
-    record.shiftEnd = finalShiftEnd;
+    record.shiftEnd = calcResult.shiftEnd || finalShiftEnd;
     record.timeReached = finalTimeReached;
     record.workerEndTime = calcResult.workerEndTime || finalWorkerEndTime;
     record.scheduledHours = isAbsent ? 0 : calcResult.scheduledHours;

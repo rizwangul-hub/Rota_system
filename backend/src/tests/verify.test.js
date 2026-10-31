@@ -226,4 +226,21 @@ assert.strictEqual(
 );
 console.log(' 9. Phase 6 salary adjustment, bonus, precision and non-duplication tests passed');
 
+// TEST 10: Accidental AM end times auto-normalization
+const tAccidentalAM = calculateAttendanceRecord({
+  dailyWage: 90,
+  shiftStart: '09:30',
+  shiftEnd: '06:00', // Usman entered 6:00 AM instead of 6:00 PM (18:00)
+  timeReached: '09:34',
+  workerEndTime: '06:40', // Usman entered 6:40 AM instead of 6:40 PM (18:40)
+  status: 'Present'
+});
+assert.strictEqual(tAccidentalAM.shiftEnd, '18:00', 'Accidental 06:00 AM shiftEnd must auto-normalize to 18:00 PM');
+assert.strictEqual(tAccidentalAM.workerEndTime, '18:40', 'Accidental 06:40 AM workerEndTime must auto-normalize to 18:40 PM');
+assert.strictEqual(tAccidentalAM.scheduledHours, 8.5, 'Scheduled hours should be 8.5');
+assert.strictEqual(tAccidentalAM.lateMinutes, 4, 'Worker arrived at 09:34 for 09:30 shift = 4 mins late');
+assert.strictEqual(tAccidentalAM.lateDeduction, 0, '4 mins is within 15 mins grace period');
+assert.strictEqual(tAccidentalAM.attendancePay, 90, 'Full daily wage should be paid');
+console.log(' 10. Accidental AM end times auto-normalization test passed');
+
 console.log('\n ALL BUSINESS LOGIC AND ACCOUNTING TESTS PASSED SUCCESSFULLY!\n');
