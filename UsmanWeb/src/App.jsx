@@ -26,6 +26,8 @@ import {
   getSundayWeekStart
 } from './utils/time';
 import logoImg from './assets/logo.jpg';
+import RotaIntroAnimation from './components/RotaIntroAnimation';
+import AttendanceCelebration from './components/AttendanceCelebration';
 
 // Time Input component with smart 12-hour AM/PM formatting
 function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType }) {
@@ -88,6 +90,16 @@ export default function App() {
   const [workerRows, setWorkerRows] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
+
+  // Modern animation states
+  const [showIntro, setShowIntro] = useState(() => {
+    try {
+      return sessionStorage.getItem('pixx_rota_intro_shown') !== 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // Native-style modal alert state
   const [alertModal, setAlertModal] = useState(null); // { title, message, buttons: [{ text, style, onClick }] }
@@ -543,10 +555,7 @@ export default function App() {
       );
 
       if (res.data?.success) {
-        showAlert(
-          'Attendance Submitted',
-          `Attendance for ${formatUKDisplayDate(currentDate)} has been successfully submitted to Sarfraz for review.`
-        );
+        setShowCelebration(true);
         void refreshRotaForDate(currentDate);
       }
     } catch (err) {
@@ -577,6 +586,7 @@ export default function App() {
   if (!token) {
     return (
       <div className="mobile-app-shell">
+        {showIntro && <RotaIntroAnimation onComplete={() => setShowIntro(false)} />}
         <div style={{
           minHeight: '100vh',
           backgroundColor: '#0f172a',
@@ -777,6 +787,16 @@ export default function App() {
 
   return (
     <div className="mobile-app-shell">
+      {/* 1. App Launch Intro Animation */}
+      {showIntro && <RotaIntroAnimation onComplete={() => setShowIntro(false)} />}
+
+      {/* 2. Attendance Submission Celebration Animation */}
+      <AttendanceCelebration
+        show={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        recipientName="Sarfraz"
+      />
+
       {/* Top Header */}
       <header style={{
         backgroundColor: '#0f172a',
