@@ -36,7 +36,10 @@ function isAllowedOrigin(origin, allowedOrigins, isProduction) {
       } catch {}
     }
   }
-  return !isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    return true;
+  }
+  return false;
 }
 
 module.exports = { normalizeAllowedOrigins, isAllowedOrigin };
