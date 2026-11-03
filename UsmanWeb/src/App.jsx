@@ -17,7 +17,9 @@ import {
   Check,
   FileDown,
   MessageSquare,
-  FileText
+  FileText,
+  Bell,
+  BellRing
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import api, { API_BASE_URL } from './services/api';
@@ -35,6 +37,13 @@ import RotaIntroAnimation from './components/RotaIntroAnimation';
 import AttendanceCelebration from './components/AttendanceCelebration';
 import InstallAppBanner from './components/InstallAppBanner';
 import UserProfileModal from './components/UserProfileModal';
+import AttendanceReminderBanner from './components/AttendanceReminderBanner';
+import AttendanceReminderModal from './components/AttendanceReminderModal';
+import {
+  startDailyReminderScheduler,
+  getNotificationPermissionStatus,
+  formatReminderTime12H
+} from './services/notificationService';
 
 // Time Input component with smart 12-hour AM/PM formatting
 function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType }) {
@@ -101,6 +110,16 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Daily attendance reminder notification states
+  const [reminderConfig, setReminderConfig] = useState({
+    time: '14:00',
+    message: "Please remember to record today's staff attendance."
+  });
+  const [permissionStatus, setPermissionStatus] = useState(() => getNotificationPermissionStatus());
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+  const [activeReminderAlert, setActiveReminderAlert] = useState(null);
+  const reminderSchedulerRef = useRef(null);
 
   // Modern animation states
   const [showIntro, setShowIntro] = useState(() => {
@@ -458,6 +477,25 @@ export default function App() {
       clearInterval(interval);
     };
   }, [token, currentDate, loadRotaForDate]);
+
+  // Daily attendance reminder scheduler (2:00 PM or Admin configured time)
+  useEffect(() => {
+    if (!token) return;
+
+    const scheduler = startDailyReminderScheduler({
+      onTrigger: (alertData) => {
+        setActiveReminderAlert(alertData);
+      },
+      onConfigLoaded: (config) => {
+        setReminderConfig(config);
+      }
+    });
+    reminderSchedulerRef.current = scheduler;
+
+    return () => {
+      scheduler.cleanup();
+    };
+  }, [token]);
 
   // Update a single field on a worker row
   const handleUpdateRow = (index, field, value) => {
@@ -1010,6 +1048,20 @@ export default function App() {
         }}
       />
 
+      {/* 4. Daily Attendance Reminder Modal */}
+      <AttendanceReminderModal
+        isOpen={isReminderModalOpen}
+        onClose={() => setIsReminderModalOpen(false)}
+        reminderConfig={reminderConfig}
+        permissionStatus={permissionStatus}
+        onPermissionChange={(perm) => setPermissionStatus(perm)}
+        onSendTestNotification={async () => {
+          if (reminderSchedulerRef.current?.testNotification) {
+            return await reminderSchedulerRef.current.testNotification();
+          }
+        }}
+      />
+
       {/* Top Header */}
       <header style={{
         backgroundColor: '#0f172a',
@@ -1075,6 +1127,40 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Daily Attendance Reminder Bell Button */}
+          <button
+            type="button"
+            onClick={() => setIsReminderModalOpen(true)}
+            title={`Daily Reminder: ${formatReminderTime12H(reminderConfig?.time)} - Click to manage or test`}
+            style={{
+              backgroundColor: '#1e293b',
+              color: permissionStatus === 'granted' ? '#60a5fa' : '#fbbf24',
+              padding: '6px 10px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              border: `1px solid ${permissionStatus === 'granted' ? '#1e3a8a' : '#78350f'}`,
+              cursor: 'pointer'
+            }}
+          >
+            <Bell size={14} />
+            <span style={{ fontSize: '11px', color: '#f8fafc' }}>
+              {formatReminderTime12H(reminderConfig?.time)}
+            </span>
+            {permissionStatus === 'granted' && (
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#22c55e',
+                display: 'inline-block'
+              }} />
+            )}
+          </button>
+
           <button
             type="button"
             onClick={handleExportToPdf}
@@ -1125,6 +1211,16 @@ export default function App() {
 
       {/* Main Scrollable Content */}
       <main style={{ padding: '16px', flex: 1, paddingBottom: '90px' }}>
+        {/* Attendance Reminder Banner / Alert */}
+        <AttendanceReminderBanner
+          reminderConfig={reminderConfig}
+          permissionStatus={permissionStatus}
+          onPermissionChange={(newPerm) => setPermissionStatus(newPerm)}
+          activeAlert={activeReminderAlert}
+          onDismissAlert={() => setActiveReminderAlert(null)}
+          onOpenReminderModal={() => setIsReminderModalOpen(true)}
+        />
+
         {/* Date Selector Banner Card */}
         <div style={{
           background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%)',
@@ -1245,13 +1341,16 @@ export default function App() {
         </div>
 
         {/* Workers List Section Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '12px',
-          padding: '0 4px'
-        }}>
+        <div
+          id="workers-list-header"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '12px',
+            padding: '0 4px'
+          }}
+        >
           <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
             Workers ({workerRows.length})
           </div>
