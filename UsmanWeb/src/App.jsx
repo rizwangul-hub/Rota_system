@@ -27,11 +27,12 @@ import {
   getSundayWeekStart
 } from './utils/time';
 import logoImg from './assets/app-logo.png';
-import usmanAvatar from './assets/usman.png';
-import adeelAvatar from './assets/adeel.jpg';
+const usmanAvatar = '/usman.png';
+const adeelAvatar = '/adeel.jpg';
 import RotaIntroAnimation from './components/RotaIntroAnimation';
 import AttendanceCelebration from './components/AttendanceCelebration';
 import InstallAppBanner from './components/InstallAppBanner';
+import UserProfileModal from './components/UserProfileModal';
 
 // Time Input component with smart 12-hour AM/PM formatting
 function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType }) {
@@ -80,13 +81,16 @@ function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType
 }
 
 export default function App() {
-  const { user, token, login, logout, loading: authLoading } = useAuth();
+  const { user, token, login, logout, updateUser, loading: authLoading } = useAuth();
 
   // Login form states
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Profile modal state
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Core attendance states
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -945,7 +949,7 @@ export default function App() {
   const isAdeel = (user?.username === 'adeel') || (typeof user?.name === 'string' && /adeel/i.test(user.name));
   const isUsman = (user?.username === 'usman') || (typeof user?.name === 'string' && /usman/i.test(user.name));
   const operatorDisplayName = user?.name || (isAdeel ? 'Adeel Ahmed' : (isUsman ? 'Usman Salahuddin' : 'Attendance Operator'));
-  const operatorPhoto = isAdeel ? adeelAvatar : (isUsman ? usmanAvatar : logoImg);
+  const operatorPhoto = user?.profilePicture || (isAdeel ? adeelAvatar : (isUsman ? usmanAvatar : logoImg));
 
   return (
     <div className="mobile-app-shell">
@@ -957,6 +961,16 @@ export default function App() {
         show={showCelebration}
         onClose={() => setShowCelebration(false)}
         recipientName="Sarfraz"
+      />
+
+      {/* 3. Operator Profile Modal (Change Name & Profile Picture) */}
+      <UserProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+        onUserUpdated={(updatedUser) => {
+          updateUser(updatedUser);
+        }}
       />
 
       {/* Top Header */}
@@ -971,7 +985,24 @@ export default function App() {
         zIndex: 50,
         borderBottom: '1px solid #1e293b'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Clickable Profile Badge */}
+        <div
+          onClick={() => setIsProfileOpen(true)}
+          role="button"
+          tabIndex={0}
+          title="Click to view & edit your profile or photo"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            cursor: 'pointer',
+            padding: '3px 6px',
+            borderRadius: '12px',
+            transition: 'background-color 0.15s'
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+        >
           <div style={{
             width: '40px',
             height: '40px',
@@ -1001,7 +1032,7 @@ export default function App() {
               {operatorDisplayName}
             </div>
             <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-              Attendance Operator
+              Attendance Operator • <span style={{ color: '#60a5fa', textDecoration: 'underline' }}>Edit</span>
             </div>
           </div>
         </div>

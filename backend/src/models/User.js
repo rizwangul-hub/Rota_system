@@ -34,6 +34,10 @@ const UserSchema = new mongoose.Schema({
     ref: 'Shop',
     default: null
   },
+  profilePicture: {
+    type: String,
+    default: null
+  },
   isActive: {
     type: Boolean,
     default: true

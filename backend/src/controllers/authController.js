@@ -57,11 +57,54 @@ exports.login = async (req, res) => {
         name: user.name,
         username: user.username,
         role: user.role,
+        profilePicture: user.profilePicture || null,
         assignedShop: user.assignedShop
       }
     });
   } catch (error) {
     return sendServerError(res, error, 'Server error during login.');
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, profilePicture } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (name && typeof name === 'string' && name.trim()) {
+      user.name = name.trim();
+    }
+    if (profilePicture !== undefined) {
+      user.profilePicture = profilePicture;
+    }
+
+    await user.save();
+
+    await logAction({
+      user: user._id,
+      username: user.name,
+      action: 'USER_PROFILE_UPDATED',
+      details: `User ${user.username} updated profile details.`,
+      req
+    });
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully.',
+      user: {
+        id: user._id,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        profilePicture: user.profilePicture || null,
+        assignedShop: user.assignedShop
+      }
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Error updating profile.');
   }
 };
 
