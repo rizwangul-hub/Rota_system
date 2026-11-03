@@ -15,7 +15,9 @@ import {
   Send,
   Save,
   Check,
-  FileDown
+  FileDown,
+  MessageSquare,
+  FileText
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import api, { API_BASE_URL } from './services/api';
@@ -98,7 +100,7 @@ export default function App() {
   const [workerRows, setWorkerRows] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   // Modern animation states
   const [showIntro, setShowIntro] = useState(() => {
@@ -576,43 +578,78 @@ export default function App() {
     setCurrentDate(new Date());
   };
 
-  // Direct Download Daily Attendance PDF (Exact matching Admin/Sarfraz PDF report)
-  const handleDownloadDailyPdf = async () => {
-    if (downloadingPdf) return;
-    setDownloadingPdf(true);
+  // Direct Export Daily Attendance to PDF & WhatsApp (Select group and send)
+  const handleExportToPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
     try {
-      const res = await api.get('/reports/daily-attendance/pdf', {
-        params: { date: rawDateString },
-        responseType: 'blob'
-      });
+      const [pdfRes, reportRes] = await Promise.all([
+        api.get('/reports/daily-attendance/pdf', {
+          params: { date: rawDateString },
+          responseType: 'blob'
+        }).catch(() => null),
+        api.get('/reports/daily-attendance', {
+          params: { date: rawDateString }
+        }).catch(() => null)
+      ]);
 
-      const contentType = res.headers['content-type'] || '';
-      if (contentType.includes('application/json')) {
-        const text = await res.data.text();
-        const errJson = JSON.parse(text);
-        throw new Error(errJson.message || 'Error generating PDF.');
-      }
+      const whatsAppText = reportRes?.data?.whatsAppText ||
+        `🚴 *PixxTechnologies - Daily Attendance*\n📅 *Date:* ${formatUKDisplayDate(currentDate)}\n📍 *Location:* All Shops\n\n_Generated from PixxTechnologies Rota System_`;
 
       const fileName = `Daily_Attendance_${rawDateString}.pdf`;
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = fileName;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        if (link.parentNode) link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-      }, 1500);
+      let pdfBlob = null;
+
+      if (pdfRes?.data && pdfRes.data instanceof Blob) {
+        const contentType = pdfRes.headers['content-type'] || '';
+        if (!contentType.includes('application/json')) {
+          pdfBlob = new Blob([pdfRes.data], { type: 'application/pdf' });
+        }
+      }
+
+      // 1. If on mobile device with file-sharing support, open native Share Sheet (shows WhatsApp at top)
+      if (pdfBlob && typeof navigator !== 'undefined' && navigator.canShare) {
+        try {
+          const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+          if (navigator.canShare({ files: [pdfFile] })) {
+            await navigator.share({
+              title: `Daily Attendance - ${formatUKDisplayDate(currentDate)}`,
+              text: whatsAppText,
+              files: [pdfFile]
+            });
+            return;
+          }
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') {
+            return; // User dismissed share sheet
+          }
+        }
+      }
+
+      // 2. Direct WhatsApp Open: opens WhatsApp with contact/group picker and formatted report text
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsAppText)}`;
+      window.open(waUrl, '_blank');
+
+      // 3. Also trigger PDF download so the document is saved on their device
+      if (pdfBlob) {
+        const downloadUrl = window.URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = fileName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) link.parentNode.removeChild(link);
+          window.URL.revokeObjectURL(downloadUrl);
+        }, 1500);
+      }
     } catch (err) {
       showAlert(
-        'PDF Download Failed',
-        err.message || err.response?.data?.message || 'Could not download daily attendance PDF.'
+        'Export Failed',
+        err.message || err.response?.data?.message || 'Could not export daily attendance report.'
       );
     } finally {
-      setDownloadingPdf(false);
+      setExportingPdf(false);
     }
   };
 
@@ -1040,9 +1077,9 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
-            onClick={handleDownloadDailyPdf}
-            disabled={downloadingPdf}
-            title="Download Daily Attendance PDF"
+            onClick={handleExportToPdf}
+            disabled={exportingPdf}
+            title="Export to PDF & Send to WhatsApp"
             style={{
               backgroundColor: '#1e293b',
               color: '#f8fafc',
@@ -1054,15 +1091,15 @@ export default function App() {
               alignItems: 'center',
               gap: '6px',
               border: '1px solid #334155',
-              cursor: downloadingPdf ? 'wait' : 'pointer'
+              cursor: exportingPdf ? 'wait' : 'pointer'
             }}
           >
-            {downloadingPdf ? (
+            {exportingPdf ? (
               <RefreshCw size={13} className="spin" color="#60a5fa" />
             ) : (
-              <FileDown size={14} color="#f87171" />
+              <MessageSquare size={14} color="#22c55e" />
             )}
-            <span>PDF</span>
+            <span>Export to PDF</span>
           </button>
 
           <button
@@ -1170,11 +1207,11 @@ export default function App() {
             </button>
           </div>
 
-          {/* Direct Download Daily Attendance PDF Button */}
+          {/* Direct Export Daily Attendance to PDF & WhatsApp Button */}
           <button
             type="button"
-            onClick={handleDownloadDailyPdf}
-            disabled={downloadingPdf}
+            onClick={handleExportToPdf}
+            disabled={exportingPdf}
             style={{
               marginTop: '12px',
               width: '100%',
@@ -1189,18 +1226,21 @@ export default function App() {
               fontSize: '13px',
               fontWeight: 800,
               border: 'none',
-              cursor: downloadingPdf ? 'wait' : 'pointer',
+              cursor: exportingPdf ? 'wait' : 'pointer',
               boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
               transition: 'transform 0.1s, opacity 0.15s',
-              opacity: downloadingPdf ? 0.8 : 1
+              opacity: exportingPdf ? 0.8 : 1
             }}
           >
-            {downloadingPdf ? (
+            {exportingPdf ? (
               <RefreshCw size={15} className="spin" color="#2563eb" />
             ) : (
-              <FileDown size={16} color="#dc2626" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <FileText size={16} color="#dc2626" />
+                <MessageSquare size={16} color="#16a34a" />
+              </div>
             )}
-            <span>{downloadingPdf ? 'Generating Daily PDF...' : 'Download Daily Attendance PDF'}</span>
+            <span>{exportingPdf ? 'Preparing WhatsApp Export...' : 'Export to PDF (Send to WhatsApp)'}</span>
           </button>
         </div>
 
