@@ -214,8 +214,10 @@ export default function App() {
       const existing = attMap[empIdStr];
       const rotaInfo = rotaResolution[empIdStr];
 
-      if (existing) {
-        const isLocked = ['Checked', 'Finalized'].includes(existing.approvalStatus);
+      const isLocked = Boolean(existing && ['Checked', 'Finalized'].includes(existing.approvalStatus));
+
+      if (existing && isLocked) {
+        // ── 1. LOCKED / FINALIZED BY SARFRAZ: Preserve audited check ────────
         const isAbsent = existing.status === 'Absent';
         return {
           attendanceId: existing._id,
@@ -232,13 +234,14 @@ export default function App() {
           recordedShopName: existing.shopName || '',
           recordedShopId: existing.shop?._id || existing.shop?.toString(),
           approvalStatus: existing.approvalStatus || 'Pending Review',
-          isLocked,
+          isLocked: true,
           isSaved: true,
           fromWeeklyRota: false
         };
       } else if (rotaInfo && rotaInfo.isOff) {
-        // ── AUTO-SET OFF / ABSENT FROM WEEKLY ROTA (NO SHOP) ─────────────────
+        // ── 2. SCHEDULED OFF IN ADMIN'S WEEKLY ROTA -> SET ABSENT & CLEAR SHOP ───
         return {
+          attendanceId: existing?._id,
           employeeId: emp._id,
           employeeName: emp.name,
           empCode: emp.employeeId,
@@ -248,28 +251,87 @@ export default function App() {
           timeReached: '',
           workerEndTime: '',
           status: 'Absent',
-          remarks: '',
+          remarks: existing?.remarks || '',
+          recordedShopName: '',
+          recordedShopId: undefined,
+          approvalStatus: existing?.approvalStatus || 'Pending Review',
           isLocked: false,
-          isSaved: false,
+          isSaved: Boolean(existing),
           fromWeeklyRota: true
         };
+      } else if (rotaInfo && rotaInfo.isWorking && rotaInfo.shopId) {
+        // ── 3. ASSIGNED WORK LOCATION IN ADMIN'S ROTA -> ALWAYS LIVE-UPDATE SHOP ───
+        const autoShopId = rotaInfo.shopId;
+        let start = rotaInfo.startTime || defaultShiftStart;
+        let end = rotaInfo.endTime || defaultShiftEnd;
+
+        // Fast shop timing adjustments
+        const assignedShopObj = shops.find((s) => (s._id || s.id) === autoShopId);
+        const isEdgware = assignedShopObj && /edgware/i.test(assignedShopObj.name);
+        const isArsalan = typeof emp.name === 'string' && /ars[al]*an/i.test(emp.name);
+        const dayOfWeek = dateObj.getDay();
+
+        if (isEdgware) {
+          start = dayOfWeek === 0 ? '11:00' : '09:30';
+          end = '18:30';
+        }
+        if (isArsalan) {
+          start = dayOfWeek === 6 ? '09:00' : dayOfWeek === 0 ? '11:00' : '10:00';
+          end = isEdgware ? '18:30' : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
+        }
+
+        const currentStatus = existing?.status === 'Absent' ? 'Present' : (existing?.status || 'Present');
+        return {
+          attendanceId: existing?._id,
+          employeeId: emp._id,
+          employeeName: emp.name,
+          empCode: emp.employeeId,
+          shopId: autoShopId,
+          shiftStart: existing?.shiftStart || start,
+          shiftEnd: existing?.shiftEnd || end,
+          timeReached: existing?.timeReached || start,
+          workerEndTime: existing?.workerEndTime || end,
+          status: currentStatus,
+          remarks: existing?.remarks || '',
+          recordedShopName: existing?.shopName || '',
+          recordedShopId: existing?.shop?._id || existing?.shop?.toString(),
+          approvalStatus: existing?.approvalStatus || 'Pending Review',
+          isLocked: false,
+          isSaved: Boolean(existing),
+          fromWeeklyRota: true
+        };
+      } else if (existing) {
+        // ── 4. EXISTING RECORD (NO ROTA ASSIGNMENT FOR THIS DATE) ─────────────
+        const isAbsent = existing.status === 'Absent';
+        return {
+          attendanceId: existing._id,
+          employeeId: emp._id,
+          employeeName: existing.employeeName || emp.name,
+          empCode: existing.employeeId || emp.employeeId,
+          shopId: existing.shop?._id || existing.shop?.toString(),
+          shiftStart: isAbsent ? '' : existing.shiftStart || defaultShiftStart,
+          shiftEnd: isAbsent ? '' : existing.shiftEnd || defaultShiftEnd,
+          timeReached: isAbsent ? '' : existing.timeReached || existing.shiftStart || defaultShiftStart,
+          workerEndTime: isAbsent ? '' : existing.workerEndTime || existing.shiftEnd || defaultShiftEnd,
+          status: existing.status || 'Present',
+          remarks: existing.remarks || '',
+          recordedShopName: existing.shopName || '',
+          recordedShopId: existing.shop?._id || existing.shop?.toString(),
+          approvalStatus: existing.approvalStatus || 'Pending Review',
+          isLocked: false,
+          isSaved: true,
+          fromWeeklyRota: false
+        };
       } else {
-        // ── AUTO-SELECT SHOP FROM WEEKLY ROTA IF ASSIGNED BY ADMIN ─────────────────
+        // ── 5. NEW RECORD FALLBACK (DEFAULT HOME SHOP) ───────────────────────
         let autoShopId = undefined;
-        let isFromRota = false;
         let start = defaultShiftStart;
         let end = defaultShiftEnd;
 
-        if (rotaInfo && rotaInfo.isWorking && rotaInfo.shopId) {
-          autoShopId = rotaInfo.shopId;
-          isFromRota = true;
-          if (rotaInfo.startTime) start = rotaInfo.startTime;
-          if (rotaInfo.endTime) end = rotaInfo.endTime;
-        } else if (emp.assignedShop) {
+        if (emp.assignedShop) {
           autoShopId = (emp.assignedShop?._id || emp.assignedShop).toString();
         }
 
-        // Fast shop timing adjustments
         const assignedShopObj = shops.find((s) => (s._id || s.id) === autoShopId);
         const isEdgware = assignedShopObj && /edgware/i.test(assignedShopObj.name);
         const isArsalan = typeof emp.name === 'string' && /ars[al]*an/i.test(emp.name);
@@ -297,7 +359,7 @@ export default function App() {
           remarks: '',
           isLocked: false,
           isSaved: false,
-          fromWeeklyRota: isFromRota
+          fromWeeklyRota: false
         };
       }
     });
@@ -342,6 +404,54 @@ export default function App() {
       setLoadingData(false);
     }
   };
+
+  // Live sync with Admin's Weekly Rota changes:
+  // Automatically detects when Admin updates the rota on window focus, tab visibility, or every 20 seconds.
+  useEffect(() => {
+    if (!token) return;
+
+    const silentSync = async () => {
+      // Don't interrupt if user is actively editing a form input
+      const activeEl = document.activeElement;
+      const isEditing = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+      if (isEditing || document.hidden) return;
+
+      try {
+        const freshRows = await loadRotaForDate(currentDate);
+        setWorkerRows((prev) => {
+          // Check if any shop, status, or times from rota have changed
+          const changed = freshRows.some((fresh, idx) => {
+            const current = prev[idx];
+            if (!current) return true;
+            return (
+              fresh.shopId !== current.shopId ||
+              fresh.status !== current.status ||
+              fresh.fromWeeklyRota !== current.fromWeeklyRota ||
+              fresh.shiftStart !== current.shiftStart ||
+              fresh.shiftEnd !== current.shiftEnd
+            );
+          });
+          return changed ? freshRows : prev;
+        });
+      } catch {
+        // Silently ignore background polling errors
+      }
+    };
+
+    const handleFocusOrVisible = () => {
+      if (!document.hidden) void silentSync();
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+    const interval = setInterval(silentSync, 20000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      clearInterval(interval);
+    };
+  }, [token, currentDate, loadRotaForDate]);
 
   // Update a single field on a worker row
   const handleUpdateRow = (index, field, value) => {
