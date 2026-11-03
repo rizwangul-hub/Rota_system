@@ -26,6 +26,8 @@ import {
   getSundayWeekStart
 } from './utils/time';
 import logoImg from './assets/app-logo.png';
+import usmanAvatar from './assets/usman.png';
+import adeelAvatar from './assets/adeel.jpg';
 import RotaIntroAnimation from './components/RotaIntroAnimation';
 import AttendanceCelebration from './components/AttendanceCelebration';
 import InstallAppBanner from './components/InstallAppBanner';
@@ -788,7 +790,10 @@ export default function App() {
 
   // 2. AUTHENTICATED VIEW: Usman & Adeel Attendance Entry Web
   const savedCount = workerRows.filter((w) => w.isSaved).length;
-  const operatorDisplayName = user?.name || (user?.username === 'adeel' ? 'Adeel Ahmed' : (user?.username === 'usman' ? 'Usman' : 'Attendance Operator'));
+  const isAdeel = (user?.username === 'adeel') || (typeof user?.name === 'string' && /adeel/i.test(user.name));
+  const isUsman = (user?.username === 'usman') || (typeof user?.name === 'string' && /usman/i.test(user.name));
+  const operatorDisplayName = user?.name || (isAdeel ? 'Adeel Ahmed' : (isUsman ? 'Usman Salahuddin' : 'Attendance Operator'));
+  const operatorPhoto = isAdeel ? adeelAvatar : (isUsman ? usmanAvatar : logoImg);
 
   return (
     <div className="mobile-app-shell">
@@ -816,17 +821,28 @@ export default function App() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            width: '38px',
-            height: '38px',
-            borderRadius: '8px',
-            backgroundColor: '#ffffff',
-            padding: '2px',
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            backgroundColor: '#1e293b',
+            border: '2px solid #3b82f6',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            flexShrink: 0
           }}>
-            <img src={logoImg} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img
+              src={operatorPhoto}
+              alt={operatorDisplayName}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center top'
+              }}
+            />
           </div>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', lineHeight: 1.2 }}>
