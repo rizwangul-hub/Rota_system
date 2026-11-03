@@ -135,20 +135,67 @@ export default function App() {
     });
 
     // Map weekly rota assignments for this specific dateKey!
-    const rotaMap = {};
-    if (rotaRes.data?.success && rotaRes.data?.rota?.assignments) {
+    // An employee can have multiple assignments in the weekly rota on a single date (e.g. loaned to another shop and marked OFF elsewhere).
+    // We group all assignments for this dateKey by employeeId and resolve:
+    // 1. Working assignments ('AVAILABLE', 'LOANED', 'CUSTOM', etc.) take precedence over 'OFF'.
+    // 2. If a working assignment exists, the physical working shop and scheduled times are selected.
+    // 3. If the employee only has 'OFF' (or 'ABSENT' / 'LEAVE') assignments on this dateKey, they are scheduled OFF -> set status to 'Absent' with no shop.
+    const rotaByEmployee = {};
+    const OFF_STATUSES = ['OFF', 'ABSENT', 'LEAVE', 'UNAVAILABLE'];
+
+    if (rotaRes.data?.success && Array.isArray(rotaRes.data?.rota?.assignments)) {
       rotaRes.data.rota.assignments.forEach((asg) => {
-        if (asg.dateKey === dateStr && asg.employeeId) {
-          const empId = asg.employeeId?._id || asg.employeeId;
-          rotaMap[empId.toString()] = asg;
+        const asgDateStr = typeof asg.dateKey === 'string'
+          ? asg.dateKey.slice(0, 10)
+          : (asg.dateKey ? new Date(asg.dateKey).toISOString().slice(0, 10) : '');
+
+        if (asgDateStr === dateStr && asg.employeeId) {
+          const empId = (asg.employeeId?._id || asg.employeeId).toString();
+          if (!rotaByEmployee[empId]) rotaByEmployee[empId] = [];
+          rotaByEmployee[empId].push(asg);
         }
       });
     }
 
+    const rotaResolution = {};
+    Object.keys(rotaByEmployee).forEach((empId) => {
+      const asgs = rotaByEmployee[empId];
+      // Find active working assignment
+      const workingAsg = asgs.find(
+        (a) => a.status && !OFF_STATUSES.includes(String(a.status).toUpperCase())
+      );
+
+      if (workingAsg) {
+        // Physical shop where the worker is assigned to work
+        const workingShopId = (workingAsg.status === 'LOANED' || (workingAsg.homeShopId && workingAsg.homeShopId.toString() !== workingAsg.shopId?.toString()))
+          ? (workingAsg.shopId?._id || workingAsg.shopId)
+          : (workingAsg.shopId?._id || workingAsg.shopId || workingAsg.homeShopId);
+
+        rotaResolution[empId] = {
+          isWorking: true,
+          isOff: false,
+          shopId: workingShopId ? workingShopId.toString() : undefined,
+          startTime: workingAsg.startTime,
+          endTime: workingAsg.endTime,
+          assignment: workingAsg
+        };
+      } else if (asgs.length > 0 && asgs.every((a) => OFF_STATUSES.includes(String(a.status || '').toUpperCase()))) {
+        // Scheduled OFF across the board
+        rotaResolution[empId] = {
+          isWorking: false,
+          isOff: true,
+          shopId: undefined,
+          startTime: '',
+          endTime: '',
+          assignment: asgs[0]
+        };
+      }
+    });
+
     const rows = activeEmployees.map((emp) => {
       const empIdStr = emp._id.toString();
       const existing = attMap[empIdStr];
-      const rotaAssignment = rotaMap[empIdStr];
+      const rotaInfo = rotaResolution[empIdStr];
 
       if (existing) {
         const isLocked = ['Checked', 'Finalized'].includes(existing.approvalStatus);
@@ -172,6 +219,23 @@ export default function App() {
           isSaved: true,
           fromWeeklyRota: false
         };
+      } else if (rotaInfo && rotaInfo.isOff) {
+        // ── AUTO-SET OFF / ABSENT FROM WEEKLY ROTA (NO SHOP) ─────────────────
+        return {
+          employeeId: emp._id,
+          employeeName: emp.name,
+          empCode: emp.employeeId,
+          shopId: undefined,
+          shiftStart: '',
+          shiftEnd: '',
+          timeReached: '',
+          workerEndTime: '',
+          status: 'Absent',
+          remarks: '',
+          isLocked: false,
+          isSaved: false,
+          fromWeeklyRota: true
+        };
       } else {
         // ── AUTO-SELECT SHOP FROM WEEKLY ROTA IF ASSIGNED BY ADMIN ─────────────────
         let autoShopId = undefined;
@@ -179,11 +243,11 @@ export default function App() {
         let start = defaultShiftStart;
         let end = defaultShiftEnd;
 
-        if (rotaAssignment && rotaAssignment.shopId) {
-          autoShopId = (rotaAssignment.shopId?._id || rotaAssignment.shopId).toString();
+        if (rotaInfo && rotaInfo.isWorking && rotaInfo.shopId) {
+          autoShopId = rotaInfo.shopId;
           isFromRota = true;
-          if (rotaAssignment.startTime) start = rotaAssignment.startTime;
-          if (rotaAssignment.endTime) end = rotaAssignment.endTime;
+          if (rotaInfo.startTime) start = rotaInfo.startTime;
+          if (rotaInfo.endTime) end = rotaInfo.endTime;
         } else if (emp.assignedShop) {
           autoShopId = (emp.assignedShop?._id || emp.assignedShop).toString();
         }
@@ -279,6 +343,18 @@ export default function App() {
         shiftEnd: '',
         timeReached: '',
         workerEndTime: '',
+        fromWeeklyRota: false
+      };
+    } else if (field === 'status' && value !== 'Absent' && updated[index].status === 'Absent') {
+      const defaultStart = '09:00';
+      const defaultEnd = '19:00';
+      updated[index] = {
+        ...updated[index],
+        status: value,
+        shiftStart: updated[index].shiftStart || defaultStart,
+        shiftEnd: updated[index].shiftEnd || defaultEnd,
+        timeReached: updated[index].timeReached || defaultStart,
+        workerEndTime: updated[index].workerEndTime || defaultEnd,
         fromWeeklyRota: false
       };
     } else {
@@ -981,13 +1057,29 @@ export default function App() {
                   backgroundColor: '#fef2f2',
                   border: '1px solid #fecaca',
                   borderRadius: '8px',
-                  padding: '10px',
+                  padding: '10px 12px',
                   fontSize: '12px',
                   color: '#b91c1c',
                   fontWeight: 600,
-                  marginBottom: '10px'
+                  marginBottom: '10px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}>
-                  Absent — no shop or time details are needed.
+                  <span>Absent — no shop or time details are needed.</span>
+                  {row.fromWeeklyRota && (
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: '#b91c1c',
+                      backgroundColor: '#fee2e2',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #fca5a5'
+                    }}>
+                      ✓ OFF in Weekly Rota
+                    </span>
+                  )}
                 </div>
               ) : (
                 <>
