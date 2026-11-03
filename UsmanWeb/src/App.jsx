@@ -25,9 +25,10 @@ import {
   parseTimeInput,
   getSundayWeekStart
 } from './utils/time';
-import logoImg from './assets/logo.jpg';
+import logoImg from './assets/app-logo.png';
 import RotaIntroAnimation from './components/RotaIntroAnimation';
 import AttendanceCelebration from './components/AttendanceCelebration';
+import InstallAppBanner from './components/InstallAppBanner';
 
 // Time Input component with smart 12-hour AM/PM formatting
 function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType }) {
@@ -622,10 +623,10 @@ export default function App() {
             </div>
 
             <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px', marginBottom: '2px' }}>
-              PIXX ROTA
+              ATTENDANCE ROTA
             </h1>
             <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
-              Attendance Entry Web
+              Pixx Technologies Attendance Web
             </p>
             <span style={{
               display: 'inline-block',
@@ -726,6 +727,9 @@ export default function App() {
                 )}
               </button>
             </form>
+
+            {/* Mobile Web View PWA Install Option */}
+            <InstallAppBanner />
           </div>
         </div>
 

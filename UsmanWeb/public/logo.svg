@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+
+    <!-- Header Gradient -->
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+
+    <!-- Checkmark Glow Gradient -->
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="50%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- Accent Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="subtleGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Base Rounded Icon Container -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="rgba(255, 255, 255, 0.15)" stroke-width="4" />
+
+  <!-- Ambient Backdrop Glow -->
+  <circle cx="256" cy="240" r="140" fill="#2563eb" opacity="0.25" filter="url(#glow)" />
+  <circle cx="280" cy="280" r="100" fill="#06b6d4" opacity="0.2" filter="url(#glow)" />
+
+  <!-- Modern Calendar Body Card -->
+  <g transform="translate(106, 96)">
+    <!-- Shadow -->
+    <rect x="0" y="8" width="300" height="290" rx="36" fill="#000000" opacity="0.4" filter="url(#glow)" />
+
+    <!-- Calendar Plate -->
+    <rect x="0" y="0" width="300" height="290" rx="36" fill="#ffffff" />
+
+    <!-- Calendar Top Bar -->
+    <path d="M 0,36 C 0,16.1 16.1,0 36,0 L 264,0 C 283.9,0 300,16.1 300,36 L 300,82 L 0,82 Z" fill="url(#headerGrad)" />
+
+    <!-- Calendar Binder Rings -->
+    <rect x="65" y="-14" width="22" height="34" rx="11" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+    <rect x="213" y="-14" width="22" height="34" rx="11" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+
+    <!-- Grid Dots (Modern Rota Matrix) -->
+    <g fill="#cbd5e1" opacity="0.75">
+      <circle cx="55" cy="120" r="8" />
+      <circle cx="110" cy="120" r="8" />
+      <circle cx="165" cy="120" r="8" />
+      <circle cx="220" cy="120" r="8" />
+
+      <circle cx="55" cy="165" r="8" />
+      <circle cx="110" cy="165" r="8" fill="#93c5fd" />
+      <circle cx="165" cy="165" r="8" fill="#60a5fa" />
+      <circle cx="220" cy="165" r="8" />
+
+      <circle cx="55" cy="210" r="8" />
+      <circle cx="110" cy="210" r="8" />
+      <circle cx="165" cy="210" r="8" />
+      <circle cx="220" cy="210" r="8" />
+    </g>
+
+    <!-- Circular Badge for Checkmark & Clock -->
+    <circle cx="195" cy="210" r="68" fill="#ffffff" filter="url(#glow)" />
+    <circle cx="195" cy="210" r="60" fill="url(#checkGrad)" filter="url(#subtleGlow)" />
+
+    <!-- Crisp White Checkmark in Badge -->
+    <path d="M 168 210 L 186 228 L 224 190" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- Subtle Clock Accent Arc on bottom-left -->
+  <g transform="translate(136, 420)">
+    <circle cx="120" cy="0" r="6" fill="#38bdf8" />
+    <circle cx="95" cy="0" r="4" fill="#64748b" />
+    <circle cx="145" cy="0" r="4" fill="#64748b" />
+  </g>
+
+  <!-- Typography at bottom: ATTENDANCE ROTA -->
+  <text x="256" y="458" font-family="'Inter', -apple-system, sans-serif" font-size="28" font-weight="900" fill="#f8fafc" letter-spacing="4" text-anchor="middle">ATTENDANCE ROTA</text>
+  <text x="256" y="482" font-family="'Inter', -apple-system, sans-serif" font-size="14" font-weight="700" fill="#06b6d4" letter-spacing="3" text-anchor="middle">PIXX TECHNOLOGIES</text>
+</svg>

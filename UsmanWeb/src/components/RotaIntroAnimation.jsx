@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import logoImg from '../assets/logo.jpg';
+import logoImg from '../assets/app-logo.png';
 
 /**
  * RotaIntroAnimation
@@ -230,7 +230,7 @@ export default function RotaIntroAnimation({ onComplete }) {
             textShadow: '0 2px 10px rgba(0, 0, 0, 0.4)'
           }}
         >
-          PIXX ROTA
+          ATTENDANCE ROTA
         </div>
         <div
           style={{
@@ -242,7 +242,7 @@ export default function RotaIntroAnimation({ onComplete }) {
             marginTop: '4px'
           }}
         >
-          Attendance & Operations
+          Pixx Technologies Mobile
         </div>
       </div>
 
