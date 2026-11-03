@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   Send,
   Save,
-  Check
+  Check,
+  FileDown
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import api, { API_BASE_URL } from './services/api';
@@ -93,6 +94,7 @@ export default function App() {
   const [workerRows, setWorkerRows] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Modern animation states
   const [showIntro, setShowIntro] = useState(() => {
@@ -458,6 +460,46 @@ export default function App() {
 
   const handleToday = () => {
     setCurrentDate(new Date());
+  };
+
+  // Direct Download Daily Attendance PDF (Exact matching Admin/Sarfraz PDF report)
+  const handleDownloadDailyPdf = async () => {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const res = await api.get('/reports/daily-attendance/pdf', {
+        params: { date: rawDateString },
+        responseType: 'blob'
+      });
+
+      const contentType = res.headers['content-type'] || '';
+      if (contentType.includes('application/json')) {
+        const text = await res.data.text();
+        const errJson = JSON.parse(text);
+        throw new Error(errJson.message || 'Error generating PDF.');
+      }
+
+      const fileName = `Daily_Attendance_${rawDateString}.pdf`;
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+      }, 1500);
+    } catch (err) {
+      showAlert(
+        'PDF Download Failed',
+        err.message || err.response?.data?.message || 'Could not download daily attendance PDF.'
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   // Single Worker Save
@@ -854,24 +896,53 @@ export default function App() {
           </div>
         </div>
 
-        <button
-          onClick={logout}
-          style={{
-            backgroundColor: '#1e293b',
-            color: '#cbd5e1',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            fontSize: '12px',
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            border: '1px solid #334155'
-          }}
-        >
-          <LogOut size={14} />
-          <span>Logout</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleDownloadDailyPdf}
+            disabled={downloadingPdf}
+            title="Download Daily Attendance PDF"
+            style={{
+              backgroundColor: '#1e293b',
+              color: '#f8fafc',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '1px solid #334155',
+              cursor: downloadingPdf ? 'wait' : 'pointer'
+            }}
+          >
+            {downloadingPdf ? (
+              <RefreshCw size={13} className="spin" color="#60a5fa" />
+            ) : (
+              <FileDown size={14} color="#f87171" />
+            )}
+            <span>PDF</span>
+          </button>
+
+          <button
+            onClick={logout}
+            style={{
+              backgroundColor: '#1e293b',
+              color: '#cbd5e1',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '1px solid #334155'
+            }}
+          >
+            <LogOut size={14} />
+            <span>Logout</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Scrollable Content */}
@@ -957,6 +1028,39 @@ export default function App() {
               Next Day ▶
             </button>
           </div>
+
+          {/* Direct Download Daily Attendance PDF Button */}
+          <button
+            type="button"
+            onClick={handleDownloadDailyPdf}
+            disabled={downloadingPdf}
+            style={{
+              marginTop: '12px',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              fontSize: '13px',
+              fontWeight: 800,
+              border: 'none',
+              cursor: downloadingPdf ? 'wait' : 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              transition: 'transform 0.1s, opacity 0.15s',
+              opacity: downloadingPdf ? 0.8 : 1
+            }}
+          >
+            {downloadingPdf ? (
+              <RefreshCw size={15} className="spin" color="#2563eb" />
+            ) : (
+              <FileDown size={16} color="#dc2626" />
+            )}
+            <span>{downloadingPdf ? 'Generating Daily PDF...' : 'Download Daily Attendance PDF'}</span>
+          </button>
         </div>
 
         {/* Workers List Section Header */}
