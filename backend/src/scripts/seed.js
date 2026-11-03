@@ -173,6 +173,13 @@ const seedData = async () => {
       assignedShop: shopMap['Station']._id
     });
 
+    const adeelUser = await User.create({
+      name: 'Adeel Ahmed',
+      username: 'adeel',
+      password: seedPassword,
+      role: 'ATTENDANCE_OPERATOR'
+    });
+
     // 5. Employees
     console.log('Seeding Employees...');
     const employeesData = [

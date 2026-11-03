@@ -648,7 +648,7 @@ export default function App() {
               <input
                 type="text"
                 autoCapitalize="none"
-                placeholder="Username (e.g. usman)"
+                placeholder="Username (usman or adeel)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 style={{
@@ -786,8 +786,9 @@ export default function App() {
     );
   }
 
-  // 2. AUTHENTICATED VIEW: Usman Attendance Entry Web
+  // 2. AUTHENTICATED VIEW: Usman & Adeel Attendance Entry Web
   const savedCount = workerRows.filter((w) => w.isSaved).length;
+  const operatorDisplayName = user?.name || (user?.username === 'adeel' ? 'Adeel Ahmed' : (user?.username === 'usman' ? 'Usman' : 'Attendance Operator'));
 
   return (
     <div className="mobile-app-shell">
@@ -829,7 +830,7 @@ export default function App() {
           </div>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', lineHeight: 1.2 }}>
-              {user?.name || 'Usman'}
+              {operatorDisplayName}
             </div>
             <div style={{ fontSize: '11px', color: '#94a3b8' }}>
               Attendance Operator
