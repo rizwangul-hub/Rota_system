@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import './WeeklySalaryPage.css';
 import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
+import CelebrationOverlay from '../components/celebrations/CelebrationOverlay';
 
 const ADJUSTMENT_TYPES = [
   { value: 'TRAVEL_ALLOWANCE', label: 'Travel Allowance', color: '#2563eb' },
@@ -71,6 +72,8 @@ export default function WeeklySalaryPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationData, setCelebrationData] = useState({ totalAmount: 0, employeeCount: 0 });
 
   // Date & Week State
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -250,6 +253,16 @@ export default function WeeklySalaryPage() {
       });
       if (res.data.success) {
         showNotification(res.data.message || 'Weekly salary calculated successfully.');
+        const generatedSalaries = Array.isArray(res.data.salaries) ? res.data.salaries : [];
+        const total = generatedSalaries.reduce(
+          (sum, s) => sum + (typeof s.netPayable === 'number' ? s.netPayable : (s.totalPay || s.grossAttendanceWages || 0)),
+          0
+        );
+        setCelebrationData({
+          totalAmount: total,
+          employeeCount: res.data.count || generatedSalaries.length
+        });
+        setShowCelebration(true);
         fetchWeekInfoAndSalaries();
       }
     } catch (err) {
@@ -1763,6 +1776,14 @@ export default function WeeklySalaryPage() {
           </div>
         </div>
       )}
+
+      {/* ── Weekly Payroll Generation Celebration ────────────────────── */}
+      <CelebrationOverlay
+        show={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        type="payroll"
+        data={celebrationData}
+      />
     </div>
   );
 }

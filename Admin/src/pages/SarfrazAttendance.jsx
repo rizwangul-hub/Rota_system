@@ -24,6 +24,7 @@ import {
   Info
 } from 'lucide-react';
 import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
+import CelebrationOverlay from '../components/celebrations/CelebrationOverlay';
 
 // Module-level cache for attendance reports across tab navigation
 const _attendanceCache = new Map();
@@ -127,6 +128,8 @@ export default function SarfrazAttendance() {
   const [detailModalRecord, setDetailModalRecord] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ open: false, type: 'single', recordId: null, count: 0 });
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [approvedCelebrationCount, setApprovedCelebrationCount] = useState(0);
   const [whatsAppText, setWhatsAppText] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
@@ -264,6 +267,8 @@ export default function SarfrazAttendance() {
       if (res.data.success) {
         _attendanceCache.clear();
         showNotification(res.data.message || `Successfully checked and approved ${targetIds.length} record(s).`);
+        setApprovedCelebrationCount(targetIds.length);
+        setShowCelebration(true);
         fetchAttendanceData();
       }
     } catch (err) {
@@ -1289,6 +1294,14 @@ export default function SarfrazAttendance() {
           </div>
         </div>
       )}
+
+      {/* ── Daily Attendance Approval Celebration ─────────────────── */}
+      <CelebrationOverlay
+        show={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        type="attendance"
+        data={{ approvedCount: approvedCelebrationCount }}
+      />
     </div>
   );
 }
