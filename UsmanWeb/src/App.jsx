@@ -616,71 +616,61 @@ export default function App() {
     setCurrentDate(new Date());
   };
 
-  // Direct Export Daily Attendance to PDF & WhatsApp (Select group and send)
+  // Direct Export Daily Attendance PDF to WhatsApp (Send PDF only, no text message)
   const handleExportToPdf = async () => {
     if (exportingPdf) return;
     setExportingPdf(true);
     try {
-      const [pdfRes, reportRes] = await Promise.all([
-        api.get('/reports/daily-attendance/pdf', {
-          params: { date: rawDateString },
-          responseType: 'blob'
-        }).catch(() => null),
-        api.get('/reports/daily-attendance', {
-          params: { date: rawDateString }
-        }).catch(() => null)
-      ]);
+      const pdfRes = await api.get('/reports/daily-attendance/pdf', {
+        params: { date: rawDateString },
+        responseType: 'blob'
+      });
 
-      const whatsAppText = reportRes?.data?.whatsAppText ||
-        `🚴 *PixxTechnologies - Daily Attendance*\n📅 *Date:* ${formatUKDisplayDate(currentDate)}\n📍 *Location:* All Shops\n\n_Generated from PixxTechnologies Rota System_`;
-
-      const fileName = `Daily_Attendance_${rawDateString}.pdf`;
-      let pdfBlob = null;
-
-      if (pdfRes?.data && pdfRes.data instanceof Blob) {
-        const contentType = pdfRes.headers['content-type'] || '';
-        if (!contentType.includes('application/json')) {
-          pdfBlob = new Blob([pdfRes.data], { type: 'application/pdf' });
-        }
+      const contentType = pdfRes.headers?.['content-type'] || '';
+      if (contentType.includes('application/json')) {
+        const text = await pdfRes.data.text();
+        const errJson = JSON.parse(text);
+        throw new Error(errJson.message || 'Error generating PDF.');
       }
 
-      // 1. If on mobile device with file-sharing support, open native Share Sheet (shows WhatsApp at top)
-      if (pdfBlob && typeof navigator !== 'undefined' && navigator.canShare) {
+      const fileName = `Daily_Attendance_${rawDateString}.pdf`;
+      const pdfBlob = new Blob([pdfRes.data], { type: 'application/pdf' });
+
+      // 1. Mobile browser / PWA: open native Share Sheet to select WhatsApp group and send PDF directly (NO text message)
+      if (typeof navigator !== 'undefined' && navigator.canShare) {
         try {
           const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
           if (navigator.canShare({ files: [pdfFile] })) {
             await navigator.share({
-              title: `Daily Attendance - ${formatUKDisplayDate(currentDate)}`,
-              text: whatsAppText,
+              title: `Daily Attendance ${rawDateString}`,
               files: [pdfFile]
             });
             return;
           }
         } catch (shareErr) {
           if (shareErr.name === 'AbortError') {
-            return; // User dismissed share sheet
+            return; // User cancelled the share dialog
           }
         }
       }
 
-      // 2. Direct WhatsApp Open: opens WhatsApp with contact/group picker and formatted report text
-      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsAppText)}`;
-      window.open(waUrl, '_blank');
+      // 2. Fallback for desktop or browsers without direct file sharing: download the PDF file
+      const downloadUrl = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+      }, 1500);
 
-      // 3. Also trigger PDF download so the document is saved on their device
-      if (pdfBlob) {
-        const downloadUrl = window.URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = fileName;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          if (link.parentNode) link.parentNode.removeChild(link);
-          window.URL.revokeObjectURL(downloadUrl);
-        }, 1500);
-      }
+      showAlert(
+        'PDF Downloaded',
+        `Attendance PDF (${fileName}) has been downloaded. You can now attach it directly into your WhatsApp chat or group.`
+      );
     } catch (err) {
       showAlert(
         'Export Failed',
@@ -1165,7 +1155,7 @@ export default function App() {
             type="button"
             onClick={handleExportToPdf}
             disabled={exportingPdf}
-            title="Export to PDF & Send to WhatsApp"
+            title="Export to WhatsApp"
             style={{
               backgroundColor: '#1e293b',
               color: '#f8fafc',
@@ -1185,7 +1175,7 @@ export default function App() {
             ) : (
               <MessageSquare size={14} color="#22c55e" />
             )}
-            <span>Export to PDF</span>
+            <span>Export to WhatsApp</span>
           </button>
 
           <button
@@ -1336,7 +1326,7 @@ export default function App() {
                 <MessageSquare size={16} color="#16a34a" />
               </div>
             )}
-            <span>{exportingPdf ? 'Preparing WhatsApp Export...' : 'Export to PDF (Send to WhatsApp)'}</span>
+            <span>{exportingPdf ? 'Preparing WhatsApp Export...' : 'Export to WhatsApp'}</span>
           </button>
         </div>
 
