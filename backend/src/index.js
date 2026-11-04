@@ -23,6 +23,7 @@ const auditRoutes = require('./routes/auditRoutes');
 const settingRoutes = require('./routes/settingRoutes');
 const rotaRoutes = require('./routes/rotaRoutes');
 const loanRoutes = require('./routes/loanRoutes');
+const versionRoutes = require('./routes/versionRoutes');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -144,6 +145,9 @@ app.use('/rota', rotaRoutes);
 
 app.use('/api/loans', loanRoutes);
 app.use('/loans', loanRoutes);
+
+app.use('/api/version', versionRoutes);
+app.use('/version', versionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { registerAxiosTracker } from '../utils/unsavedChangesTracker';
+
+// Hook into axios to protect active in-flight transactions during updates
+registerAxiosTracker(axios);
 
 const AuthContext = createContext();
 

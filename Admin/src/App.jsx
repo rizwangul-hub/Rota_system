@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PanelLeftOpen } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider, useSidebar } from './context/SidebarContext';
+import { SystemUpdateProvider } from './context/SystemUpdateContext';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 
@@ -89,8 +90,9 @@ function RoleDefaultRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <SidebarProvider>
-        <BrowserRouter>
+      <SystemUpdateProvider>
+        <SidebarProvider>
+          <BrowserRouter>
           <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -207,6 +209,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       </SidebarProvider>
+      </SystemUpdateProvider>
     </AuthProvider>
   );
 }

@@ -4,6 +4,7 @@ import { Menu, LogOut, UserCircle, ShieldAlert, PanelLeftClose, PanelLeftOpen } 
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import UpdateNavbarBadge from './updates/UpdateNavbarBadge';
 
 const ROUTE_TITLES = {
   '/dashboard': { title: 'Executive Dashboard', parent: 'Core', parentPath: '/dashboard' },
@@ -114,6 +115,9 @@ export default function Navbar() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+        {/* Smart System Update Available Badge */}
+        <UpdateNavbarBadge />
+
         {complianceCounts.total > 0 && (
           <Link
             to="/employees"

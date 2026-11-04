@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { registerAxiosTracker } from '../utils/unsavedChangesTracker';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || (
   import.meta.env.DEV
@@ -10,6 +11,8 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000
 });
+
+registerAxiosTracker(api);
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('usman_web_token');

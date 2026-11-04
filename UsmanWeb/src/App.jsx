@@ -39,6 +39,7 @@ import InstallAppBanner from './components/InstallAppBanner';
 import UserProfileModal from './components/UserProfileModal';
 import AttendanceReminderBanner from './components/AttendanceReminderBanner';
 import AttendanceReminderModal from './components/AttendanceReminderModal';
+import UpdateHeaderBadge from './components/updates/UpdateHeaderBadge';
 import {
   startDailyReminderScheduler,
   getNotificationPermissionStatus,
@@ -1117,6 +1118,9 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Smart System Update Badge */}
+          <UpdateHeaderBadge />
+
           {/* Daily Attendance Reminder Bell Button */}
           <button
             type="button"

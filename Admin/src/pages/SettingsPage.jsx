@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
-import { Store, Clock, Shield, Plus, Save, Check } from 'lucide-react';
+import { Store, Clock, Shield, Plus, Save, Check, Rocket, AlertTriangle, RefreshCw } from 'lucide-react';
 import { clearShopCache } from '../utils/shopCache';
 
 export default function SettingsPage() {
@@ -18,6 +18,19 @@ export default function SettingsPage() {
   const [newShopPhone, setNewShopPhone] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  // System Update & Version Management States
+  const [systemVersion, setSystemVersion] = useState({
+    version: '2.5.0',
+    buildId: '',
+    type: 'normal',
+    title: '🚀 System Update Available!',
+    message: 'We have improved the system with new features, enhancements, and bug fixes.\n\nPlease refresh the system to experience the latest improvements.',
+    releaseNotes: '',
+    criticalDeadlineMinutes: 30
+  });
+  const [publishingUpdate, setPublishingUpdate] = useState(false);
+  const [updatePublishSuccess, setUpdatePublishSuccess] = useState(false);
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -25,11 +38,12 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const [shopsRes, schedRes, setRes, reminderRes] = await Promise.all([
+      const [shopsRes, schedRes, setRes, reminderRes, versionRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/shops?includeInactive=true`),
         axios.get(`${API_BASE_URL}/shops/schedules`),
         axios.get(`${API_BASE_URL}/settings`),
-        axios.get(`${API_BASE_URL}/settings/attendance-reminder`)
+        axios.get(`${API_BASE_URL}/settings/attendance-reminder`),
+        axios.get(`${API_BASE_URL}/version`).catch(() => ({ data: {} }))
       ]);
 
       if (shopsRes.data.success) setShops(shopsRes.data.shops);
@@ -39,6 +53,19 @@ export default function SettingsPage() {
       }
       if (reminderRes.data.success && reminderRes.data.reminder) {
         setAttendanceReminder(reminderRes.data.reminder);
+      }
+      if (versionRes.data.success) {
+        setSystemVersion(current => ({
+          ...current,
+          version: versionRes.data.version || current.version,
+          buildId: versionRes.data.buildId || '',
+          type: versionRes.data.type || 'normal',
+          title: versionRes.data.title || current.title,
+          message: versionRes.data.message || current.message,
+          releaseNotes: Array.isArray(versionRes.data.releaseNotes)
+            ? versionRes.data.releaseNotes.join('\n')
+            : ''
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -141,6 +168,49 @@ export default function SettingsPage() {
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to save attendance reminder.');
+    }
+  };
+
+  const handlePublishUpdateAnnouncement = async (e) => {
+    e.preventDefault();
+    setPublishingUpdate(true);
+    setUpdatePublishSuccess(false);
+
+    try {
+      const isCritical = systemVersion.type === 'critical';
+      const deadline = isCritical && systemVersion.criticalDeadlineMinutes > 0
+        ? new Date(Date.now() + systemVersion.criticalDeadlineMinutes * 60 * 1000).toISOString()
+        : null;
+
+      const releaseNotesList = systemVersion.releaseNotes
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const res = await axios.put(`${API_BASE_URL}/version`, {
+        version: systemVersion.version,
+        type: systemVersion.type,
+        title: systemVersion.title,
+        message: systemVersion.message,
+        releaseNotes: releaseNotesList,
+        criticalDeadline: deadline,
+        bumpBuild: true
+      });
+
+      if (res.data.success) {
+        setUpdatePublishSuccess(true);
+        if (res.data.config) {
+          setSystemVersion(current => ({
+            ...current,
+            buildId: res.data.config.buildId
+          }));
+        }
+        setTimeout(() => setUpdatePublishSuccess(false), 4500);
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to publish system update announcement.');
+    } finally {
+      setPublishingUpdate(false);
     }
   };
 
@@ -256,6 +326,126 @@ export default function SettingsPage() {
             </div>
             <button type="submit" className="btn btn-primary btn-sm">
               <Plus size={14} /> Add Shop
+            </button>
+          </form>
+        </div>
+
+        {/* Smart System Version & Update Management Card */}
+        <div className="card" style={{ border: '1.5px solid #3b82f6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Rocket size={18} color="#2563eb" />
+              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
+                Smart System Update & Version
+              </h2>
+            </div>
+            <span style={{ fontSize: '11px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+              v{systemVersion.version}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '14px', lineHeight: 1.4 }}>
+            Active users automatically receive notifications when a new version is deployed. You can also broadcast manual release announcements.
+          </div>
+
+          {updatePublishSuccess && (
+            <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Check size={14} color="#059669" />
+              <span>Update broadcast published! Active users will be notified automatically.</span>
+            </div>
+          )}
+
+          <form onSubmit={handlePublishUpdateAnnouncement}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Release Version</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={systemVersion.version}
+                  onChange={e => setSystemVersion(c => ({ ...c, version: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Update Severity</label>
+                <select
+                  className="form-input"
+                  value={systemVersion.type}
+                  onChange={e => setSystemVersion(c => ({ ...c, type: e.target.value }))}
+                >
+                  <option value="normal">Normal Update</option>
+                  <option value="critical">Critical Update (Required)</option>
+                </select>
+              </div>
+            </div>
+
+            {systemVersion.type === 'critical' && (
+              <div className="form-group" style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#991b1b', marginBottom: '6px' }}>
+                  <AlertTriangle size={14} />
+                  <span>Critical Enforcement Deadline</span>
+                </div>
+                <select
+                  className="form-input"
+                  value={systemVersion.criticalDeadlineMinutes}
+                  onChange={e => setSystemVersion(c => ({ ...c, criticalDeadlineMinutes: Number(e.target.value) }))}
+                >
+                  <option value={15}>15 Minutes from now</option>
+                  <option value={30}>30 Minutes from now</option>
+                  <option value={60}>1 Hour from now</option>
+                  <option value={120}>2 Hours from now</option>
+                  <option value={0}>Immediate (No grace period)</option>
+                </select>
+                <small style={{ color: '#b91c1c', display: 'block', marginTop: '4px' }}>
+                  After deadline passes, active users are prompted to reload to continue.
+                </small>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label">Update Title</label>
+              <input
+                type="text"
+                className="form-input"
+                value={systemVersion.title}
+                onChange={e => setSystemVersion(c => ({ ...c, title: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Release Notes (One item per line)</label>
+              <textarea
+                className="form-input"
+                rows={3}
+                placeholder="Added new attendance feature&#10;Improved rota planning speed&#10;Fixed late calculation edge cases"
+                value={systemVersion.releaseNotes}
+                onChange={e => setSystemVersion(c => ({ ...c, releaseNotes: e.target.value }))}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm"
+              disabled={publishingUpdate}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                background: systemVersion.type === 'critical' ? '#dc2626' : '#2563eb',
+                borderColor: systemVersion.type === 'critical' ? '#dc2626' : '#2563eb'
+              }}
+            >
+              {publishingUpdate ? (
+                <RefreshCw size={14} className="spin" />
+              ) : (
+                <Rocket size={14} />
+              )}
+              <span>{publishingUpdate ? 'Broadcasting...' : 'Broadcast Update Announcement'}</span>
             </button>
           </form>
         </div>
