@@ -7,6 +7,7 @@ import {
   UserCheck, UserX, Users, X
 } from 'lucide-react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import CelebrationOverlay from '../components/celebrations/CelebrationOverlay';
 import './WeeklyRotaPlanner.css';
 
 const API = `${API_BASE_URL}/rota`;
@@ -86,6 +87,7 @@ export default function WeeklyRotaPlanner() {
   const [copying, setCopying] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // Fullscreen & Pick/Drop Modes
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1033,6 +1035,7 @@ export default function WeeklyRotaPlanner() {
           shopRosters,
           fetchedAt: Date.now()
         });
+        setShowCelebration(true);
       }
       setNotice('Weekly Rota draft saved successfully!');
     } catch (err) {
@@ -2570,6 +2573,14 @@ export default function WeeklyRotaPlanner() {
           </div>
         </div>
       )}
+
+      {/* ── Weekly Rota Creation Celebration ──────────────────────── */}
+      <CelebrationOverlay
+        show={showCelebration}
+        onClose={() => setShowCelebration(false)}
+        type="rota"
+        data={{ weekLabel: `Week Starting ${weekStart}` }}
+      />
     </div>
   );
 }

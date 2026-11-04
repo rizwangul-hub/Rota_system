@@ -1,0 +1,339 @@
+/* Celebration Animations CSS */
+
+/* Base Overlay */
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.75) 100%);
+  backdrop-filter: blur(4px);
+  animation: celebrationFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.celebration-overlay.fading-out {
+  animation: celebrationFadeOut 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.celebration-particles-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Card Container */
+.celebration-card {
+  position: relative;
+  z-index: 10;
+  width: 90%;
+  max-width: 480px;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 32px 28px;
+  text-align: center;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35), 0 0 40px rgba(255, 255, 255, 0.2);
+  animation: celebrationCardPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.celebration-card-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: none;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 20;
+}
+
+.celebration-card-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  transform: scale(1.08);
+}
+
+/* Specific Card Themes */
+.celebration-card-rota {
+  border: 2px solid #06b6d4;
+  box-shadow: 0 20px 50px -10px rgba(6, 182, 212, 0.35), 0 0 30px rgba(20, 184, 166, 0.2);
+}
+
+.celebration-card-payroll {
+  border: 2px solid #10b981;
+  box-shadow: 0 20px 50px -10px rgba(16, 185, 129, 0.35), 0 0 35px rgba(245, 158, 11, 0.25);
+}
+
+.celebration-card-attendance {
+  border: 2px solid #ec4899;
+  box-shadow: 0 20px 50px -10px rgba(236, 72, 153, 0.35), 0 0 35px rgba(168, 85, 247, 0.25);
+}
+
+/* Titles and Text */
+.celebration-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  line-height: 1.3;
+  letter-spacing: -0.3px;
+}
+
+.celebration-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.celebration-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+/* ── 1. ROTA THEME: Animated Calendar Cards ── */
+.rota-calendar-cluster {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.rota-cal-card {
+  width: 58px;
+  height: 68px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 2px solid #06b6d4;
+  box-shadow: 0 8px 16px rgba(6, 182, 212, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: rotaCalEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  position: relative;
+}
+
+.rota-cal-header {
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 0;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.rota-cal-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+}
+
+.rota-cal-check {
+  animation: rotaCheckPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards;
+}
+
+/* Floating Stars */
+.floating-star {
+  position: absolute;
+  pointer-events: none;
+  animation: floatStar 3s ease-in-out infinite alternate;
+}
+
+/* ── 2. PAYROLL THEME: 3D Golden Coins ── */
+.payroll-coins-cluster {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.gold-coin {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fef08a 0%, #f59e0b 50%, #b45309 100%);
+  border: 3px solid #fef3c7;
+  box-shadow: 0 10px 20px rgba(245, 158, 11, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #78350f;
+  font-weight: 900;
+  font-size: 22px;
+  animation: coinSpinAndFloat 2s ease-in-out infinite alternate;
+  position: relative;
+}
+
+.gold-coin::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  width: 14px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  transform: rotate(-30deg);
+}
+
+.payroll-amount-counter {
+  font-size: 24px;
+  font-weight: 900;
+  color: #059669;
+  letter-spacing: -0.5px;
+}
+
+/* Floating Coins in Background */
+.bg-floating-coin {
+  position: absolute;
+  bottom: -60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fef08a 0%, #f59e0b 60%, #b45309 100%);
+  border: 2px solid #fef3c7;
+  box-shadow: 0 8px 16px rgba(245, 158, 11, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #78350f;
+  font-weight: 900;
+  pointer-events: none;
+  animation: floatUpward linear forwards;
+}
+
+/* ── 3. ATTENDANCE THEME: Floating Balloons ── */
+.balloon-item {
+  position: absolute;
+  bottom: -100px;
+  pointer-events: none;
+  animation: balloonRise linear forwards;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.balloon-body {
+  border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+  box-shadow: inset -4px -4px 8px rgba(0, 0, 0, 0.15), 0 8px 16px rgba(0, 0, 0, 0.12);
+  position: relative;
+}
+
+.balloon-body::before {
+  content: '';
+  position: absolute;
+  top: 15%;
+  left: 20%;
+  width: 25%;
+  height: 35%;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  transform: rotate(-35deg);
+}
+
+.balloon-knot {
+  width: 6px;
+  height: 4px;
+  margin-top: -1px;
+  border-radius: 2px;
+}
+
+.balloon-string {
+  width: 1.5px;
+  height: 36px;
+  background: rgba(148, 163, 184, 0.7);
+  transform-origin: top center;
+  animation: stringSway 1.5s ease-in-out infinite alternate;
+}
+
+/* ── KEYFRAMES ── */
+@keyframes celebrationFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes celebrationFadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes celebrationCardPop {
+  0% { opacity: 0; transform: scale(0.65) translateY(30px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes rotaCalEntrance {
+  0% { opacity: 0; transform: translateY(20px) rotate(-8deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+@keyframes rotaCheckPop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+@keyframes coinSpinAndFloat {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(-10px) rotate(12deg); }
+}
+
+@keyframes floatUpward {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
+}
+
+@keyframes balloonRise {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  5% { opacity: 1; }
+  50% { transform: translateY(-55vh) translateX(25px); }
+  95% { opacity: 1; }
+  100% { transform: translateY(-115vh) translateX(-20px); opacity: 0; }
+}
+
+@keyframes stringSway {
+  0% { transform: rotate(-8deg); }
+  100% { transform: rotate(8deg); }
+}
+
+@keyframes floatStar {
+  0% { transform: translateY(0) scale(0.85) rotate(0deg); opacity: 0.6; }
+  100% { transform: translateY(-18px) scale(1.15) rotate(35deg); opacity: 1; }
+}
+
+/* Accessibility: prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .celebration-overlay,
+  .celebration-card,
+  .gold-coin,
+  .balloon-item,
+  .bg-floating-coin,
+  .floating-star {
+    animation: none !important;
+    transition: none !important;
+  }
+}
