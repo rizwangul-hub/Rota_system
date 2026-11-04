@@ -103,13 +103,8 @@ export function SystemUpdateProvider({ children }) {
     try {
       const timestamp = Date.now();
       const [staticRes, apiRes] = await Promise.all([
-        fetch(`/version.json?t=${timestamp}`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
-        }).then(r => (r.ok ? r.json() : null)).catch(() => null),
-        api.get(`/version?t=${timestamp}`, {
-          headers: { 'Cache-Control': 'no-cache' }
-        }).then(r => r.data).catch(() => null)
+        fetch(`/version.json?t=${timestamp}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
+        api.get(`/version?t=${timestamp}`).then(r => r.data).catch(() => null)
       ]);
 
       const latestData = apiRes?.success ? apiRes : staticRes;

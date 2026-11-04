@@ -15,7 +15,7 @@ import {
   CalendarDays,
   PanelLeftClose
 } from 'lucide-react';
-import logo from '../assets/logo.jpg';
+const logo = '/logo.jpg';
 import { useSidebar } from '../context/SidebarContext';
 
 export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: propSetMobileOpen }) {

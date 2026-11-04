@@ -18,7 +18,7 @@ import {
   Sparkles,
   Monitor
 } from 'lucide-react';
-import logo from '../assets/logo.jpg';
+const logo = '/logo.jpg';
 
 export default function Login() {
   const { login } = useAuth();
