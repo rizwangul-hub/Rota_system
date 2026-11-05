@@ -188,13 +188,20 @@ input:focus, textarea:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  gap: 5px;
+  height: 32px;
+  padding: 0 9px;
   flex-shrink: 0;
-  border: 1px solid #475569;
-  border-radius: 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
   color: #fbbf24;
   background: #1e293b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+:root[data-theme="dark"] .theme-toggle {
+  border-color: #ca8a04;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
 }
 .theme-toggle:hover { background: #334155; }
 .theme-toggle:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
