@@ -10,7 +10,7 @@ import newLogo from '../assets/app-logo.png';
  * - iOS Safari step-by-step visual installation guide modal
  * - Detects if already running inside standalone app mode
  */
-export default function InstallAppBanner() {
+export default function InstallAppBanner({ isDark = false }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -91,7 +91,7 @@ export default function InstallAppBanner() {
           gap: '6px',
           fontSize: '11px',
           fontWeight: 700,
-          color: '#15803d'
+          color: 'var(--theme-green-text)'
         }}
       >
         <Check size={14} />
@@ -108,9 +108,9 @@ export default function InstallAppBanner() {
           marginTop: '20px',
           padding: '12px 14px',
           borderRadius: '14px',
-          backgroundColor: '#f8fafc',
-          border: '1.5px solid #e2e8f0',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+          backgroundColor: isDark ? '#0f172a' : 'var(--theme-page)',
+          border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
+          boxShadow: isDark ? '0 4px 10px rgba(0,0,0,0.3)' : '0 2px 6px rgba(0,0,0,0.03)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -131,10 +131,10 @@ export default function InstallAppBanner() {
             <img src={newLogo} alt="Attendance Rota" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: isDark ? '#f8fafc' : 'var(--theme-text)' }}>
               Attendance Rota
             </div>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>
+            <div style={{ fontSize: '11px', color: isDark ? '#94a3b8' : 'var(--theme-text-muted)', fontWeight: 500 }}>
               Install on your phone like an app
             </div>
           </div>
@@ -187,7 +187,7 @@ export default function InstallAppBanner() {
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--theme-surface)',
               borderRadius: '20px',
               padding: '24px',
               maxWidth: '350px',
@@ -206,7 +206,7 @@ export default function InstallAppBanner() {
                 position: 'absolute',
                 top: '12px',
                 right: '12px',
-                backgroundColor: '#f1f5f9',
+                backgroundColor: 'var(--theme-muted)',
                 border: 'none',
                 borderRadius: '50%',
                 width: '28px',
@@ -215,7 +215,7 @@ export default function InstallAppBanner() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                color: '#64748b'
+                color: 'var(--theme-text-muted)'
               }}
             >
               <X size={15} />
@@ -235,29 +235,29 @@ export default function InstallAppBanner() {
               <img src={newLogo} alt="Attendance Rota" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
 
-            <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+            <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--theme-text)', margin: '0 0 4px 0' }}>
               Install "Attendance Rota"
             </h3>
-            <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px 0', fontWeight: 500 }}>
+            <p style={{ fontSize: '12px', color: 'var(--theme-text-muted)', margin: '0 0 16px 0', fontWeight: 500 }}>
               Add to your phone home screen to open directly like a mobile app.
             </p>
 
             {/* Platform Specific Steps */}
             <div
               style={{
-                backgroundColor: '#f8fafc',
+                backgroundColor: 'var(--theme-page)',
                 borderRadius: '12px',
                 padding: '14px',
                 textAlign: 'left',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--theme-border)',
                 fontSize: '12px',
-                color: '#334155',
+                color: 'var(--theme-text-secondary)',
                 lineHeight: 1.6
               }}
             >
               {isIOS ? (
                 <>
-                  <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--theme-text)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Share size={14} color="#2563eb" /> On iPhone / Safari:
                   </div>
                   <div style={{ marginBottom: '6px' }}>
@@ -272,7 +272,7 @@ export default function InstallAppBanner() {
                 </>
               ) : (
                 <>
-                  <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--theme-text)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Smartphone size={14} color="#2563eb" /> On Android / Chrome:
                   </div>
                   <div style={{ marginBottom: '6px' }}>

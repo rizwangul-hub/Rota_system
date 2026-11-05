@@ -19,7 +19,9 @@ import {
   MessageSquare,
   FileText,
   Bell,
-  BellRing
+  BellRing,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import api, { API_BASE_URL } from './services/api';
@@ -80,12 +82,12 @@ function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType
         width: '100%',
         height: '38px',
         padding: '0 10px',
-        backgroundColor: editable ? '#ffffff' : '#f1f5f9',
-        border: '1.5px solid #cbd5e1',
+        backgroundColor: editable ? 'var(--theme-surface)' : 'var(--theme-muted)',
+        border: '1.5px solid var(--theme-border)',
         borderRadius: '8px',
         fontSize: '13px',
         fontWeight: 600,
-        color: editable ? '#0f172a' : '#64748b',
+        color: editable ? 'var(--theme-text)' : 'var(--theme-text-muted)',
         boxSizing: 'border-box'
       }}
     />
@@ -94,6 +96,47 @@ function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType
 
 export default function App() {
   const { user, token, login, logout, updateUser, loading: authLoading } = useAuth();
+
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('usman-web-theme') === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
+  const isDark = theme === 'dark';
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem('usman-web-theme', theme);
+    } catch {
+      // The switch still works when browser storage is unavailable.
+    }
+  }, [theme]);
+
+  const themeToggle = (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-pressed={isDark}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {isDark ? (
+        <>
+          <Sun size={14} color="#facc15" />
+          <span className="header-btn-text-sm" style={{ fontSize: '11px', color: '#fef08a' }}>Light</span>
+        </>
+      ) : (
+        <>
+          <Moon size={14} color="#cbd5e1" />
+          <span className="header-btn-text-sm" style={{ fontSize: '11px', color: '#e2e8f0' }}>Dark</span>
+        </>
+      )}
+    </button>
+  );
 
   // Login form states
   const [username, setUsername] = useState('');
@@ -810,7 +853,8 @@ export default function App() {
   // 1. UNLOGGED VIEW: Exact Usman Mobile Login
   if (!token) {
     return (
-      <div className="mobile-app-shell">
+      <div className={`mobile-app-shell${isDark ? ' dark' : ''}`}>
+        <div className="login-theme-toggle">{themeToggle}</div>
         {showIntro && <RotaIntroAnimation onComplete={() => setShowIntro(false)} />}
         <div style={{
           minHeight: '100vh',
@@ -824,7 +868,7 @@ export default function App() {
           <div style={{
             width: '100%',
             maxWidth: '380px',
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--theme-surface)',
             borderRadius: '20px',
             padding: '28px 24px',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
@@ -834,8 +878,8 @@ export default function App() {
               width: '84px',
               height: '84px',
               borderRadius: '20px',
-              backgroundColor: '#f8fafc',
-              border: '2px solid #e2e8f0',
+              backgroundColor: 'var(--theme-page)',
+              border: '2px solid var(--theme-border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -846,10 +890,10 @@ export default function App() {
               <img src={logoImg} alt="Pixx Rota" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
 
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px', marginBottom: '2px' }}>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--theme-text)', letterSpacing: '-0.3px', marginBottom: '2px' }}>
               ATTENDANCE ROTA
             </h1>
-            <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+            <p style={{ fontSize: '13px', color: 'var(--theme-text-muted)', fontWeight: 500 }}>
               Pixx Technologies Attendance Web
             </p>
             <span style={{
@@ -858,7 +902,7 @@ export default function App() {
               fontSize: '11px',
               color: '#2563eb',
               fontWeight: 700,
-              backgroundColor: '#eff6ff',
+              backgroundColor: 'var(--theme-blue-soft)',
               padding: '3px 10px',
               borderRadius: '12px'
             }}>
@@ -866,7 +910,7 @@ export default function App() {
             </span>
 
             <form onSubmit={handleLoginSubmit} style={{ marginTop: '24px', textAlign: 'left' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--theme-text-secondary)', marginBottom: '6px' }}>
                 Username
               </label>
               <input
@@ -880,14 +924,14 @@ export default function App() {
                   height: '42px',
                   padding: '0 12px',
                   borderRadius: '10px',
-                  border: '1.5px solid #cbd5e1',
+                  border: '1.5px solid var(--theme-border)',
                   fontSize: '14px',
                   marginBottom: '14px',
                   boxSizing: 'border-box'
                 }}
               />
 
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--theme-text-secondary)', marginBottom: '6px' }}>
                 Password
               </label>
               <div style={{ position: 'relative', width: '100%', marginBottom: '20px' }}>
@@ -901,7 +945,7 @@ export default function App() {
                     height: '42px',
                     padding: '0 40px 0 12px',
                     borderRadius: '10px',
-                    border: '1.5px solid #cbd5e1',
+                    border: '1.5px solid var(--theme-border)',
                     fontSize: '14px',
                     boxSizing: 'border-box'
                   }}
@@ -916,7 +960,7 @@ export default function App() {
                     transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
-                    color: '#64748b',
+                    color: 'var(--theme-text-muted)',
                     padding: '4px',
                     display: 'flex',
                     alignItems: 'center'
@@ -953,7 +997,7 @@ export default function App() {
             </form>
 
             {/* Mobile Web View PWA Install Option */}
-            <InstallAppBanner />
+            <InstallAppBanner isDark={isDark} />
           </div>
         </div>
 
@@ -970,7 +1014,7 @@ export default function App() {
             padding: '20px'
           }}>
             <div style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--theme-surface)',
               borderRadius: '16px',
               maxWidth: '320px',
               width: '100%',
@@ -978,10 +1022,10 @@ export default function App() {
               textAlign: 'center',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
             }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--theme-text)', marginBottom: '8px' }}>
                 {alertModal.title}
               </h3>
-              <p style={{ fontSize: '13px', color: '#475569', marginBottom: '16px', whiteSpace: 'pre-line' }}>
+              <p style={{ fontSize: '13px', color: 'var(--theme-text-secondary)', marginBottom: '16px', whiteSpace: 'pre-line' }}>
                 {alertModal.message}
               </p>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
@@ -992,8 +1036,8 @@ export default function App() {
                     style={{
                       flex: 1,
                       padding: '8px 14px',
-                      backgroundColor: b.style === 'cancel' ? '#f1f5f9' : '#2563eb',
-                      color: b.style === 'cancel' ? '#475569' : '#ffffff',
+                      backgroundColor: b.style === 'cancel' ? 'var(--theme-muted)' : '#2563eb',
+                      color: b.style === 'cancel' ? 'var(--theme-text-secondary)' : '#ffffff',
                       fontWeight: 700,
                       borderRadius: '8px',
                       fontSize: '13px'
@@ -1018,7 +1062,7 @@ export default function App() {
   const operatorPhoto = user?.profilePicture || (isAdeel ? adeelAvatar : (isUsman ? usmanAvatar : logoImg));
 
   return (
-    <div className="mobile-app-shell">
+    <div className={`mobile-app-shell${isDark ? ' dark' : ''}`}>
       {/* 1. App Launch Intro Animation */}
       {showIntro && <RotaIntroAnimation onComplete={() => setShowIntro(false)} />}
 
@@ -1031,6 +1075,7 @@ export default function App() {
 
       {/* 3. Operator Profile Modal (Change Name & Profile Picture) */}
       <UserProfileModal
+        isDark={isDark}
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         user={user}
@@ -1054,7 +1099,7 @@ export default function App() {
       />
 
       {/* Top Header */}
-      <header style={{
+      <header className="app-header" style={{
         backgroundColor: '#0f172a',
         padding: '12px 16px',
         display: 'flex',
@@ -1118,6 +1163,7 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {themeToggle}
           {/* Smart System Update Badge */}
           <UpdateHeaderBadge />
 
@@ -1309,8 +1355,8 @@ export default function App() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
-              backgroundColor: '#ffffff',
-              color: '#0f172a',
+              backgroundColor: 'var(--theme-surface)',
+              color: 'var(--theme-text)',
               padding: '10px 14px',
               borderRadius: '10px',
               fontSize: '13px',
@@ -1345,14 +1391,14 @@ export default function App() {
             padding: '0 4px'
           }}
         >
-          <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--theme-text)' }}>
             Workers ({workerRows.length})
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {loadingData ? (
               <RefreshCw size={14} color="#2563eb" className="spin" />
             ) : (
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--theme-text-muted)' }}>
                 {savedCount} / {workerRows.length} Recorded
               </span>
             )}
@@ -1362,7 +1408,7 @@ export default function App() {
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#64748b',
+                color: 'var(--theme-text-muted)',
                 padding: '4px',
                 display: 'flex',
                 alignItems: 'center'
@@ -1379,12 +1425,12 @@ export default function App() {
             <div
               key={row.employeeId}
               style={{
-                backgroundColor: row.isLocked ? '#f1f5f9' : '#ffffff',
+                backgroundColor: row.isLocked ? 'var(--theme-muted)' : 'var(--theme-surface)',
                 opacity: row.isLocked ? 0.85 : 1,
                 borderRadius: '14px',
                 padding: '14px',
                 marginBottom: '12px',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--theme-border)',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
               }}
             >
@@ -1400,13 +1446,13 @@ export default function App() {
               }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
+                    <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--theme-text)' }}>
                       {row.employeeName}
                     </span>
                     {row.isLocked ? (
                       <span style={{
-                        backgroundColor: '#fef3c7',
-                        color: '#92400e',
+                        backgroundColor: 'var(--theme-amber-soft)',
+                        color: 'var(--theme-amber-text)',
                         fontSize: '10px',
                         fontWeight: 800,
                         padding: '2px 6px',
@@ -1416,8 +1462,8 @@ export default function App() {
                       </span>
                     ) : row.isSaved ? (
                       <span style={{
-                        backgroundColor: '#dcfce7',
-                        color: '#166534',
+                        backgroundColor: 'var(--theme-green-soft)',
+                        color: 'var(--theme-green-text)',
                         fontSize: '10px',
                         fontWeight: 800,
                         padding: '2px 6px',
@@ -1428,7 +1474,7 @@ export default function App() {
                     ) : null}
                   </div>
 
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--theme-text-muted)', marginTop: '2px' }}>
                     ID: {row.empCode}
                   </div>
                 </div>
@@ -1455,11 +1501,11 @@ export default function App() {
                           borderRadius: '6px',
                           fontSize: '11px',
                           fontWeight: isActive ? 800 : 600,
-                          backgroundColor: isActive ? activeBg : '#f1f5f9',
+                          backgroundColor: isActive ? activeBg : 'var(--theme-muted)',
                           borderColor: isActive ? activeBorder : '#e2e8f0',
                           borderWidth: '1px',
                           borderStyle: 'solid',
-                          color: isActive ? activeTextColor : '#475569',
+                          color: isActive ? activeTextColor : 'var(--theme-text-secondary)',
                           cursor: row.isLocked ? 'not-allowed' : 'pointer'
                         }}
                       >
@@ -1473,12 +1519,12 @@ export default function App() {
               {/* Card Body: Absent vs Active Shift */}
               {row.status === 'Absent' ? (
                 <div style={{
-                  backgroundColor: '#fef2f2',
+                  backgroundColor: 'var(--theme-red-faint)',
                   border: '1px solid #fecaca',
                   borderRadius: '8px',
                   padding: '10px 12px',
                   fontSize: '12px',
-                  color: '#b91c1c',
+                  color: 'var(--theme-red-text)',
                   fontWeight: 600,
                   marginBottom: '10px',
                   display: 'flex',
@@ -1490,8 +1536,8 @@ export default function App() {
                     <span style={{
                       fontSize: '10px',
                       fontWeight: 700,
-                      color: '#b91c1c',
-                      backgroundColor: '#fee2e2',
+                      color: 'var(--theme-red-text)',
+                      backgroundColor: 'var(--theme-red-soft)',
                       padding: '2px 8px',
                       borderRadius: '4px',
                       border: '1px solid #fca5a5'
@@ -1505,7 +1551,7 @@ export default function App() {
                   {/* Shop Selection with Rota Auto-Select Indicator */}
                   <div style={{ marginBottom: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-secondary)' }}>
                         Shop where this worker worked
                       </span>
                       {row.fromWeeklyRota && (
@@ -1513,7 +1559,7 @@ export default function App() {
                           fontSize: '10px',
                           fontWeight: 700,
                           color: '#2563eb',
-                          backgroundColor: '#eff6ff',
+                          backgroundColor: 'var(--theme-blue-soft)',
                           padding: '1px 6px',
                           borderRadius: '4px',
                           border: '1px solid #bfdbfe'
@@ -1538,8 +1584,8 @@ export default function App() {
                               fontSize: '12px',
                               fontWeight: isSelected ? 800 : 500,
                               whiteSpace: 'nowrap',
-                              backgroundColor: isSelected ? '#2563eb' : '#f1f5f9',
-                              color: isSelected ? '#ffffff' : '#334155',
+                              backgroundColor: isSelected ? '#2563eb' : 'var(--theme-muted)',
+                              color: isSelected ? '#ffffff' : 'var(--theme-text-secondary)',
                               border: isSelected ? '1px solid #1d4ed8' : '1px solid #e2e8f0',
                               boxShadow: isSelected ? '0 2px 4px rgba(37,99,235,0.2)' : 'none',
                               cursor: row.isLocked ? 'not-allowed' : 'pointer'
@@ -1551,7 +1597,7 @@ export default function App() {
                       })}
                     </div>
                     {!row.shopId && !row.isLocked && (
-                      <div style={{ fontSize: '11px', color: '#b45309', marginTop: '4px', fontWeight: 600 }}>
+                      <div style={{ fontSize: '11px', color: 'var(--theme-amber-text)', marginTop: '4px', fontWeight: 600 }}>
                         Select the shop for this worker before submitting attendance.
                       </div>
                     )}
@@ -1560,7 +1606,7 @@ export default function App() {
                   {/* Scheduled Shift Times */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-secondary)', marginBottom: '4px' }}>
                         Shift Start
                       </span>
                       <AttendanceTimeInput
@@ -1572,7 +1618,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-secondary)', marginBottom: '4px' }}>
                         Shift End
                       </span>
                       <AttendanceTimeInput
@@ -1588,7 +1634,7 @@ export default function App() {
                   {/* Actual Arrival & Leave Times */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-secondary)', marginBottom: '4px' }}>
                         Arrival (Reached)
                       </span>
                       <AttendanceTimeInput
@@ -1600,7 +1646,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                      <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-secondary)', marginBottom: '4px' }}>
                         Leave (Left)
                       </span>
                       <AttendanceTimeInput
@@ -1628,10 +1674,10 @@ export default function App() {
                     height: '36px',
                     padding: '0 10px',
                     borderRadius: '8px',
-                    border: '1.5px solid #cbd5e1',
+                    border: '1.5px solid var(--theme-border)',
                     fontSize: '12px',
-                    backgroundColor: row.isLocked ? '#f1f5f9' : '#ffffff',
-                    color: '#0f172a'
+                    backgroundColor: row.isLocked ? 'var(--theme-muted)' : 'var(--theme-surface)',
+                    color: 'var(--theme-text)'
                   }}
                 />
 
@@ -1692,8 +1738,8 @@ export default function App() {
           display: 'flex',
           justifyContent: 'center',
           padding: '12px 16px',
-          backgroundColor: '#ffffff',
-          borderTop: '1px solid #e2e8f0',
+          backgroundColor: 'var(--theme-surface)',
+          borderTop: '1px solid var(--theme-border)',
           boxShadow: '0 -4px 12px rgba(0,0,0,0.06)',
           zIndex: 40
         }}>
@@ -1741,7 +1787,7 @@ export default function App() {
           padding: '20px'
         }}>
           <div style={{
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--theme-surface)',
             borderRadius: '16px',
             maxWidth: '340px',
             width: '100%',
@@ -1749,10 +1795,10 @@ export default function App() {
             textAlign: 'center',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
           }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--theme-text)', marginBottom: '8px' }}>
               {alertModal.title}
             </h3>
-            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '18px', whiteSpace: 'pre-line' }}>
+            <p style={{ fontSize: '13px', color: 'var(--theme-text-secondary)', marginBottom: '18px', whiteSpace: 'pre-line' }}>
               {alertModal.message}
             </p>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
@@ -1763,8 +1809,8 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: '8px 14px',
-                    backgroundColor: b.style === 'cancel' ? '#f1f5f9' : '#2563eb',
-                    color: b.style === 'cancel' ? '#475569' : '#ffffff',
+                    backgroundColor: b.style === 'cancel' ? 'var(--theme-muted)' : '#2563eb',
+                    color: b.style === 'cancel' ? 'var(--theme-text-secondary)' : '#ffffff',
                     fontWeight: 700,
                     borderRadius: '8px',
                     fontSize: '13px'

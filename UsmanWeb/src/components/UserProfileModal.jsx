@@ -47,7 +47,7 @@ function compressImage(file, maxDimension = 400, quality = 0.85) {
   });
 }
 
-export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated }) {
+export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated, isDark = false }) {
   const isAdeel = (user?.username === 'adeel') || (typeof user?.name === 'string' && /adeel/i.test(user.name));
   const isUsman = (user?.username === 'usman') || (typeof user?.name === 'string' && /usman/i.test(user.name));
   const fallbackPhoto = isAdeel ? adeelDefault : isUsman ? usmanDefault : logoDefault;
@@ -133,7 +133,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
         position: 'fixed',
         inset: 0,
         zIndex: 99999,
-        backgroundColor: 'rgba(15, 23, 42, 0.65)',
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
         backdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'center',
@@ -144,13 +144,16 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
     >
       <div
         style={{
-          backgroundColor: '#ffffff',
+          backgroundColor: isDark ? '#1e293b' : '#ffffff',
           borderRadius: '20px',
           width: '100%',
           maxWidth: '380px',
           padding: '24px',
           position: 'relative',
-          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+          boxShadow: isDark
+            ? '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+            : '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+          border: isDark ? '1px solid #334155' : 'none',
           textAlign: 'center'
         }}
         onClick={(e) => e.stopPropagation()}
@@ -164,7 +167,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
             position: 'absolute',
             top: '14px',
             right: '14px',
-            backgroundColor: '#f1f5f9',
+            backgroundColor: isDark ? '#334155' : '#f1f5f9',
             border: 'none',
             borderRadius: '50%',
             width: '30px',
@@ -173,13 +176,18 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            color: '#64748b'
+            color: isDark ? '#e2e8f0' : '#64748b'
           }}
         >
           <X size={16} />
         </button>
 
-        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0' }}>
+        <h2 style={{
+          fontSize: '18px',
+          fontWeight: 800,
+          color: isDark ? '#f8fafc' : '#0f172a',
+          margin: '0 0 16px 0'
+        }}>
           Operator Profile
         </h2>
 
@@ -222,7 +230,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
               right: '0',
               backgroundColor: '#2563eb',
               color: '#ffffff',
-              border: '2px solid #ffffff',
+              border: `2px solid ${isDark ? '#1e293b' : '#ffffff'}`,
               borderRadius: '50%',
               width: '32px',
               height: '32px',
@@ -254,9 +262,9 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
             style={{
               padding: '6px 12px',
               borderRadius: '8px',
-              backgroundColor: '#eff6ff',
-              color: '#2563eb',
-              border: '1px solid #bfdbfe',
+              backgroundColor: isDark ? 'rgba(37, 99, 235, 0.2)' : '#eff6ff',
+              color: isDark ? '#93c5fd' : '#2563eb',
+              border: isDark ? '1px solid #1d4ed8' : '1px solid #bfdbfe',
               fontSize: '12px',
               fontWeight: 700,
               cursor: 'pointer',
@@ -277,9 +285,9 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
               style={{
                 padding: '6px 10px',
                 borderRadius: '8px',
-                backgroundColor: '#f1f5f9',
-                color: '#64748b',
-                border: '1px solid #cbd5e1',
+                backgroundColor: isDark ? '#334155' : '#f1f5f9',
+                color: isDark ? '#cbd5e1' : '#64748b',
+                border: isDark ? '1px solid #475569' : '1px solid #cbd5e1',
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: 'pointer'
@@ -294,7 +302,13 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
         <form onSubmit={handleSave} style={{ textAlign: 'left' }}>
           {/* Full Name Field */}
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: isDark ? '#cbd5e1' : '#334155',
+              marginBottom: '6px'
+            }}>
               Full Name
             </label>
             <input
@@ -307,10 +321,11 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
                 height: '40px',
                 padding: '0 12px',
                 borderRadius: '10px',
-                border: '1.5px solid #cbd5e1',
+                border: isDark ? '1.5px solid #334155' : '1.5px solid #cbd5e1',
+                backgroundColor: isDark ? '#0f172a' : '#ffffff',
+                color: isDark ? '#f8fafc' : '#0f172a',
                 fontSize: '14px',
                 fontWeight: 600,
-                color: '#0f172a',
                 boxSizing: 'border-box'
               }}
             />
@@ -318,7 +333,13 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
 
           {/* Username Field (Read-only) */}
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: isDark ? '#94a3b8' : '#64748b',
+              marginBottom: '6px'
+            }}>
               Username
             </label>
             <div
@@ -326,12 +347,12 @@ export default function UserProfileModal({ isOpen, onClose, user, onUserUpdated 
                 width: '100%',
                 height: '40px',
                 padding: '0 12px',
-                backgroundColor: '#f8fafc',
+                backgroundColor: isDark ? '#0b1120' : '#f8fafc',
                 borderRadius: '10px',
-                border: '1px solid #e2e8f0',
+                border: isDark ? '1px solid #1e293b' : '1px solid #e2e8f0',
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#64748b',
+                color: isDark ? '#94a3b8' : '#64748b',
                 display: 'flex',
                 alignItems: 'center',
                 boxSizing: 'border-box'

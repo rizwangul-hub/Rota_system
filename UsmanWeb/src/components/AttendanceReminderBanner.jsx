@@ -78,7 +78,7 @@ export default function AttendanceReminderBanner({
             }}
             style={{
               flex: 1,
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--theme-surface)',
               color: '#991b1b',
               border: 'none',
               borderRadius: '8px',
@@ -172,7 +172,7 @@ export default function AttendanceReminderBanner({
             style={{
               backgroundColor: 'transparent',
               border: 'none',
-              color: '#64748b',
+              color: 'var(--theme-text-muted)',
               cursor: 'pointer',
               padding: '6px',
               display: 'flex'
