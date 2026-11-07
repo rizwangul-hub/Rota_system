@@ -45,27 +45,49 @@ function isPdfReportRequest(text) {
   return /\b(pdf|download\s*pdf|export\s*pdf|in\s*pdf|pdf\s*file|pdf\s*bhejo|pdf\s*do|pdf\s*chahiye|pdf\s*generate|generate\s*pdf|make\s*pdf)\b/i.test(t);
 }
 
-// Standard English & Roman Urdu month dictionary
+// Standard English & Roman Urdu month dictionary with common phonetic variations and typos
 const MONTH_NAMES = {
-  january: '01', jan: '01',
-  february: '02', feb: '02',
+  january: '01', jan: '01', januray: '01', janury: '01',
+  february: '02', feb: '02', feburary: '02',
   march: '03', mar: '03',
   april: '04', apr: '04',
   may: '05',
   june: '06', jun: '06',
   july: '07', jul: '07',
-  august: '08', aug: '08',
-  september: '09', sep: '09', sept: '09',
-  october: '10', oct: '10',
-  november: '11', nov: '11',
-  december: '12', dec: '12'
+  august: '08', aug: '08', agust: '08',
+  september: '09', sep: '09', sept: '09', septmbr: '09', septembr: '09',
+  october: '10', oct: '10', octobe: '10', octber: '10', octo: '10',
+  november: '11', nov: '11', nobember: '11', novmber: '11', novembr: '11',
+  december: '12', dec: '12', decembr: '12', dicember: '12'
 };
+
+function findMonthInfo(word) {
+  if (!word) return null;
+  const w = word.toLowerCase().trim();
+  if (MONTH_NAMES[w]) {
+    return { num: MONTH_NAMES[w], name: w };
+  }
+  // Prefix or fuzzy check for truncated month typos
+  if (w.startsWith('octob') || w.startsWith('oct')) return { num: '10', name: 'october' };
+  if (w.startsWith('novem') || w.startsWith('nov') || w.startsWith('nobem')) return { num: '11', name: 'november' };
+  if (w.startsWith('decem') || w.startsWith('dec') || w.startsWith('dicem')) return { num: '12', name: 'december' };
+  if (w.startsWith('janua') || w.startsWith('jan')) return { num: '01', name: 'january' };
+  if (w.startsWith('febru') || w.startsWith('feb')) return { num: '02', name: 'february' };
+  if (w.startsWith('march') || w.startsWith('mar')) return { num: '03', name: 'march' };
+  if (w.startsWith('april') || w.startsWith('apr')) return { num: '04', name: 'april' };
+  if (w === 'may') return { num: '05', name: 'may' };
+  if (w.startsWith('june') || w.startsWith('jun')) return { num: '06', name: 'june' };
+  if (w.startsWith('july') || w.startsWith('jul')) return { num: '07', name: 'july' };
+  if (w.startsWith('augus') || w.startsWith('aug')) return { num: '08', name: 'august' };
+  if (w.startsWith('septe') || w.startsWith('sept')) return { num: '09', name: 'september' };
+  return null;
+}
 
 /**
  * Intelligent date and period parser for natural language
  * Handles:
  * - "31 October", "31st Oct", "October 31" -> { type: 'exact_date', dateStr: '2026-10-31' }
- * - "october", "october month", "in october" -> { type: 'month_range', startDate: '2026-10-01', endDate: '2026-10-31' }
+ * - "october", "octobe", "october month", "in october" -> { type: 'month_range', startDate: '2026-10-01', endDate: '2026-10-31' }
  * - "today", "aaj" -> { type: 'exact_date', dateStr: ... }
  * - "yesterday", "kal" -> { type: 'exact_date', dateStr: ... }
  * - "2026-10-31", "31/10/2026"
@@ -100,38 +122,42 @@ function parseDateOrPeriod(text) {
     return { type: 'exact_date', dateStr: `${year}-${month}-${day}` };
   }
 
-  // 4. "31 October", "31st October", "31-oct"
+  // 4. "31 October", "31st Oct", "31 octobe"
   const dayMonthMatch = t.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\b/);
   if (dayMonthMatch) {
     const day = dayMonthMatch[1].padStart(2, '0');
     const monthWord = dayMonthMatch[2];
-    if (MONTH_NAMES[monthWord]) {
-      return { type: 'exact_date', dateStr: `${defaultYear}-${MONTH_NAMES[monthWord]}-${day}` };
+    const mInfo = findMonthInfo(monthWord);
+    if (mInfo) {
+      return { type: 'exact_date', dateStr: `${defaultYear}-${mInfo.num}-${day}` };
     }
   }
 
-  // 5. "October 31", "Oct 31st"
+  // 5. "October 31", "Oct 31st", "Octobe 31"
   const monthDayMatch = t.match(/\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
   if (monthDayMatch) {
     const monthWord = monthDayMatch[1];
     const day = monthDayMatch[2].padStart(2, '0');
-    if (MONTH_NAMES[monthWord]) {
-      return { type: 'exact_date', dateStr: `${defaultYear}-${MONTH_NAMES[monthWord]}-${day}` };
+    const mInfo = findMonthInfo(monthWord);
+    if (mInfo) {
+      return { type: 'exact_date', dateStr: `${defaultYear}-${mInfo.num}-${day}` };
     }
   }
 
-  // 6. Standalone month (e.g. "october", "october month", "in october")
-  for (const [mName, mNum] of Object.entries(MONTH_NAMES)) {
-    if (new RegExp(`\\b${mName}\\b`, 'i').test(t)) {
+  // 6. Standalone month (e.g. "october", "octobe", "month of octobe", "october month", "in october")
+  const tokens = t.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  for (const token of tokens) {
+    const mInfo = findMonthInfo(token);
+    if (mInfo) {
       const yr = Number(defaultYear);
-      const m = Number(mNum);
+      const m = Number(mInfo.num);
       const lastDay = new Date(Date.UTC(yr, m, 0)).getUTCDate();
       return {
         type: 'month_range',
-        monthNum: mNum,
-        monthName: mName,
-        startDate: `${defaultYear}-${mNum}-01`,
-        endDate: `${defaultYear}-${mNum}-${String(lastDay).padStart(2, '0')}`
+        monthNum: mInfo.num,
+        monthName: mInfo.name,
+        startDate: `${defaultYear}-${mInfo.num}-01`,
+        endDate: `${defaultYear}-${mInfo.num}-${String(lastDay).padStart(2, '0')}`
       };
     }
   }

@@ -120,30 +120,50 @@ function formatToolResult(toolName, result, originalQuery = '') {
     let out = '';
 
     if (isLateQuery) {
-      out += `### ⏱️ Lateness Calculation: ${result.workerName} (${result.workerId})\n\n`;
-      out += `**Total Late Minutes:** **${s.totalLateMinutes || 0} minutes** across **${s.totalLate || 0}** official Late shift(s).\n`;
-      out += `**Total Lateness Deductions:** **${s.totalLateDeductions || '£0.00'}**\n`;
-      out += `**Period Summary:** Present: **${s.totalPresent || 0}** | Late: **${s.totalLate || 0}** | Absent: **${s.totalAbsent || 0}** | Total Hours: **${s.totalHoursLogged || 0} hrs**\n\n`;
+      const totalMins = s.totalLateMinutes || 0;
+      const hours = Math.floor(totalMins / 60);
+      const remainingMins = totalMins % 60;
+      const timeStr = hours > 0 ? `${hours} hr${hours > 1 ? 's' : ''} ${remainingMins} min${remainingMins !== 1 ? 's' : ''}` : `${totalMins} mins`;
+      const minorDelays = Math.max(0, (result.lateRecords?.length || 0) - (s.totalLate || 0));
+
+      out += `## ⏱️ Total Late Minutes: ${totalMins} Minutes (${timeStr})\n`;
+      out += `**Worker:** **${result.workerName}** (${result.workerId}) | **Total Shifts Scanned:** ${result.totalRecords}\n\n`;
+
+      out += `| Metric | Total Value |\n|---|---|\n`;
+      out += `| **Total Late Duration** | **${totalMins} minutes** (${timeStr}) |\n`;
+      out += `| **Official Late Shifts (>15 min grace)** | **${s.totalLate || 0} shifts** |\n`;
+      out += `| **Minor Delay Shifts (within grace)** | **${minorDelays} shifts** |\n`;
+      out += `| **Total Late Deductions** | **${s.totalLateDeductions || '£0.00'}** |\n`;
+      out += `| **Total Present Days** | **${s.totalPresent || 0} days** |\n`;
+      out += `| **Total Absent Days** | **${s.totalAbsent || 0} days** |\n`;
+      out += `| **Total Logged Hours** | **${s.totalHoursLogged || 0} hrs** |\n`;
+      out += `| **Total Calculated Pay** | **${s.totalEarned || '£0.00'}** |\n\n`;
 
       if (result.lateRecords && result.lateRecords.length > 0) {
-        out += `#### 🚨 Late Arrivals Breakdown:\n`;
-        out += `| Date | Shop | Shift Scheduled | Actual Arrival | Late Duration | Status | Deduction |\n|---|---|---|---|---|---|---|\n`;
+        out += `### 🚨 Detailed Late Shifts Breakdown (${result.lateRecords.length} Shifts):\n`;
+        out += `| Date | Shop | Shift Scheduled | Actual Arrival | Late Duration | Official Status | Deduction |\n|---|---|---|---|---|---|---|\n`;
         result.lateRecords.forEach(r => {
-          out += `| **${r.date}** | ${r.shop} | ${r.shiftStart}–${r.shiftEnd} | ${r.reachedTime} | **${r.lateMinutes} mins late** | ${r.status} | ${r.deduction} |\n`;
+          out += `| **${r.date}** | ${r.shop} | ${r.shiftStart}–${r.shiftEnd} | ${r.reachedTime} | **${r.lateMinutes} mins late** | **${r.status}** | ${r.deduction} |\n`;
         });
         out += `\n`;
       } else {
         out += `_No late arrivals recorded for this worker in the specified period._\n\n`;
       }
 
-      out += `#### 📋 Complete Attendance Records:\n`;
+      out += `### 📋 Complete Period Attendance Records:\n`;
     } else if (isAbsentQuery) {
-      out += `### 🏖️ Absence Calculation: ${result.workerName} (${result.workerId})\n\n`;
-      out += `**Total Absent Days:** **${s.totalAbsent || 0} days**\n`;
-      out += `**Period Summary:** Present: **${s.totalPresent || 0}** | Late: **${s.totalLate || 0}** | Total Hours: **${s.totalHoursLogged || 0} hrs**\n\n`;
+      out += `## ❌ Total Absent Days: ${s.totalAbsent || 0} Days\n`;
+      out += `**Worker:** **${result.workerName}** (${result.workerId}) | **Total Shifts:** ${result.totalRecords}\n\n`;
+
+      out += `| Metric | Total Value |\n|---|---|\n`;
+      out += `| **Total Absent Days** | **${s.totalAbsent || 0} days** |\n`;
+      out += `| **Total Present Days** | **${s.totalPresent || 0} days** |\n`;
+      out += `| **Total Late Shifts** | **${s.totalLate || 0} shifts** |\n`;
+      out += `| **Total Logged Hours** | **${s.totalHoursLogged || 0} hrs** |\n`;
+      out += `| **Total Calculated Pay** | **${s.totalEarned || '£0.00'}** |\n\n`;
 
       if (result.absentRecords && result.absentRecords.length > 0) {
-        out += `#### ❌ Absent Dates:\n`;
+        out += `### ❌ Absent Dates Breakdown:\n`;
         out += `| Date | Status | Shop | Remarks |\n|---|---|---|---|\n`;
         result.absentRecords.forEach(r => {
           out += `| **${r.date}** | **Absent** | ${r.shop} | ${r.remarks || '—'} |\n`;
@@ -153,11 +173,16 @@ function formatToolResult(toolName, result, originalQuery = '') {
         out += `_No absences recorded for this worker in the specified period._\n\n`;
       }
 
-      out += `#### 📋 Complete Attendance Records:\n`;
+      out += `### 📋 Complete Period Attendance Records:\n`;
     } else {
-      out += `### 📋 Attendance Records: ${result.workerName} (${result.workerId})\n\n`;
+      out += `## 📋 Attendance Summary: ${result.workerName} (${result.workerId})\n\n`;
       if (result.summary) {
-        out += `**Summary:** Present: **${s.totalPresent}** | Late: **${s.totalLate}** (${s.totalLateMinutes || 0} mins) | Half-Day: **${s.totalHalf}** | Absent: **${s.totalAbsent}** | Total Hours: **${s.totalHoursLogged} hrs** | Total Earned: **${s.totalEarned}**\n\n`;
+        out += `| Metric | Total Value |\n|---|---|\n`;
+        out += `| **Total Present Days** | **${s.totalPresent} days** |\n`;
+        out += `| **Total Late Shifts** | **${s.totalLate}** (${s.totalLateMinutes || 0} mins total) |\n`;
+        out += `| **Total Absent Days** | **${s.totalAbsent} days** |\n`;
+        out += `| **Total Hours Logged** | **${s.totalHoursLogged} hrs** |\n`;
+        out += `| **Total Calculated Pay** | **${s.totalEarned}** |\n\n`;
       }
     }
 
@@ -175,19 +200,25 @@ function formatToolResult(toolName, result, originalQuery = '') {
 
   // 3. getWorkerSalaryAndPayroll
   if (toolName === 'getWorkerSalaryAndPayroll' && result.salaries) {
-    let out = `### 💰 Weekly Payroll Breakdown: ${result.workerName} (${result.workerId})\n\n`;
     if (result.salaries.length === 0) {
-      out += `_No salary calculations generated for this worker in the requested period._\n`;
-      return out;
+      return `### 💰 Payroll Breakdown: ${result.workerName} (${result.workerId})\n\n_No salary calculations generated for this worker in the requested period._\n`;
     }
 
-    if (result.summary && result.salaries.length > 1) {
-      out += `**Total Period Final Salary:** ${result.summary.totalFinalSalary} | **Gross Wages:** ${result.summary.totalGrossWages} | **Total Paid:** ${result.summary.totalPaid}\n\n`;
-    }
+    const s = result.summary || {};
+    let out = `## 💰 Total Salary: ${s.totalFinalSalary || '£0.00'}\n`;
+    out += `**Worker:** **${result.workerName}** (${result.workerId}) | **Total Weeks:** ${result.salaries.length} weeks\n\n`;
 
+    out += `| Metric | Total Value |\n|---|---|\n`;
+    out += `| **Total Final Net Salary** | **${s.totalFinalSalary || '£0.00'}** |\n`;
+    out += `| **Total Gross Daily Wages** | **${s.totalGrossWages || '£0.00'}** |\n`;
+    out += `| **Total Deductions** | **${s.totalLateDeductions || '£0.00'}** |\n`;
+    out += `| **Total Disbursed / Paid** | **${s.totalPaid || '£0.00'}** |\n`;
+    out += `| **Total Remaining Balance** | **${s.totalBalanceRemaining || '£0.00'}** |\n\n`;
+
+    out += `### 📅 Weekly Payroll Breakdown:\n`;
     out += `| Week Range | Days | Hours | Gross Wages | Deductions | Final Salary | Status |\n|---|---|---|---|---|---|---|\n`;
-    result.salaries.forEach(s => {
-      out += `| ${s.week} | ${s.workingDays} | ${s.actualHours}h | ${s.grossWages} | ${s.lateDeductions} | **${s.finalSalary}** | ${s.status} |\n`;
+    result.salaries.forEach(w => {
+      out += `| ${w.week} | ${w.workingDays} | ${w.actualHours}h | ${w.grossWages} | ${w.lateDeductions} | **${w.finalSalary}** | ${w.status} |\n`;
     });
     return out;
   }
