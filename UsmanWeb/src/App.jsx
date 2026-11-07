@@ -342,11 +342,11 @@ export default function App() {
 
         if (isEdgware) {
           start = dayOfWeek === 0 ? '11:00' : '09:30';
-          end = '18:30';
+          end = dayOfWeek === 0 ? '18:00' : '18:30';
         }
         if (isArsalan) {
           start = dayOfWeek === 6 ? '09:00' : dayOfWeek === 0 ? '11:00' : '10:00';
-          end = isEdgware ? '18:30' : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
+          end = isEdgware ? (dayOfWeek === 0 ? '18:00' : '18:30') : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
         }
 
         const currentStatus = existing?.status === 'Absent' ? 'Present' : (existing?.status || 'Present');
@@ -408,11 +408,11 @@ export default function App() {
 
         if (isEdgware) {
           start = dayOfWeek === 0 ? '11:00' : '09:30';
-          end = '18:30';
+          end = dayOfWeek === 0 ? '18:00' : '18:30';
         }
         if (isArsalan) {
           start = dayOfWeek === 6 ? '09:00' : dayOfWeek === 0 ? '11:00' : '10:00';
-          end = isEdgware ? '18:30' : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
+          end = isEdgware ? (dayOfWeek === 0 ? '18:00' : '18:30') : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
         }
 
         return {
@@ -589,11 +589,11 @@ export default function App() {
     const dayOfWeek = currentDate.getDay();
 
     let fastStart = isEdgware ? (dayOfWeek === 0 ? '11:00' : '09:30') : (dayOfWeek === 0 ? '11:00' : '09:00');
-    let fastEnd = isEdgware ? '18:30' : (dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00');
+    let fastEnd = isEdgware ? (dayOfWeek === 0 ? '18:00' : '18:30') : (dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00');
 
     if (isArsalan) {
       fastStart = dayOfWeek === 6 ? '09:00' : dayOfWeek === 0 ? '11:00' : '10:00';
-      fastEnd = isEdgware ? '18:30' : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
+      fastEnd = isEdgware ? (dayOfWeek === 0 ? '18:00' : '18:30') : dayOfWeek === 0 ? '17:00' : dayOfWeek === 6 ? '18:00' : '19:00';
     }
 
     setWorkerRows((current) =>

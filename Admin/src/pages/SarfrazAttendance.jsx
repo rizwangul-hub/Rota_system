@@ -82,7 +82,7 @@ function getWorkerDefaultShift(dateStr, empName, shopName) {
   const isEdgware = typeof shopName === 'string' && /edgware/i.test(shopName);
 
   if (isArsalan) {
-    const shiftEnd = isEdgware ? '18:30' : (day === 0 ? '17:00' : (day === 6 ? '18:00' : '19:00'));
+    const shiftEnd = isEdgware ? (day === 0 ? '18:00' : '18:30') : (day === 0 ? '17:00' : (day === 6 ? '18:00' : '19:00'));
     if (day === 6) return { shiftStart: '09:00', shiftEnd };
     if (day === 0) return { shiftStart: '11:00', shiftEnd };
     return { shiftStart: '10:00', shiftEnd };
@@ -91,7 +91,7 @@ function getWorkerDefaultShift(dateStr, empName, shopName) {
   if (isEdgware) {
     return {
       shiftStart: day === 0 ? '11:00' : '09:30',
-      shiftEnd: '18:30'
+      shiftEnd: day === 0 ? '18:00' : '18:30'
     };
   }
 

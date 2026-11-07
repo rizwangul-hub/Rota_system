@@ -31,7 +31,7 @@ async function run() {
   for (let day = 0; day <= 6; day++) {
     const isSunday = (day === 0);
     const openingTime = isSunday ? '11:00' : '09:30';
-    const closingTime = '18:30';
+    const closingTime = isSunday ? '18:00' : '18:30';
     const defaultHours = calculateScheduledHours(openingTime, closingTime);
 
     const sched = await ShopSchedule.findOneAndUpdate(

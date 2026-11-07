@@ -300,7 +300,7 @@ function isArsalanWorker(workerName = '') {
 /**
  * Default shift hours for UK bicycle shops by day of week (0=Sunday, 1=Monday ... 6=Saturday)
  * Arsalan: Saturday 9:00 AM, Sunday 11:00 AM, Monday–Friday 10:00 AM.
- * Edgware: Sunday 11:00 AM – 6:30 PM, Monday–Saturday 9:30 AM – 6:30 PM.
+ * Edgware: Sunday 11:00 AM – 6:00 PM, Monday–Saturday 9:30 AM – 6:30 PM.
  * Other shops: Sunday 11:00 AM – 5:00 PM, Saturday 9:00 AM – 6:00 PM, Monday–Friday 9:00 AM – 7:00 PM.
  */
 function getDefaultShiftTimesForDate(dateObj = new Date(), shopName = '', workerName = '') {
@@ -310,7 +310,7 @@ function getDefaultShiftTimesForDate(dateObj = new Date(), shopName = '', worker
 
   if (isArsalan) {
     const shiftEnd = isEdgware
-      ? '18:30'
+      ? (day === 0 ? '18:00' : '18:30')
       : (day === 0 ? '17:00' : (day === 6 ? '18:00' : '19:00'));
     if (day === 6) {
       // Arsalan Saturday: 9:00 AM
@@ -326,8 +326,8 @@ function getDefaultShiftTimesForDate(dateObj = new Date(), shopName = '', worker
 
   if (isEdgware) {
     if (day === 0) {
-      // Edgware Sunday: 11:00 AM - 6:30 PM (7.5 hours)
-      return { shiftStart: '11:00', shiftEnd: '18:30' };
+      // Edgware Sunday: 11:00 AM - 6:00 PM (7 hours)
+      return { shiftStart: '11:00', shiftEnd: '18:00' };
     } else {
       // Edgware Monday - Saturday: 9:30 AM - 6:30 PM (9 hours)
       return { shiftStart: '09:30', shiftEnd: '18:30' };
