@@ -200,8 +200,20 @@ async function runComprehensiveAiTests() {
     assert.ok(t30.pdfReport.fileName.includes('Arslan') || t30.pdfReport.title.includes('Arslan'), 'Must resolve Arslan from previous turn');
     console.log('✓ 30. Multi-turn Follow-up Context Resolution (resolved "give me in pdf" -> Arslan)');
 
+    // 31. Ranking & Comparison: Most Active Worker
+    const t31 = await askRotaAssistant('which worker is most active on shop', [], adminUser);
+    assert.strictEqual(t31.success, true);
+    assert.ok(t31.message.includes('Most Active Worker') || t31.message.includes('Activity & Hours Leaderboard'));
+    console.log('✓ 31. Ranking & Comparison: Most Active Worker Leaderboard');
+
+    // 32. Ranking & Comparison: Least Late Minutes (Most Punctual Worker)
+    const t32 = await askRotaAssistant('which worker late mint is more less then other', [{ role: 'user', content: 'ubaid' }], adminUser);
+    assert.strictEqual(t32.success, true);
+    assert.ok(t32.message.includes('Most Punctual Worker') || t32.message.includes('Punctuality & Lateness Leaderboard'));
+    console.log('✓ 32. Ranking & Comparison: Most Punctual / Least Late Minutes Leaderboard (does NOT erroneously lock into ubaid)');
+
     console.log('\n====================================================');
-    console.log('   ALL 30 AI ASSISTANT TEST SCENARIOS PASSED!   ');
+    console.log('   ALL 32 AI ASSISTANT TEST SCENARIOS PASSED!   ');
     console.log('====================================================');
   } finally {
     await mongoose.disconnect();

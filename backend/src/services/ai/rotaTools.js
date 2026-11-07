@@ -22,6 +22,10 @@ function isAdmin(user) {
   return (user?.role || '') === 'ADMIN';
 }
 
+function escapeRegex(str = '') {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Helper to find employee by name or ID (case-insensitive fuzzy match)
 async function findEmployee(searchTerm) {
   if (!searchTerm || typeof searchTerm !== 'string') return null;
@@ -949,6 +953,167 @@ async function getLoansSummary({ workerName, workerId, status, limit = 30 }, use
   };
 }
 
+/**
+ * 16. Worker Rankings and Comparison Tool
+ * Compares staff across all shops or within a specific shop based on:
+ * - Activity / Hours / Shifts (most_active, most_hours)
+ * - Punctuality / Lateness (least_late, most_late)
+ * - Attendance / Absences (most_absent, least_absent)
+ */
+async function getWorkerRankingsAndComparison(args = {}, user = {}) {
+  const criteria = args.criteria || 'most_active';
+  const shopFilter = args.shopName ? args.shopName.trim() : null;
+
+  let startDate = args.startDate;
+  let endDate = args.endDate;
+  let periodLabel = '';
+
+  if (startDate && endDate) {
+    periodLabel = `${formatUKDate(startDate)} – ${formatUKDate(endDate)}`;
+  } else {
+    const now = new Date();
+    const yr = now.getUTCFullYear();
+    const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
+    startDate = `${yr}-${mo}-01`;
+    const lastDay = new Date(Date.UTC(yr, now.getUTCMonth() + 1, 0)).getUTCDate();
+    endDate = `${yr}-${mo}-${String(lastDay).padStart(2, '0')}`;
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    periodLabel = `${monthNames[now.getUTCMonth()]} ${yr}`;
+  }
+
+  let empQuery = {
+    $or: [
+      { employmentStatus: 'Active' },
+      { employmentStatus: { $exists: false } },
+      { employmentStatus: null }
+    ]
+  };
+  let shopObj = null;
+  if (shopFilter) {
+    shopObj = await Shop.findOne({ name: new RegExp(`^${escapeRegex(shopFilter)}$`, 'i') }).lean();
+    if (shopObj) {
+      empQuery.assignedShop = shopObj._id;
+    }
+  }
+
+  const employees = await Employee.find(empQuery)
+    .populate('assignedShop', 'name code')
+    .lean();
+
+  if (!employees || employees.length === 0) {
+    return {
+      success: false,
+      message: shopFilter ? `No active workers found assigned to shop "${shopFilter}".` : 'No active workers found in system.'
+    };
+  }
+
+  const empMap = {};
+  employees.forEach(e => {
+    const key = String(e._id);
+    empMap[key] = {
+      id: key,
+      workerName: e.name,
+      employeeId: e.employeeId,
+      assignedShop: e.assignedShop?.name || 'Unassigned',
+      presentDays: 0,
+      absentDays: 0,
+      totalHours: 0,
+      totalLateMinutes: 0,
+      officialLateCount: 0,
+      minorDelayCount: 0,
+      totalEarned: 0
+    };
+  });
+
+  const attQuery = {
+    dateString: { $gte: startDate, $lte: endDate }
+  };
+  if (shopObj) {
+    attQuery.$or = [
+      { shop: shopObj._id },
+      { shopName: new RegExp(`^${escapeRegex(shopObj.name)}$`, 'i') }
+    ];
+  }
+
+  const attendances = await Attendance.find(attQuery).lean();
+
+  attendances.forEach(a => {
+    const empId = a.employee ? String(a.employee) : null;
+    let w = empId ? empMap[empId] : null;
+    if (!w && a.employeeId) {
+      w = Object.values(empMap).find(x => x.employeeId === a.employeeId);
+    }
+    if (!w) return;
+
+    if (a.status === 'Present' || a.status === 'Half-Day' || a.status === 'Late') {
+      w.presentDays += (a.status === 'Half-Day' ? 0.5 : 1);
+      w.totalHours += (a.actualHours || 0);
+      const lm = a.lateMinutes || 0;
+      w.totalLateMinutes += lm;
+      if (a.status === 'Late' || lm > 15) {
+        w.officialLateCount += 1;
+      } else if (lm > 0) {
+        w.minorDelayCount += 1;
+      }
+      w.totalEarned += (a.attendancePay || 0);
+    } else if (a.status === 'Absent') {
+      w.absentDays += 1;
+    }
+  });
+
+  const workerList = Object.values(empMap);
+
+  if (criteria === 'least_late') {
+    workerList.sort((a, b) => {
+      if (a.totalLateMinutes !== b.totalLateMinutes) return a.totalLateMinutes - b.totalLateMinutes;
+      return b.presentDays - a.presentDays;
+    });
+  } else if (criteria === 'most_late') {
+    workerList.sort((a, b) => {
+      if (b.totalLateMinutes !== a.totalLateMinutes) return b.totalLateMinutes - a.totalLateMinutes;
+      return b.officialLateCount - a.officialLateCount;
+    });
+  } else if (criteria === 'most_absent') {
+    workerList.sort((a, b) => b.absentDays - a.absentDays);
+  } else if (criteria === 'least_absent') {
+    workerList.sort((a, b) => {
+      if (a.absentDays !== b.absentDays) return a.absentDays - b.absentDays;
+      return b.presentDays - a.presentDays;
+    });
+  } else {
+    // most_active / most_hours
+    workerList.sort((a, b) => {
+      if (b.totalHours !== a.totalHours) return b.totalHours - a.totalHours;
+      return b.presentDays - a.presentDays;
+    });
+  }
+
+  workerList.forEach(w => {
+    w.totalHours = Number(w.totalHours.toFixed(2));
+    if (user.role !== 'ADMIN' && user.role !== 'SALARY_DISTRIBUTOR') {
+      w.totalEarned = '[Restricted]';
+    } else {
+      w.totalEarned = `£${w.totalEarned.toFixed(2)}`;
+    }
+  });
+
+  const limit = Math.min(50, Math.max(1, args.limit || 15));
+  const topRanked = workerList.slice(0, limit);
+  const winner = topRanked[0] || null;
+
+  return {
+    success: true,
+    criteria,
+    shopFilter: shopObj ? shopObj.name : 'All Shops',
+    periodLabel,
+    startDate,
+    endDate,
+    totalWorkersEvaluated: workerList.length,
+    winner,
+    rankings: topRanked
+  };
+}
+
 // Function Declarations for Gemini & natural language resolver
 const ALL_ROTA_TOOL_DECLARATIONS = [
   {
@@ -1182,6 +1347,24 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
         limit: { type: 'number', description: 'Max records' }
       }
     }
+  },
+  {
+    name: 'getWorkerRankingsAndComparison',
+    description: 'Rank and compare workers across the company or for a specific shop by activity (most active/most hours), punctuality (least late minutes/most punctual), highest late minutes, or absences.',
+    parameters: {
+      type: 'object',
+      properties: {
+        criteria: {
+          type: 'string',
+          enum: ['most_active', 'least_late', 'most_late', 'most_hours', 'most_absent', 'least_absent'],
+          description: 'Ranking criterion: "most_active", "least_late", "most_late", "most_hours", "most_absent", "least_absent"'
+        },
+        shopName: { type: 'string', description: 'Optional shop name (e.g. Camden, Chelsea, Edgware) to filter rankings to that shop' },
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'End date YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max rankings to return (default 15)' }
+      }
+    }
   }
 ];
 
@@ -1194,6 +1377,8 @@ async function executeRotaTool(name, args = {}, user) {
       return await getWorkerAttendance(args, user);
     case 'getWorkerSalaryAndPayroll':
       return await getWorkerSalaryAndPayroll(args, user);
+    case 'getWorkerRankingsAndComparison':
+      return await getWorkerRankingsAndComparison(args, user);
     case 'getEmployeeLedger':
       return await getEmployeeLedger(args, user);
     case 'getSalaryPayments':

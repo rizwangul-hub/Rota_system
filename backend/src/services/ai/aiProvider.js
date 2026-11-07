@@ -485,6 +485,66 @@ function formatToolResult(toolName, result, originalQuery = '') {
     return out;
   }
 
+  // 19. getWorkerRankingsAndComparison
+  if (toolName === 'getWorkerRankingsAndComparison') {
+    if (!result.success) return `⚠️ ${result.message || 'Unable to retrieve worker rankings.'}`;
+    const c = result.criteria;
+    const w = result.winner;
+    let out = '';
+
+    if (c === 'least_late') {
+      out += '## ⏱️ Most Punctual Worker (Least Late Minutes): ' + (w?.workerName || '—') + ' (' + (w?.employeeId || '—') + ')\n';
+      out += '**Shop Filter:** ' + result.shopFilter + ' | **Period:** ' + result.periodLabel + ' | **Evaluated Workers:** ' + result.totalWorkersEvaluated + '\n\n';
+      if (w) {
+        out += '🥇 **Rank 1 (Best Punctuality):** **' + w.workerName + '** has only **' + w.totalLateMinutes + ' total late minutes** across ' + w.presentDays + ' shifts worked (' + w.totalHours + ' hrs logged)!\n\n';
+      }
+      out += '### 🎯 Worker Punctuality & Lateness Leaderboard:\n';
+      out += '| Rank | Worker Name | ID | Assigned Shop | Total Late Mins | Shifts Worked | Official Late (>15m) | Minor Delay (≤15m) | Total Hours |\n|---|---|---|---|---|---|---|---|---|\n';
+      result.rankings.forEach((r, idx) => {
+        const medal = idx === 0 ? '🥇 1' : (idx === 1 ? '🥈 2' : (idx === 2 ? '🥉 3' : `${idx + 1}`));
+        out += '| ' + medal + ' | **' + r.workerName + '** | ' + r.employeeId + ' | ' + r.assignedShop + ' | **' + r.totalLateMinutes + ' mins** | ' + r.presentDays + ' days | ' + r.officialLateCount + ' | ' + r.minorDelayCount + ' | ' + r.totalHours + ' hrs |\n';
+      });
+    } else if (c === 'most_late') {
+      out += '## 🚨 Worker Lateness Leaderboard (Highest Late Minutes)\n';
+      out += '**Shop Filter:** ' + result.shopFilter + ' | **Period:** ' + result.periodLabel + ' | **Evaluated Workers:** ' + result.totalWorkersEvaluated + '\n\n';
+      if (w) {
+        out += '⚠️ **Highest Late Minutes:** **' + w.workerName + '** with **' + w.totalLateMinutes + ' late minutes** across ' + w.presentDays + ' shifts (' + w.officialLateCount + ' official late shifts).\n\n';
+      }
+      out += '### 📋 Lateness Comparison Table:\n';
+      out += '| Rank | Worker Name | ID | Assigned Shop | Total Late Mins | Official Late (>15m) | Minor Delay (≤15m) | Shifts Worked | Total Hours |\n|---|---|---|---|---|---|---|---|---|\n';
+      result.rankings.forEach((r, idx) => {
+        const badge = idx === 0 ? '🔴 1' : (idx === 1 ? '🟠 2' : (idx === 2 ? '🟡 3' : `${idx + 1}`));
+        out += '| ' + badge + ' | **' + r.workerName + '** | ' + r.employeeId + ' | ' + r.assignedShop + ' | **' + r.totalLateMinutes + ' mins** | ' + r.officialLateCount + ' | ' + r.minorDelayCount + ' | ' + r.presentDays + ' days | ' + r.totalHours + ' hrs |\n';
+      });
+    } else if (c === 'most_absent') {
+      out += '## ❌ Worker Absences Leaderboard (Highest Absent Days)\n';
+      out += '**Shop Filter:** ' + result.shopFilter + ' | **Period:** ' + result.periodLabel + ' | **Evaluated Workers:** ' + result.totalWorkersEvaluated + '\n\n';
+      if (w) {
+        out += '⚠️ **Most Absences:** **' + w.workerName + '** with **' + w.absentDays + ' absent days**.\n\n';
+      }
+      out += '### 📋 Absence Comparison Table:\n';
+      out += '| Rank | Worker Name | ID | Assigned Shop | Absent Days | Shifts Worked | Total Hours |\n|---|---|---|---|---|---|---|\n';
+      result.rankings.forEach((r, idx) => {
+        out += '| ' + (idx + 1) + ' | **' + r.workerName + '** | ' + r.employeeId + ' | ' + r.assignedShop + ' | **' + r.absentDays + ' days** | ' + r.presentDays + ' days | ' + r.totalHours + ' hrs |\n';
+      });
+    } else {
+      // most_active / most_hours
+      out += '## 🏆 Most Active Worker: ' + (w?.workerName || '—') + ' (' + (w?.employeeId || '—') + ')\n';
+      out += '**Shop Filter:** ' + result.shopFilter + ' | **Period:** ' + result.periodLabel + ' | **Evaluated Workers:** ' + result.totalWorkersEvaluated + '\n\n';
+      if (w) {
+        out += '🥇 **Rank 1 (Most Active):** **' + w.workerName + '** worked **' + w.totalHours + ' hours** across **' + w.presentDays + ' shifts** with ' + w.absentDays + ' absences!\n\n';
+      }
+      out += '### 📊 Worker Activity & Hours Leaderboard:\n';
+      out += '| Rank | Worker Name | ID | Assigned Shop | Total Hours Worked | Shifts Worked | Late Mins | Absent Days |\n|---|---|---|---|---|---|---|---|\n';
+      result.rankings.forEach((r, idx) => {
+        const medal = idx === 0 ? '🥇 1' : (idx === 1 ? '🥈 2' : (idx === 2 ? '🥉 3' : `${idx + 1}`));
+        out += '| ' + medal + ' | **' + r.workerName + '** | ' + r.employeeId + ' | ' + r.assignedShop + ' | **' + r.totalHours + ' hrs** | ' + r.presentDays + ' days | ' + r.totalLateMinutes + ' mins | ' + r.absentDays + ' days |\n';
+      });
+    }
+
+    return out;
+  }
+
   return JSON.stringify(result, null, 2);
 }
 

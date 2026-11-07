@@ -395,9 +395,12 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
   const period = parseDateOrPeriod(t);
   let workerName = await extractWorker(message);
 
-  // Multi-turn Context Resolution (extract recent entity from history if pronouns or short follow-ups used)
-  const isPronounOrFollowup = !workerName && /\b(he|him|his|unka|unke|unki|uska|uske|uski|worker|employee|that person)\b/i.test(t);
-  const isShortFollowup = !workerName && (isPdfReportRequest(t) || isExcelReportRequest(t) || /\b(salary|late|mints|attendance|hours|shifts|record|statement)\b/i.test(t));
+  // Detect Comparative / Ranking Queries (e.g. "which worker is most active", "which worker late mint is more less then other", "who is most punctual")
+  const isComparisonQuery = /\b(which\s*worker|which\s*employee|who\s*is\s*most|who\s*has\s*most|who\s*is\s*least|who\s*has\s*least|most\s*active|least\s*late|less\s*late|more\s*less|most\s*late|highest\s*late|minimum\s*late|lowest\s*late|most\s*punctual|best\s*punctuality|worst\s*punctuality|who\s*worked\s*most|who\s*worked\s*least|highest\s*hours|lowest\s*hours|most\s*shifts|least\s*shifts|most\s*absent|least\s*absent|sab\s*se\s*zyada|sab\s*se\s*kam|konsa\s*worker|konsa\s*employee|top\s*worker|top\s*workers|worker\s*ranking|compare\s*workers)\b/i.test(t);
+
+  // Multi-turn Context Resolution (extract recent entity from history ONLY if not a comparison/ranking question and pronouns or short follow-ups used)
+  const isPronounOrFollowup = !isComparisonQuery && !workerName && /\b(he|him|his|unka|unke|unki|uska|uske|uski|that person)\b/i.test(t);
+  const isShortFollowup = !isComparisonQuery && !workerName && (isPdfReportRequest(t) || isExcelReportRequest(t) || /^(salary|late|mints|attendance|hours|shifts|record|statement)$/i.test(t.trim()) || (/^(how many|what is|give me|show)\s+(salary|late|mints|hours|shifts)\b/i.test(t)));
 
   if ((isPronounOrFollowup || isShortFollowup) && Array.isArray(history) && history.length > 0) {
     for (let i = history.length - 1; i >= 0; i--) {
@@ -432,6 +435,40 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
     return [{
       name: 'securityNotice',
       args: { query: message }
+    }];
+  }
+
+  // 0. Worker Comparison & Ranking Queries (e.g. "which worker is most active on shop", "which worker late mint is more less then other")
+  if (isComparisonQuery) {
+    let criteria = 'most_active';
+
+    if (/\b(least\s*late|less\s*late|more\s*less|minimum\s*late|lowest\s*late|most\s*punctual|best\s*punctuality|kam\s*late|sab\s*se\s*kam\s*late|punctual)\b/i.test(t)) {
+      criteria = 'least_late';
+    } else if (/\b(most\s*late|highest\s*late|maximum\s*late|worst\s*punctuality|sab\s*se\s*zyada\s*late|zyada\s*late)\b/i.test(t)) {
+      criteria = 'most_late';
+    } else if (/\b(most\s*absent|highest\s*absence|sab\s*se\s*zyada\s*absent|most\s*absences)\b/i.test(t)) {
+      criteria = 'most_absent';
+    } else if (/\b(least\s*absent|lowest\s*absence|sab\s*se\s*kam\s*absent|fewest\s*absent)\b/i.test(t)) {
+      criteria = 'least_absent';
+    } else if (/\b(most\s*hours|highest\s*hours|most\s*worked|sab\s*se\s*zyada\s*ghante|sab\s*se\s*zyada\s*hours)\b/i.test(t)) {
+      criteria = 'most_hours';
+    } else {
+      criteria = 'most_active';
+    }
+
+    const args = { criteria };
+    if (shopName) args.shopName = shopName;
+    if (period?.type === 'month_range') {
+      args.startDate = period.startDate;
+      args.endDate = period.endDate;
+    } else if (period?.type === 'exact_date') {
+      args.startDate = period.dateStr;
+      args.endDate = period.dateStr;
+    }
+
+    return [{
+      name: 'getWorkerRankingsAndComparison',
+      args
     }];
   }
 
