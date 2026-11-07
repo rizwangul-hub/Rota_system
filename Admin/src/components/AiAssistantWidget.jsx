@@ -6,6 +6,7 @@ import {
   Send,
   RefreshCw,
   FileText,
+  FileSpreadsheet,
   Download,
   ExternalLink,
   Bot,
@@ -195,7 +196,7 @@ export default function AiAssistantWidget() {
             userSelect: 'none'
           }}
         >
-          {/* Rounded Pill "Ask AI" */}
+          {/* Rounded Pill "Assistant" */}
           <div
             className="ai-pill-text"
             style={{
@@ -203,9 +204,9 @@ export default function AiAssistantWidget() {
               color: '#ffffff',
               fontSize: '13px',
               fontWeight: 700,
-              padding: '9px 24px 9px 16px',
+              padding: '9px 30px 9px 16px',
               borderRadius: '24px',
-              marginRight: '-18px',
+              marginRight: '-14px',
               boxShadow: '0 4px 18px rgba(0,0,0,0.3)',
               border: '1.5px solid rgba(255,255,255,0.25)',
               display: 'flex',
@@ -442,6 +443,48 @@ export default function AiAssistantWidget() {
                         >
                           <Download size={12} />
                           <span>{downloadingToken === m.pdfReport.token ? '...' : 'Download'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {m.excelReport && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px 10px',
+                        backgroundColor: '#f0fdf4',
+                        borderRadius: '8px',
+                        border: '1px solid #bbf7d0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FileSpreadsheet size={16} color="#16a34a" />
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#166534' }}>
+                            Excel Ready
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadPdf(m.excelReport)}
+                          disabled={downloadingToken === m.excelReport.token}
+                          style={{
+                            padding: '4px 10px',
+                            backgroundColor: '#16a34a',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Download size={12} />
+                          <span>{downloadingToken === m.excelReport.token ? '...' : 'Download'}</span>
                         </button>
                       </div>
                     )}

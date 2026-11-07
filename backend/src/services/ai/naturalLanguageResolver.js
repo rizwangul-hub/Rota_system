@@ -45,6 +45,11 @@ function isPdfReportRequest(text) {
   return /\b(pdf|download\s*pdf|export\s*pdf|in\s*pdf|pdf\s*file|pdf\s*bhejo|pdf\s*do|pdf\s*chahiye|pdf\s*generate|generate\s*pdf|make\s*pdf)\b/i.test(t);
 }
 
+function isExcelReportRequest(text) {
+  const t = (text || '').toLowerCase();
+  return /\b(excel|spreadsheet|xlsx|excel\s*sheet|in\s*excel|excel\s*file|excel\s*do|excel\s*bhejo|excel\s*report|make\s*excel)\b/i.test(t);
+}
+
 // Standard English & Roman Urdu month dictionary with common phonetic variations and typos
 const MONTH_NAMES = {
   january: '01', jan: '01', januray: '01', janury: '01',
@@ -384,15 +389,42 @@ async function extractWorker(text) {
  * Intelligent Intent Resolver:
  * Dispatches to the exact tool with validated entities and date parameters.
  */
-async function resolveIntentAndToolCall(message) {
+async function resolveIntentAndToolCall(message, history = [], user = {}) {
   const t = (message || '').trim().toLowerCase();
-  const shopName = extractShopName(t);
+  let shopName = extractShopName(t);
   const period = parseDateOrPeriod(t);
-  const workerName = await extractWorker(message);
+  let workerName = await extractWorker(message);
+
+  // Multi-turn Context Resolution (extract recent entity from history if pronouns or short follow-ups used)
+  const isPronounOrFollowup = !workerName && /\b(he|him|his|unka|unke|unki|uska|uske|uski|worker|employee|that person)\b/i.test(t);
+  const isShortFollowup = !workerName && (isPdfReportRequest(t) || isExcelReportRequest(t) || /\b(salary|late|mints|attendance|hours|shifts|record|statement)\b/i.test(t));
+
+  if ((isPronounOrFollowup || isShortFollowup) && Array.isArray(history) && history.length > 0) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const pastText = history[i]?.content || '';
+      const pastWorker = await extractWorker(pastText);
+      if (pastWorker) {
+        workerName = pastWorker;
+        break;
+      }
+      if (!shopName) {
+        const pastShop = extractShopName(pastText);
+        if (pastShop) shopName = pastShop;
+      }
+    }
+  }
 
   const isSalaryQuery = /\b(salary|salaries|tankhwah|payroll|wage|wages|earnings|pay|paid|balance)\b/i.test(t);
   const isRotaQuery = /\b(rota|schedule|shift|planning|roster|planner)\b/i.test(t);
   const isAttendanceQuery = /\b(attendance|hazri|present|late|lateness|absent|hours|worked|checked|reached|left|time|duty|work|mints|minute|minutes|deri)\b/i.test(t);
+  const isLedgerQuery = /\b(ledger|khatta|running\s*balance|ledger\s*statement|account\s*statement|running\s*account)\b/i.test(t);
+  const isPaymentQuery = /\b(payment|payments|disburs|disbursement|cash\s*paid|bank\s*transfer|cash\s*vs\s*bank|was\s*paid|paid\s*out)\b/i.test(t);
+  const isPendingQuery = /\b(pending|pending\s*review|unverified|unapproved|pending\s*attendance|needs\s*approval|to\s*be\s*checked|awaiting\s*check)\b/i.test(t);
+  const isCheckedQuery = /\b(checked\s*attendance|verified\s*attendance|approved\s*attendance|finalized\s*attendance)\b/i.test(t);
+  const isHoursQuery = /\b(opening\s*hours?|closing\s*hours?|opening\s*time|closing\s*time|shop\s*hours?|timing|timings)\b/i.test(t);
+  const isAuditQuery = /\b(audit|audit\s*log|audit\s*trail|system\s*log|activity\s*log|who\s*changed|who\s*deleted)\b/i.test(t);
+  const isBonusQuery = /\b(bonus|bonuses|sales\s*bonus|target\s*bonus|monthly\s*bonus)\b/i.test(t);
+  const isLoanQuery = /\b(loan|loans|qarz|advance|advances|loan\s*balance)\b/i.test(t);
 
   // Security & Credential Queries Protection
   const isSecurityQuery = /\b(password|passwords|credential|credentials|login\s*detail|login\s*details|admin\s*login|secret|secrets|token|tokens|api\s*key|auth\s*token)\b/i.test(t);
@@ -403,7 +435,90 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 1. Worker Specific Queries
+  // 1. Audit Trail Query (Admin only)
+  if (isAuditQuery) {
+    return [{
+      name: 'getAuditHistory',
+      args: { limit: 30 }
+    }];
+  }
+
+  // 2. Bonus History Query
+  if (isBonusQuery) {
+    return [{
+      name: 'getBonusHistory',
+      args: { workerName, limit: 30 }
+    }];
+  }
+
+  // 3. Loans Summary Query
+  if (isLoanQuery) {
+    return [{
+      name: 'getLoansSummary',
+      args: { workerName, limit: 30 }
+    }];
+  }
+
+  // 4. Verification Queue: Pending Review Query
+  if (isPendingQuery) {
+    return [{
+      name: 'getPendingAttendance',
+      args: {
+        shopName,
+        date: period?.type === 'exact_date' ? period.dateStr : undefined,
+        limit: 50
+      }
+    }];
+  }
+
+  // 5. Verified / Checked Attendance Query
+  if (isCheckedQuery) {
+    return [{
+      name: 'getCheckedAttendance',
+      args: {
+        shopName,
+        date: period?.type === 'exact_date' ? period.dateStr : undefined,
+        limit: 50
+      }
+    }];
+  }
+
+  // 6. Shop Opening Hours / Operating Timings Query
+  if (isHoursQuery) {
+    return [{
+      name: 'getShopOpeningHours',
+      args: { shopName }
+    }];
+  }
+
+  // 7. Salary Payments / Disbursement History Query
+  if (isPaymentQuery) {
+    const isCash = /\bcash\b/i.test(t);
+    const isBank = /\bbank\b/i.test(t);
+    return [{
+      name: 'getSalaryPayments',
+      args: {
+        workerName,
+        paymentMethod: isCash ? 'Cash' : (isBank ? 'Bank' : undefined),
+        limit: 50
+      }
+    }];
+  }
+
+  // 8. Employee Ledger / Khatta Query
+  if (isLedgerQuery && workerName) {
+    const args = { workerName, limit: 50 };
+    if (period?.type === 'month_range') {
+      args.startDate = period.startDate;
+      args.endDate = period.endDate;
+    }
+    return [{
+      name: 'getEmployeeLedger',
+      args
+    }];
+  }
+
+  // 9. Worker Specific Queries
   if (workerName) {
     // A. Worker Salary / Payroll query
     if (isSalaryQuery) {
@@ -459,7 +574,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 2. Shop Specific Queries
+  // 10. Shop Specific Queries
   if (shopName) {
     if (isRotaQuery) {
       return [{
@@ -481,7 +596,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 3. Company-wide Payroll Query
+  // 11. Company-wide Payroll Query
   if (isSalaryQuery) {
     return [{
       name: 'getWeeklyPayrollSummary',
@@ -491,7 +606,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 4. Company-wide Weekly Rota Query
+  // 12. Company-wide Weekly Rota Query
   if (isRotaQuery) {
     return [{
       name: 'getWeeklyRotaOverview',
@@ -501,7 +616,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 5. Daily Attendance Overview for a specific Date
+  // 13. Daily Attendance Overview for a specific Date
   if (period?.type === 'exact_date') {
     return [{
       name: 'getDailyAttendanceOverview',
@@ -509,7 +624,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 6. Explicit inquiry for today or general attendance overview
+  // 14. Explicit inquiry for today or general attendance overview
   const isExplicitTodayOrAttendance = /\b(today|aaj|attendance|hazri|who\s*is\s*working|duty\s*list|daily\s*report)\b/i.test(t);
   if (isAttendanceQuery || isExplicitTodayOrAttendance) {
     return [{
@@ -518,7 +633,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 7. Unknown or out-of-scope query fallback: Guide user instead of dumping daily attendance!
+  // 15. Unknown or out-of-scope query fallback
   return [{
     name: 'clarifyOrOutOfScopeNotice',
     args: { query: message }
@@ -529,6 +644,7 @@ module.exports = {
   isGreetingOrHelp,
   getGreetingResponse,
   isPdfReportRequest,
+  isExcelReportRequest,
   parseRelativeDate,
   parseDateOrPeriod,
   extractShopName,

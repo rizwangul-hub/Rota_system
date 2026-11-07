@@ -4,9 +4,10 @@ const {
   isGreetingOrHelp,
   getGreetingResponse,
   isPdfReportRequest,
+  isExcelReportRequest,
   resolveIntentAndToolCall
 } = require('./naturalLanguageResolver');
-const { generateAiPdfReport } = require('./aiPdfReportService');
+const { generateAiPdfReport, generateAiReport } = require('./aiPdfReportService');
 const { getUKDateString } = require('../../utils/calc');
 
 const SYSTEM_INSTRUCTION = `You are the AI Workforce, Rota & Payroll Assistant for Pixx Technologies Ltd (UK Rota Management System).
@@ -357,6 +358,133 @@ function formatToolResult(toolName, result, originalQuery = '') {
     return out;
   }
 
+
+  // 11. getEmployeeLedger
+  if (toolName === 'getEmployeeLedger') {
+    let out = '### 📒 Employee Financial Ledger: ' + result.workerName + ' (' + result.workerId + ')\n\n';
+    out += '**Current Running Balance:** **' + result.latestRunningBalance + '** | **Total Ledger Entries:** ' + result.totalTransactions + '\n\n';
+    if (result.periodSummary) {
+      out += '| Metric | Amount |\n|---|---|\n';
+      out += '| **Total Earned (Credits)** | ' + result.periodSummary.totalEarned + ' |\n';
+      out += '| **Total Paid / Disbursed (Debits)** | ' + result.periodSummary.totalPaid + ' |\n\n';
+    }
+    if (!result.transactions || result.transactions.length === 0) {
+      out += '_No ledger transactions recorded for this worker._\n';
+      return out;
+    }
+    out += '| Date | Type | Description | Earned (+) | Paid (-) | Running Balance |\n|---|---|---|---|---|---|\n';
+    result.transactions.forEach(t => {
+      out += '| ' + t.date + ' | ' + t.type + ' | ' + t.description + ' | ' + t.amountEarned + ' | ' + t.amountPaid + ' | **' + t.runningBalance + '** |\n';
+    });
+    return out;
+  }
+
+  // 12. getSalaryPayments
+  if (toolName === 'getSalaryPayments') {
+    let out = '### 💵 Salary Payment Disbursements (' + result.totalPayments + ' Payments)\n\n';
+    if (result.summary) {
+      out += '**Total Disbursed:** **' + result.summary.totalAmount + '** (Cash: ' + result.summary.cashTotal + ' | Bank: ' + result.summary.bankTotal + ')\n\n';
+    }
+    if (!result.payments || result.payments.length === 0) {
+      out += '_No salary disbursements found matching criteria._\n';
+      return out;
+    }
+    out += '| Worker | Shop | Week | Amount | Method | Date | Paid By |\n|---|---|---|---|---|---|---|\n';
+    result.payments.forEach(p => {
+      out += '| **' + p.worker + '** | ' + p.shop + ' | ' + p.week + ' | **' + p.amount + '** | ' + p.method + ' | ' + p.date + ' | ' + p.paidBy + ' |\n';
+    });
+    return out;
+  }
+
+  // 13. getPendingAttendance
+  if (toolName === 'getPendingAttendance') {
+    let out = '### ⏳ Unverified Attendance Verification Queue (' + result.count + ' Pending)\n\n';
+    out += '**Date Filter:** ' + result.dateFilter + ' | **Shop:** ' + result.shopFilter + '\n\n';
+    if (!result.records || result.records.length === 0) {
+      out += '✅ _All attendance records have been checked and verified! No pending reviews._\n';
+      return out;
+    }
+    out += '| Worker | ID | Shop | Date | Scheduled Shift | Logged Times | Hours | Status |\n|---|---|---|---|---|---|---|---|\n';
+    result.records.forEach(r => {
+      out += '| **' + r.worker + '** | ' + r.id + ' | ' + r.shop + ' | ' + r.date + ' | ' + r.shift + ' | ' + r.logged + ' | ' + r.hours + 'h | ' + r.status + ' |\n';
+    });
+    return out;
+  }
+
+  // 14. getCheckedAttendance
+  if (toolName === 'getCheckedAttendance') {
+    let out = '### ✅ Verified Attendance Records (' + result.count + ' Checked)\n\n';
+    out += '**Date Filter:** ' + result.dateFilter + ' | **Shop:** ' + result.shopFilter + '\n\n';
+    if (!result.records || result.records.length === 0) {
+      out += '_No checked attendance records found for the specified criteria._\n';
+      return out;
+    }
+    out += '| Worker | ID | Shop | Date | Logged | Hours | Late | Approval | Checked By |\n|---|---|---|---|---|---|---|---|---|\n';
+    result.records.forEach(r => {
+      out += '| **' + r.worker + '** | ' + r.id + ' | ' + r.shop + ' | ' + r.date + ' | ' + r.logged + ' | ' + r.hours + 'h | ' + r.lateMinutes + ' min | ' + r.approvalStatus + ' | ' + r.checkedBy + ' |\n';
+    });
+    return out;
+  }
+
+  // 15. getShopOpeningHours
+  if (toolName === 'getShopOpeningHours') {
+    let out = '### 🕒 Operating Hours & Schedule: ' + result.shopName + '\n\n';
+    if (result.address && result.address !== '—') {
+      out += '**Location:** ' + result.address + '\n\n';
+    }
+    out += '| Day | Opening Time | Closing Time | Standard Shift Hours |\n|---|---|---|---|\n';
+    result.schedules.forEach(s => {
+      out += '| **' + s.day + '** | ' + s.openingTime + ' | ' + s.closingTime + ' | ' + s.defaultHours + ' hrs |\n';
+    });
+    return out;
+  }
+
+  // 16. getAuditHistory
+  if (toolName === 'getAuditHistory') {
+    let out = '### 🛡️ System Audit Trail & Security Logs (' + result.totalLogs + ' Logs)\n\n';
+    if (!result.logs || result.logs.length === 0) {
+      out += '_No audit log records found._\n';
+      return out;
+    }
+    out += '| Timestamp | User | Role | Action | Record Type | Details |\n|---|---|---|---|---|---|\n';
+    result.logs.forEach(l => {
+      out += '| ' + l.timestamp + ' | **' + l.username + '** | ' + l.role + ' | ' + l.action + ' | ' + l.recordType + ' | ' + l.details + ' |\n';
+    });
+    return out;
+  }
+
+  // 17. getBonusHistory
+  if (toolName === 'getBonusHistory') {
+    let out = '### 🎯 Monthly Performance & Sales Target Bonuses\n\n';
+    out += '**Total Bonus Credited:** **' + result.totalBonusAmount + '** (' + result.totalBonuses + ' records)\n\n';
+    if (!result.bonuses || result.bonuses.length === 0) {
+      out += '_No bonus records found for this worker or month._\n';
+      return out;
+    }
+    out += '| Worker | Shop | Month | Sales Logged | Target | Bonus Credited | Status |\n|---|---|---|---|---|---|---|\n';
+    result.bonuses.forEach(b => {
+      out += '| **' + b.worker + '** | ' + b.shop + ' | ' + b.monthYear + ' | ' + b.salesAmount + ' | ' + b.targetAmount + ' | **' + b.bonusAmount + '** | ' + b.status + ' |\n';
+    });
+    return out;
+  }
+
+  // 18. getLoansSummary
+  if (toolName === 'getLoansSummary') {
+    let out = '### 💳 Employee Loans & Advances Summary\n\n';
+    if (result.summary) {
+      out += '**Total Principal:** ' + result.summary.totalOriginalAmount + ' | **Outstanding Balance:** **' + result.summary.totalRemainingBalance + '**\n\n';
+    }
+    if (!result.loans || result.loans.length === 0) {
+      out += '✅ _No active loans found._\n';
+      return out;
+    }
+    out += '| Worker | Amount | Remaining | Weekly Deduction | Reason | Status | Date |\n|---|---|---|---|---|---|---|\n';
+    result.loans.forEach(l => {
+      out += '| **' + l.worker + '** | ' + l.amount + ' | **' + l.remainingBalance + '** | ' + l.weeklyDeduction + ' | ' + l.reason + ' | ' + l.status + ' | ' + l.date + ' |\n';
+    });
+    return out;
+  }
+
   return JSON.stringify(result, null, 2);
 }
 
@@ -376,45 +504,69 @@ async function askRotaAssistant(message, history = [], user = {}) {
     };
   }
 
-  // 2. Check for natural language PDF request
-  if (isPdfReportRequest(trimmed)) {
+  // 2. Check for direct PDF or Excel report export request
+  if (isPdfReportRequest(trimmed) || isExcelReportRequest(trimmed)) {
     try {
-      const pdfResult = await generateAiPdfReport(trimmed, user);
-      if (pdfResult && pdfResult.success) {
+      const reportRes = await generateAiReport(trimmed, user, history);
+      if (reportRes && (reportRes.pdfReport || reportRes.excelReport)) {
         return {
           success: true,
-          message: pdfResult.message,
-          pdfReport: pdfResult.pdfReport,
-          engine: 'pdf-generation-service'
+          message: reportRes.message || '📄 **Official report has been generated!** Click below to download.',
+          pdfReport: reportRes.pdfReport || null,
+          excelReport: reportRes.excelReport || null,
+          engine: 'report-generation-service'
+        };
+      } else if (reportRes && reportRes.message) {
+        return {
+          success: false,
+          message: reportRes.message,
+          engine: 'report-generation-service'
         };
       }
-    } catch (pdfErr) {
-      console.warn('[AI PDF Generation Warning]:', pdfErr.message);
+    } catch (repErr) {
+      console.warn('[AI Report Generation Warning]:', repErr.message);
     }
   }
 
-  // 3. Attempt Gemini API with function calling
+  // 3. Attempt Gemini API with function calling + user identity context
   const config = getAiConfig();
   let calls = null;
   let engine = 'pixx-ai-resolver';
+
+  const userName = user?.name || user?.username || 'Authenticated Staff';
+  const userRole = user?.role || 'ADMIN';
+  const assignedShop = user?.assignedShop?.name || user?.assignedShop || 'All Shops';
+
+  const userContextStr = `
+CURRENT LOGGED IN USER:
+- Name: ${userName}
+- Role: ${userRole}
+- Assigned Shop: ${assignedShop}
+- System Timezone: Europe/London
+- Security & Permissions:
+  * ADMIN: Full system access across all workers, shops, payroll, salaries, loans, bonuses, ledgers, and audit logs.
+  * ATTENDANCE_CHECKER & ATTENDANCE_OPERATOR: Attendance entry/verification, worker hours, and shop rosters only. Strictly blocked from financial figures (salaries, wages, loans, bonuses, and ledgers).
+  * SALARY_DISTRIBUTOR: Salary disbursement and payment history only. Blocked from audit logs and rota alterations.
+`;
 
   if (config.enabled && config.configured) {
     try {
       const candidateModels = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', config.model];
       const todayUK = getUKDateString(new Date());
-      const systemWithDate = `${SYSTEM_INSTRUCTION}\nToday in UK: ${todayUK}.`;
+      const systemWithDate = `${SYSTEM_INSTRUCTION}\nToday in UK: ${todayUK}.\n${userContextStr}`;
 
       const requestBody = {
         systemInstruction: { parts: [{ text: systemWithDate }] },
         contents: [
           ...history.slice(-6).map(h => ({
-            role: h.role === 'user' ? 'user' : 'model',
+            role: h.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: h.content }]
           })),
           { role: 'user', parts: [{ text: trimmed }] }
         ],
-        tools: [{ functionDeclarations: ALL_ROTA_TOOL_DECLARATIONS }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.1 }
+        tools: [{
+          functionDeclarations: ALL_ROTA_TOOL_DECLARATIONS
+        }]
       };
 
       for (const modelToTry of candidateModels) {
@@ -460,10 +612,10 @@ async function askRotaAssistant(message, history = [], user = {}) {
 
   // 4. Fallback to natural language intent resolver if LLM returned no calls
   if (!calls || calls.length === 0) {
-    calls = await resolveIntentAndToolCall(trimmed);
+    calls = await resolveIntentAndToolCall(trimmed, history, user);
   }
 
-  // 5. Execute resolved tools against the database
+  // 5. Execute resolved tools against the database with authenticated user RBAC
   const toolResults = [];
   const textOutputs = [];
 
@@ -480,14 +632,19 @@ async function askRotaAssistant(message, history = [], user = {}) {
 
   let finalMessage = textOutputs.join('\n\n---\n\n');
 
-  // If the query was asking about PDF, or if the user mentioned PDF, also generate a PDF companion!
+  // If the query was asking about PDF or Excel, or companion report requested
   let pdfReport = null;
-  if (isPdfReportRequest(trimmed)) {
+  let excelReport = null;
+  if (isPdfReportRequest(trimmed) || isExcelReportRequest(trimmed)) {
     try {
-      const pdfRes = await generateAiPdfReport(trimmed, user);
-      if (pdfRes && pdfRes.pdfReport) {
-        pdfReport = pdfRes.pdfReport;
+      const repRes = await generateAiReport(trimmed, user, history);
+      if (repRes?.pdfReport) {
+        pdfReport = repRes.pdfReport;
         finalMessage += `\n\n📄 **Official PDF report has been generated!** Click the button below to download.`;
+      }
+      if (repRes?.excelReport) {
+        excelReport = repRes.excelReport;
+        finalMessage += `\n\n📊 **Excel Spreadsheet has been generated!** Click the button below to download.`;
       }
     } catch {}
   }
@@ -497,6 +654,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
     message: finalMessage,
     toolCalls: calls,
     pdfReport,
+    excelReport,
     engine,
     timestamp: new Date().toISOString()
   };

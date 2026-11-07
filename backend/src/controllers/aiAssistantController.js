@@ -48,9 +48,14 @@ exports.handleDownloadPdfReport = async (req, res) => {
       });
     }
 
-    // Set download headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(report.fileName || 'Pixx_Report.pdf')}"`);
+    // Set download headers (dynamic MIME type for PDF and Excel spreadsheet)
+    const isExcel = report.format === 'excel' || (report.fileName && report.fileName.endsWith('.xlsx'));
+    const contentType = isExcel
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : (report.mimeType || 'application/pdf');
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(report.fileName || (isExcel ? 'Pixx_Report.xlsx' : 'Pixx_Report.pdf'))}"`);
     res.setHeader('Content-Length', report.buffer.length);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 

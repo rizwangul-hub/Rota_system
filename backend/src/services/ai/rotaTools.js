@@ -6,7 +6,21 @@ const WeeklyRota = require('../../models/WeeklyRota');
 const WeeklySalary = require('../../models/WeeklySalary');
 const Loan = require('../../models/Loan');
 const Bonus = require('../../models/Bonus');
+const LedgerTransaction = require('../../models/LedgerTransaction');
+const SalaryPayment = require('../../models/SalaryPayment');
+const ShopSchedule = require('../../models/ShopSchedule');
+const AuditLog = require('../../models/AuditLog');
 const { getUKDateString, formatUKDate, getWeekRange, calculateAttendanceRecord } = require('../../utils/calc');
+
+// Helper to determine if a user role is permitted for financial operations
+function isFinancialAuthorized(user) {
+  const role = user?.role || '';
+  return role === 'ADMIN' || role === 'SALARY_DISTRIBUTOR';
+}
+
+function isAdmin(user) {
+  return (user?.role || '') === 'ADMIN';
+}
 
 // Helper to find employee by name or ID (case-insensitive fuzzy match)
 async function findEmployee(searchTerm) {
@@ -52,7 +66,7 @@ async function findShop(searchTerm) {
 /**
  * 1. getWorkerDetails
  */
-async function getWorkerDetails({ workerName, workerId }) {
+async function getWorkerDetails({ workerName, workerId }, user) {
   const emp = await findEmployee(workerName || workerId);
   if (!emp) {
     const all = await Employee.find({ employmentStatus: 'Active' }).select('name employeeId').limit(15);
@@ -62,13 +76,35 @@ async function getWorkerDetails({ workerName, workerId }) {
     };
   }
 
-  // Fetch recent loans if any
-  const loans = await Loan.find({ employee: emp._id }).sort({ createdAt: -1 });
-  const totalLoanAmount = loans.reduce((s, l) => s + (l.amount || 0), 0);
-  const remainingLoanBalance = loans.reduce((s, l) => s + (l.remainingBalance || 0), 0);
+  const role = user?.role || '';
+  const canViewFinancials = role === 'ADMIN' || role === 'SALARY_DISTRIBUTOR';
 
-  // Fetch latest week's salary if available
-  const latestSalary = await WeeklySalary.findOne({ employee: emp._id }).sort({ weekStartDate: -1 });
+  let loansData = null;
+  let payrollData = null;
+
+  if (canViewFinancials) {
+    // Fetch recent loans if any
+    const loans = await Loan.find({ employee: emp._id }).sort({ createdAt: -1 });
+    const totalLoanAmount = loans.reduce((s, l) => s + (l.amount || 0), 0);
+    const remainingLoanBalance = loans.reduce((s, l) => s + (l.remainingBalance || 0), 0);
+    loansData = {
+      totalLoansCount: loans.length,
+      totalLoanAmount: `£${totalLoanAmount.toFixed(2)}`,
+      remainingLoanBalance: `£${remainingLoanBalance.toFixed(2)}`
+    };
+
+    // Fetch latest week's salary if available
+    const latestSalary = await WeeklySalary.findOne({ employee: emp._id }).sort({ weekStartDate: -1 });
+    if (latestSalary) {
+      payrollData = {
+        weekLabel: latestSalary.weekLabel,
+        workingDays: latestSalary.workingDays,
+        totalHours: latestSalary.actualHours,
+        finalSalary: `£${latestSalary.finalSalary.toFixed(2)}`,
+        status: latestSalary.status
+      };
+    }
+  }
 
   return {
     worker: {
@@ -77,31 +113,22 @@ async function getWorkerDetails({ workerName, workerId }) {
       phone: emp.phone || '—',
       email: emp.email || '—',
       assignedShop: emp.assignedShop ? emp.assignedShop.name : '—',
-      dailyWage: `£${emp.dailyWage || 0}`,
-      hourlyWage: `£${((emp.dailyWage || 0) / 9).toFixed(2)}`,
+      dailyWage: canViewFinancials ? `£${emp.dailyWage || 0}` : '[Confidential]',
+      hourlyWage: canViewFinancials ? `£${((emp.dailyWage || 0) / 9).toFixed(2)}` : '[Confidential]',
       employmentStatus: emp.employmentStatus,
       startDate: emp.startDate ? formatUKDate(emp.startDate) : '—',
       notes: emp.notes || '—'
     },
-    loans: {
-      totalLoansCount: loans.length,
-      totalLoanAmount: `£${totalLoanAmount.toFixed(2)}`,
-      remainingLoanBalance: `£${remainingLoanBalance.toFixed(2)}`
-    },
-    latestPayroll: latestSalary ? {
-      weekLabel: latestSalary.weekLabel,
-      workingDays: latestSalary.workingDays,
-      totalHours: latestSalary.actualHours,
-      finalSalary: `£${latestSalary.finalSalary.toFixed(2)}`,
-      status: latestSalary.status
-    } : null
+    loans: loansData,
+    latestPayroll: payrollData,
+    financialAccessRestricted: !canViewFinancials
   };
 }
 
 /**
  * 2. getWorkerAttendance
  */
-async function getWorkerAttendance({ workerName, workerId, date, startDate, endDate, status, limit }) {
+async function getWorkerAttendance({ workerName, workerId, date, startDate, endDate, status, limit }, user) {
   const emp = await findEmployee(workerName || workerId);
   if (!emp) {
     const all = await Employee.find({ employmentStatus: 'Active' }).select('name employeeId').limit(15);
@@ -110,6 +137,9 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
       availableWorkers: all.map(e => `${e.name} (${e.employeeId})`)
     };
   }
+
+  const role = user?.role || '';
+  const canViewFinancials = role === 'ADMIN' || role === 'SALARY_DISTRIBUTOR';
 
   const query = { employee: emp._id };
   if (date) {
@@ -138,8 +168,8 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
     lateMinutes: r.lateMinutes || 0,
     hours: r.actualHours || 0,
     status: r.status,
-    pay: `£${(r.attendancePay || 0).toFixed(2)}`,
-    deduction: r.lateDeduction ? `£${r.lateDeduction.toFixed(2)}` : '£0.00',
+    pay: canViewFinancials ? `£${(r.attendancePay || 0).toFixed(2)}` : '—',
+    deduction: canViewFinancials ? (r.lateDeduction ? `£${r.lateDeduction.toFixed(2)}` : '£0.00') : '—',
     approvalStatus: r.approvalStatus || 'Pending Review',
     remarks: r.remarks || '—'
   }));
@@ -166,9 +196,9 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
       totalHalf,
       totalAbsent,
       totalLateMinutes,
-      totalLateDeductions: `£${totalLateDeductions.toFixed(2)}`,
+      totalLateDeductions: canViewFinancials ? `£${totalLateDeductions.toFixed(2)}` : '[Restricted]',
       totalHoursLogged: Number(totalHours.toFixed(1)),
-      totalEarned: `£${totalPay.toFixed(2)}`
+      totalEarned: canViewFinancials ? `£${totalPay.toFixed(2)}` : '[Restricted]'
     },
     lateRecords,
     absentRecords,
@@ -179,7 +209,14 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
 /**
  * 3. getWorkerSalaryAndPayroll
  */
-async function getWorkerSalaryAndPayroll({ workerName, workerId, weekStart, startDate, endDate, limit = 10 }) {
+async function getWorkerSalaryAndPayroll({ workerName, workerId, weekStart, startDate, endDate, limit = 10 }, user) {
+  if (!isFinancialAuthorized(user)) {
+    return {
+      error: `Permission Denied: Your user role (${user?.role || 'Guest'}) does not have authorization to view employee salaries, earnings, or payroll. Please contact an administrator.`,
+      restricted: true
+    };
+  }
+
   const emp = await findEmployee(workerName || workerId);
   if (!emp) {
     const all = await Employee.find({ employmentStatus: 'Active' }).select('name employeeId').limit(15);
@@ -387,7 +424,7 @@ async function getShopWeeklyRota({ shopName, weekStart }) {
 /**
  * 7. getDailyAttendanceOverview
  */
-async function getDailyAttendanceOverview({ date, shopName, status }) {
+async function getDailyAttendanceOverview({ date, shopName, status }, user) {
   const dateStr = date ? getUKDateString(date) : getUKDateString(new Date());
   const query = { dateString: dateStr };
 
@@ -402,6 +439,8 @@ async function getDailyAttendanceOverview({ date, shopName, status }) {
     .populate('employee')
     .populate('shop')
     .sort({ shopName: 1, employeeName: 1 });
+
+  const canViewFinancials = isFinancialAuthorized(user);
 
   const present = records.filter(r => r.status === 'Present').length;
   const late = records.filter(r => r.status === 'Late').length;
@@ -424,8 +463,8 @@ async function getDailyAttendanceOverview({ date, shopName, status }) {
       actual: r.status === 'Absent' ? '—' : `${r.timeReached} – ${r.workerEndTime}`,
       hours: r.actualHours || 0,
       lateMin: r.lateMinutes || 0,
-      deduction: `£${(r.lateDeduction || 0).toFixed(2)}`,
-      pay: `£${(r.attendancePay || 0).toFixed(2)}`,
+      deduction: canViewFinancials ? `£${(r.lateDeduction || 0).toFixed(2)}` : '—',
+      pay: canViewFinancials ? `£${(r.attendancePay || 0).toFixed(2)}` : '—',
       approval: r.approvalStatus || 'Pending Review'
     });
   });
@@ -441,8 +480,8 @@ async function getDailyAttendanceOverview({ date, shopName, status }) {
       half,
       absent,
       totalHours: Number(totalHours.toFixed(1)),
-      totalWages: `£${totalWages.toFixed(2)}`,
-      totalLateDeductions: `£${totalLateDeductions.toFixed(2)}`
+      totalWages: canViewFinancials ? `£${totalWages.toFixed(2)}` : '[Restricted]',
+      totalLateDeductions: canViewFinancials ? `£${totalLateDeductions.toFixed(2)}` : '[Restricted]'
     },
     shopBreakdown
   };
@@ -486,7 +525,14 @@ async function getWeeklyRotaOverview({ weekStart }) {
 /**
  * 9. getWeeklyPayrollSummary
  */
-async function getWeeklyPayrollSummary({ weekStart }) {
+async function getWeeklyPayrollSummary({ weekStart }, user) {
+  if (!isFinancialAuthorized(user)) {
+    return {
+      error: `Permission Denied: Your user role (${user?.role || 'Guest'}) does not have authorization to view company payroll summaries. Please contact an administrator.`,
+      restricted: true
+    };
+  }
+
   const range = getWeekRange(weekStart);
   const salaries = await WeeklySalary.find({ weekStartDateString: range.startDateString });
 
@@ -533,13 +579,15 @@ async function getWeeklyPayrollSummary({ weekStart }) {
 /**
  * 10. getAllEmployeesSummary
  */
-async function getAllEmployeesSummary({ status = 'Active' }) {
+async function getAllEmployeesSummary({ status = 'Active' }, user) {
   const query = {};
   if (status && status !== 'all') query.employmentStatus = status;
 
   const employees = await Employee.find(query)
     .populate('assignedShop')
     .sort({ name: 1 });
+
+  const canViewFinancials = isFinancialAuthorized(user);
 
   return {
     totalEmployees: employees.length,
@@ -548,7 +596,7 @@ async function getAllEmployeesSummary({ status = 'Active' }) {
       name: e.name,
       employeeId: e.employeeId,
       assignedShop: e.assignedShop ? e.assignedShop.name : 'Unassigned',
-      dailyWage: `£${e.dailyWage}`,
+      dailyWage: canViewFinancials ? `£${e.dailyWage}` : '[Confidential]',
       phone: e.phone || '—',
       status: e.employmentStatus
     }))
@@ -575,6 +623,328 @@ async function getAllShopsSummary() {
       address: s.address || '—',
       activeWorkersAssigned: countMap[String(s._id)] || 0,
       status: s.status || (s.isActive ? 'Active' : 'Inactive')
+    }))
+  };
+}
+
+/**
+ * 12. getEmployeeLedger
+ */
+async function getEmployeeLedger({ workerName, workerId, startDate, endDate, limit = 50 }, user) {
+  if (!isAdmin(user)) {
+    return {
+      error: `Permission Denied: Only administrators have access to employee financial ledger balances and running accounts (current role: ${user?.role || 'Guest'}).`,
+      restricted: true
+    };
+  }
+  const emp = await findEmployee(workerName || workerId);
+  if (!emp) {
+    const all = await Employee.find({ employmentStatus: 'Active' }).select('name employeeId').limit(15);
+    return {
+      error: `Worker "${workerName || workerId || ''}" not found.`,
+      availableWorkers: all.map(e => `${e.name} (${e.employeeId})`)
+    };
+  }
+
+  const query = { employee: emp._id };
+  if (startDate || endDate) {
+    query.date = {};
+    if (startDate) query.date.$gte = new Date(startDate);
+    if (endDate) query.date.$lte = new Date(endDate);
+  }
+
+  const txs = await LedgerTransaction.find(query)
+    .sort({ date: -1, createdAt: -1 })
+    .limit(Number(limit) || 50);
+
+  const totalEarned = txs.reduce((s, t) => s + (t.amountEarned || 0), 0);
+  const totalPaid = txs.reduce((s, t) => s + (t.amountPaid || 0), 0);
+  const latestRunningBalance = txs.length > 0 ? (txs[0].runningBalance || 0) : 0;
+
+  return {
+    workerName: emp.name,
+    workerId: emp.employeeId,
+    totalTransactions: txs.length,
+    latestRunningBalance: `£${latestRunningBalance.toFixed(2)}`,
+    periodSummary: {
+      totalEarned: `£${totalEarned.toFixed(2)}`,
+      totalPaid: `£${totalPaid.toFixed(2)}`
+    },
+    transactions: txs.map(t => ({
+      date: formatUKDate(t.date),
+      type: t.transactionType,
+      description: t.description,
+      amountEarned: `£${(t.amountEarned || 0).toFixed(2)}`,
+      amountPaid: `£${(t.amountPaid || 0).toFixed(2)}`,
+      runningBalance: `£${(t.runningBalance || 0).toFixed(2)}`,
+      referenceType: t.referenceType
+    }))
+  };
+}
+
+/**
+ * 13. getSalaryPayments
+ */
+async function getSalaryPayments({ workerName, workerId, weekLabel, paymentMethod, startDate, endDate, limit = 50 }, user) {
+  if (!isFinancialAuthorized(user)) {
+    return {
+      error: `Permission Denied: Your role (${user?.role || 'Guest'}) does not have authorization to view salary payment disbursements.`,
+      restricted: true
+    };
+  }
+
+  const query = {};
+  if (workerName || workerId) {
+    const emp = await findEmployee(workerName || workerId);
+    if (emp) query.employee = emp._id;
+  }
+  if (weekLabel) query.weekLabel = new RegExp(weekLabel, 'i');
+  if (paymentMethod) query.paymentMethod = paymentMethod;
+  if (startDate || endDate) {
+    query.paymentDate = {};
+    if (startDate) query.paymentDate.$gte = new Date(startDate);
+    if (endDate) query.paymentDate.$lte = new Date(endDate);
+  }
+
+  const payments = await SalaryPayment.find(query)
+    .sort({ paymentDate: -1 })
+    .limit(Number(limit) || 50);
+
+  const totalAmount = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const cashTotal = payments.filter(p => p.paymentMethod === 'Cash').reduce((s, p) => s + (p.amount || 0), 0);
+  const bankTotal = payments.filter(p => p.paymentMethod === 'Bank').reduce((s, p) => s + (p.amount || 0), 0);
+
+  return {
+    totalPayments: payments.length,
+    summary: {
+      totalAmount: `£${totalAmount.toFixed(2)}`,
+      cashTotal: `£${cashTotal.toFixed(2)}`,
+      bankTotal: `£${bankTotal.toFixed(2)}`
+    },
+    payments: payments.map(p => ({
+      worker: p.employeeName,
+      shop: p.shopName,
+      week: p.weekLabel,
+      amount: `£${(p.amount || 0).toFixed(2)}`,
+      method: p.paymentMethod,
+      date: formatUKDate(p.paymentDate),
+      paidBy: p.paidByName || 'System'
+    }))
+  };
+}
+
+/**
+ * 14. getPendingAttendance
+ */
+async function getPendingAttendance({ date, shopName, limit = 50 }) {
+  const query = { approvalStatus: { $in: ['Pending Review', 'pending review', 'Pending', 'pending'] } };
+  if (date) query.dateString = getUKDateString(date);
+  if (shopName) {
+    const shop = await findShop(shopName);
+    if (shop) query.shop = shop._id;
+  }
+
+  const pending = await Attendance.find(query)
+    .populate('employee')
+    .populate('shop')
+    .sort({ dateString: -1, employeeName: 1 })
+    .limit(Number(limit) || 50);
+
+  return {
+    count: pending.length,
+    dateFilter: date ? formatUKDate(getUKDateString(date)) : 'All Dates',
+    shopFilter: shopName || 'All Shops',
+    records: pending.map(p => ({
+      worker: p.employeeName,
+      id: p.employeeId,
+      shop: p.shopName || p.shop?.name || '—',
+      date: p.dateString ? formatUKDate(p.dateString) : '—',
+      status: p.status,
+      shift: `${p.shiftStart || '—'} – ${p.shiftEnd || '—'}`,
+      logged: `${p.timeReached || '—'} – ${p.workerEndTime || '—'}`,
+      hours: p.actualHours || 0,
+      lateMinutes: p.lateMinutes || 0,
+      notes: p.notes || p.remarks || '—',
+      approvalStatus: p.approvalStatus
+    }))
+  };
+}
+
+/**
+ * 15. getCheckedAttendance
+ */
+async function getCheckedAttendance({ date, shopName, limit = 50 }) {
+  const query = { approvalStatus: { $in: ['Checked', 'Approved', 'Finalized', 'checked'] } };
+  if (date) query.dateString = getUKDateString(date);
+  if (shopName) {
+    const shop = await findShop(shopName);
+    if (shop) query.shop = shop._id;
+  }
+
+  const checked = await Attendance.find(query)
+    .populate('employee')
+    .populate('shop')
+    .sort({ dateString: -1, employeeName: 1 })
+    .limit(Number(limit) || 50);
+
+  return {
+    count: checked.length,
+    dateFilter: date ? formatUKDate(getUKDateString(date)) : 'All Dates',
+    shopFilter: shopName || 'All Shops',
+    records: checked.map(p => ({
+      worker: p.employeeName,
+      id: p.employeeId,
+      shop: p.shopName || p.shop?.name || '—',
+      date: p.dateString ? formatUKDate(p.dateString) : '—',
+      status: p.status,
+      shift: `${p.shiftStart || '—'} – ${p.shiftEnd || '—'}`,
+      logged: `${p.timeReached || '—'} – ${p.workerEndTime || '—'}`,
+      hours: p.actualHours || 0,
+      lateMinutes: p.lateMinutes || 0,
+      approvalStatus: p.approvalStatus,
+      checkedBy: p.checkedByName || 'Sarfraz Khan'
+    }))
+  };
+}
+
+/**
+ * 16. getShopOpeningHours
+ */
+async function getShopOpeningHours({ shopName, shopCode }) {
+  let shop = null;
+  if (shopName || shopCode) {
+    shop = await findShop(shopName || shopCode);
+  }
+
+  let schedules = [];
+  if (shop) {
+    schedules = await ShopSchedule.find({ shop: shop._id, isActive: true }).sort({ dayOfWeek: 1 });
+  }
+  if (!schedules.length) {
+    schedules = await ShopSchedule.find({ shop: null, isActive: true }).sort({ dayOfWeek: 1 });
+  }
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const formatted = schedules.map(s => ({
+    day: s.dayName || dayNames[s.dayOfWeek],
+    dayOfWeek: s.dayOfWeek,
+    openingTime: s.openingTime,
+    closingTime: s.closingTime,
+    defaultHours: s.defaultHours
+  }));
+
+  return {
+    shopName: shop ? shop.name : 'Default System Schedule (All Shops)',
+    shopCode: shop ? shop.code : 'ALL',
+    address: shop ? shop.address : '—',
+    schedules: formatted
+  };
+}
+
+/**
+ * 17. getAuditHistory
+ */
+async function getAuditHistory({ username, action, recordType, limit = 30 }, user) {
+  if (!isAdmin(user)) {
+    return {
+      error: `Permission Denied: Security and audit logs can only be viewed by administrators (current role: ${user?.role || 'Guest'}).`,
+      restricted: true
+    };
+  }
+
+  const query = {};
+  if (username) query.username = new RegExp(username, 'i');
+  if (action) query.action = new RegExp(action, 'i');
+  if (recordType) query.recordType = new RegExp(recordType, 'i');
+
+  const logs = await AuditLog.find(query).sort({ timestamp: -1 }).limit(Number(limit) || 30);
+
+  return {
+    totalLogs: logs.length,
+    logs: logs.map(l => ({
+      timestamp: formatUKDate(l.timestamp),
+      username: l.username,
+      role: l.role,
+      action: l.action,
+      recordType: l.recordType,
+      details: l.details || '—'
+    }))
+  };
+}
+
+/**
+ * 18. getBonusHistory
+ */
+async function getBonusHistory({ workerName, workerId, month, year, limit = 30 }, user) {
+  if (!isAdmin(user)) {
+    return {
+      error: `Permission Denied: Only administrators can view monthly performance bonuses (current role: ${user?.role || 'Guest'}).`,
+      restricted: true
+    };
+  }
+
+  const query = {};
+  if (workerName || workerId) {
+    const emp = await findEmployee(workerName || workerId);
+    if (emp) query.employee = emp._id;
+  }
+  if (month) query.month = Number(month);
+  if (year) query.year = Number(year);
+
+  const bonuses = await Bonus.find(query).populate('employee').populate('shop').sort({ year: -1, month: -1 }).limit(Number(limit) || 30);
+  const totalBonusAmount = bonuses.reduce((s, b) => s + (b.bonusAmount || 0), 0);
+
+  return {
+    totalBonuses: bonuses.length,
+    totalBonusAmount: `£${totalBonusAmount.toFixed(2)}`,
+    bonuses: bonuses.map(b => ({
+      worker: b.employeeName || b.employee?.name || '—',
+      shop: b.shop?.name || '—',
+      monthYear: `${b.month}/${b.year}`,
+      salesAmount: `£${(b.salesAmount || 0).toFixed(2)}`,
+      targetAmount: `£${(b.targetAmount || 0).toFixed(2)}`,
+      bonusAmount: `£${(b.bonusAmount || 0).toFixed(2)}`,
+      status: b.status
+    }))
+  };
+}
+
+/**
+ * 19. getLoansSummary
+ */
+async function getLoansSummary({ workerName, workerId, status, limit = 30 }, user) {
+  if (!isAdmin(user)) {
+    return {
+      error: `Permission Denied: Only administrators can view employee loan records (current role: ${user?.role || 'Guest'}).`,
+      restricted: true
+    };
+  }
+
+  const query = {};
+  if (workerName || workerId) {
+    const emp = await findEmployee(workerName || workerId);
+    if (emp) query.employee = emp._id;
+  }
+  if (status) query.status = status;
+
+  const loans = await Loan.find(query).populate('employee').sort({ createdAt: -1 }).limit(Number(limit) || 30);
+  const totalAmount = loans.reduce((s, l) => s + (l.amount || 0), 0);
+  const remainingTotal = loans.reduce((s, l) => s + (l.remainingBalance || 0), 0);
+
+  return {
+    totalLoans: loans.length,
+    summary: {
+      totalOriginalAmount: `£${totalAmount.toFixed(2)}`,
+      totalRemainingBalance: `£${remainingTotal.toFixed(2)}`
+    },
+    loans: loans.map(l => ({
+      worker: l.employeeName || l.employee?.name || '—',
+      amount: `£${(l.amount || 0).toFixed(2)}`,
+      remainingBalance: `£${(l.remainingBalance || 0).toFixed(2)}`,
+      weeklyDeduction: `£${(l.weeklyDeduction || 0).toFixed(2)}`,
+      reason: l.reason || '—',
+      status: l.status,
+      date: formatUKDate(l.createdAt)
     }))
   };
 }
@@ -610,7 +980,7 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
   },
   {
     name: 'getWorkerSalaryAndPayroll',
-    description: 'Get weekly salary breakdown, hours, gross wages, late deductions, bonuses, loans, final pay, and payment status for any worker. Use this whenever the user asks about salary, earnings, pay, payroll, or tankhwah of an employee for any week, month, or overall.',
+    description: 'Get weekly salary breakdown, hours, gross wages, late deductions, bonuses, loans, final pay, and payment status for any worker. Restricted to authorized financial roles.',
     parameters: {
       type: 'object',
       properties: {
@@ -620,6 +990,60 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
         startDate: { type: 'string', description: 'Start date for month or range filter (YYYY-MM-DD, e.g. 2026-10-01)' },
         endDate: { type: 'string', description: 'End date for month or range filter (YYYY-MM-DD, e.g. 2026-10-31)' },
         limit: { type: 'number', description: 'Max records to return' }
+      }
+    }
+  },
+  {
+    name: 'getEmployeeLedger',
+    description: 'Get complete financial ledger transactions, debit/credit entries, and running account balance for an employee. (Admin only)',
+    parameters: {
+      type: 'object',
+      properties: {
+        workerName: { type: 'string', description: 'Worker name' },
+        workerId: { type: 'string', description: 'Worker ID' },
+        startDate: { type: 'string', description: 'Start date filter' },
+        endDate: { type: 'string', description: 'End date filter' },
+        limit: { type: 'number', description: 'Max records' }
+      }
+    }
+  },
+  {
+    name: 'getSalaryPayments',
+    description: 'Get history of actual salary disbursements (Cash vs Bank payments, amounts, dates, disbursed by).',
+    parameters: {
+      type: 'object',
+      properties: {
+        workerName: { type: 'string', description: 'Worker name' },
+        workerId: { type: 'string', description: 'Worker ID' },
+        weekLabel: { type: 'string', description: 'Week label filter' },
+        paymentMethod: { type: 'string', enum: ['Cash', 'Bank'], description: 'Filter Cash or Bank' },
+        startDate: { type: 'string', description: 'Start date' },
+        endDate: { type: 'string', description: 'End date' },
+        limit: { type: 'number', description: 'Max records' }
+      }
+    }
+  },
+  {
+    name: 'getPendingAttendance',
+    description: 'Get unverified attendance entries in the verification queue awaiting review or approval.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'Optional date filter' },
+        shopName: { type: 'string', description: 'Optional shop filter' },
+        limit: { type: 'number', description: 'Max records' }
+      }
+    }
+  },
+  {
+    name: 'getCheckedAttendance',
+    description: 'Get verified/checked attendance entries that have been reviewed by managers/checkers.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'Optional date filter' },
+        shopName: { type: 'string', description: 'Optional shop filter' },
+        limit: { type: 'number', description: 'Max records' }
       }
     }
   },
@@ -648,7 +1072,7 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
   },
   {
     name: 'getShopWeeklyRota',
-    description: 'Get the weekly rota schedule for a specific shop across all 7 days of the week.',
+    description: 'Get the planned weekly rota schedule for a specific shop across all 7 days of the week.',
     parameters: {
       type: 'object',
       properties: {
@@ -656,6 +1080,17 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
         weekStart: { type: 'string', description: 'Week start date' }
       },
       required: ['shopName']
+    }
+  },
+  {
+    name: 'getShopOpeningHours',
+    description: 'Get operating schedule, opening hours, closing times, and standard hours for any shop.',
+    parameters: {
+      type: 'object',
+      properties: {
+        shopName: { type: 'string', description: 'Shop name' },
+        shopCode: { type: 'string', description: 'Shop code' }
+      }
     }
   },
   {
@@ -672,7 +1107,7 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
   },
   {
     name: 'getWeeklyRotaOverview',
-    description: 'Get the weekly rota summary, assignment count, and publication status for any week.',
+    description: 'Get the weekly planned rota summary, assignment count, and publication status for any week.',
     parameters: {
       type: 'object',
       properties: {
@@ -682,7 +1117,7 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
   },
   {
     name: 'getWeeklyPayrollSummary',
-    description: 'Get weekly payroll totals (total gross wages, total deductions, net payable, total paid, and balance) for the entire company.',
+    description: 'Get weekly payroll totals (total gross wages, total deductions, net payable, total paid, and balance) for the entire company. Restricted to Admin/Salary Distributor.',
     parameters: {
       type: 'object',
       properties: {
@@ -707,6 +1142,46 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
       type: 'object',
       properties: {}
     }
+  },
+  {
+    name: 'getAuditHistory',
+    description: 'Get administrative audit trail and system activity logs. (Admin only)',
+    parameters: {
+      type: 'object',
+      properties: {
+        username: { type: 'string', description: 'Filter by username' },
+        action: { type: 'string', description: 'Filter by action' },
+        recordType: { type: 'string', description: 'Filter by record type' },
+        limit: { type: 'number', description: 'Max logs' }
+      }
+    }
+  },
+  {
+    name: 'getBonusHistory',
+    description: 'Get monthly sales target bonus credits and performance records. (Admin only)',
+    parameters: {
+      type: 'object',
+      properties: {
+        workerName: { type: 'string', description: 'Worker name' },
+        workerId: { type: 'string', description: 'Worker ID' },
+        month: { type: 'number', description: 'Month (1-12)' },
+        year: { type: 'number', description: 'Year (e.g. 2026)' },
+        limit: { type: 'number', description: 'Max records' }
+      }
+    }
+  },
+  {
+    name: 'getLoansSummary',
+    description: 'Get employee loan and advance records, repayments, and outstanding balances. (Admin only)',
+    parameters: {
+      type: 'object',
+      properties: {
+        workerName: { type: 'string', description: 'Worker name' },
+        workerId: { type: 'string', description: 'Worker ID' },
+        status: { type: 'string', enum: ['Active', 'Repaid', 'all'], description: 'Loan status' },
+        limit: { type: 'number', description: 'Max records' }
+      }
+    }
   }
 ];
 
@@ -714,11 +1189,21 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
 async function executeRotaTool(name, args = {}, user) {
   switch (name) {
     case 'getWorkerDetails':
-      return await getWorkerDetails(args);
+      return await getWorkerDetails(args, user);
     case 'getWorkerAttendance':
-      return await getWorkerAttendance(args);
+      return await getWorkerAttendance(args, user);
     case 'getWorkerSalaryAndPayroll':
-      return await getWorkerSalaryAndPayroll(args);
+      return await getWorkerSalaryAndPayroll(args, user);
+    case 'getEmployeeLedger':
+      return await getEmployeeLedger(args, user);
+    case 'getSalaryPayments':
+      return await getSalaryPayments(args, user);
+    case 'getPendingAttendance':
+      return await getPendingAttendance(args, user);
+    case 'getCheckedAttendance':
+      return await getCheckedAttendance(args, user);
+    case 'getShopOpeningHours':
+      return await getShopOpeningHours(args, user);
     case 'getShopDetails':
       return await getShopDetails(args);
     case 'getShopDailyAttendance':
@@ -726,29 +1211,35 @@ async function executeRotaTool(name, args = {}, user) {
     case 'getShopWeeklyRota':
       return await getShopWeeklyRota(args);
     case 'getDailyAttendanceOverview':
-      return await getDailyAttendanceOverview(args);
+      return await getDailyAttendanceOverview(args, user);
     case 'getWeeklyRotaOverview':
       return await getWeeklyRotaOverview(args);
     case 'getWeeklyPayrollSummary':
-      return await getWeeklyPayrollSummary(args);
+      return await getWeeklyPayrollSummary(args, user);
     case 'getAllEmployeesSummary':
-      return await getAllEmployeesSummary(args);
+      return await getAllEmployeesSummary(args, user);
     case 'getAllShopsSummary':
-      return await getAllShopsSummary(args);
+      return await getAllShopsSummary();
+    case 'getAuditHistory':
+      return await getAuditHistory(args, user);
+    case 'getBonusHistory':
+      return await getBonusHistory(args, user);
+    case 'getLoansSummary':
+      return await getLoansSummary(args, user);
     case 'securityNotice':
       return {
         isNotice: true,
         noticeType: 'security',
-        text: `🔒 **Security Notice:** For system protection and privacy compliance, I do not store or provide user passwords, admin login credentials, or secret keys.\n\nPlease log in via the official **[Admin Login](/login)** page or contact your system administrator for account credentials.`
+        text: '🔒 **Security Notice:** For system protection and privacy compliance, I do not store or provide user passwords, admin login credentials, or secret keys.\n\nPlease log in via the official **[Admin Login](/login)** page or contact your system administrator for account credentials.'
       };
     case 'clarifyOrOutOfScopeNotice':
       return {
         isNotice: true,
         noticeType: 'clarify',
-        text: `❓ **I didn't quite catch that:**\n\nI couldn't match a worker name, shop, or attendance request from your query: *"${args.query || ''}"*.\n\nI can help you with:\n1. 👤 **Worker Attendance & Lateness** (e.g. *"Show Shiva's attendance"*, *"how many mints late by arslan in october"*)\n2. 💰 **Weekly Salaries & Payroll** (e.g. *"Qasim salary report"*, *"Ubaid october earnings"*)\n3. 🏪 **Shop Staffing & Shifts** (e.g. *"Who worked at Camden yesterday?"*, *"Chelsea rota"*)\n4. 📄 **Official PDF Reports** (e.g. *"Give me Shiva's report in PDF"*)\n\n_Tip: If asking about a worker, check their spelling or use their ID (e.g. Arslan Bhai, Shiva, PIXX001)._`
+        text: '❓ **I didn\'t quite catch that:**\n\nI couldn\'t match a worker name, shop, or attendance request from your query: *"' + (args.query || '') + '"*.\n\nI can help you with:\n1. 👤 **Worker Attendance & Lateness** (e.g. *"Show Shiva\'s attendance"*, *"how many mints late by arslan in october"*)\n2. 💰 **Weekly Salaries & Payroll** (e.g. *"Qasim salary report"*, *"Ubaid october earnings"*)\n3. 🏪 **Shop Staffing & Shifts** (e.g. *"Who worked at Camden yesterday?"*, *"Chelsea rota"*)\n4. 📄 **Official PDF & Excel Reports** (e.g. *"Give me Shiva\'s report in PDF"*, *"Export to Excel"*)\n\n_Tip: If asking about a worker, check their spelling or use their ID (e.g. Arslan Bhai, Shiva, PIXX001)._'
       };
     default:
-      throw new Error(`Tool "${name}" is not implemented.`);
+      throw new Error('Tool ' + name + ' is not implemented.');
   }
 }
 

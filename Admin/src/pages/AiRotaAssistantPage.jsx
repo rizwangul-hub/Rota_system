@@ -6,6 +6,7 @@ import {
   Trash2,
   RefreshCw,
   FileText,
+  FileSpreadsheet,
   Download,
   User,
   Building2,
@@ -22,8 +23,8 @@ import { API_BASE_URL } from '../context/AuthContext';
 
 const SUGGESTED_PROMPTS = [
   { text: "Give me Shiva's attendance in PDF", icon: FileText, tag: 'PDF Report' },
-  { text: "Today's daily attendance summary in PDF", icon: FileText, tag: 'PDF Report' },
-  { text: "Weekly payroll summary in PDF", icon: FileText, tag: 'PDF Report' },
+  { text: "Export today's attendance to Excel", icon: FileSpreadsheet, tag: 'Excel Export' },
+  { text: "Show unverified attendance queue", icon: Clock, tag: 'Verification' },
   { text: "Show me Qasim's wage and profile details", icon: User, tag: 'Worker' },
   { text: "Who worked at Camden shop yesterday?", icon: Building2, tag: 'Shop' },
   { text: "Who arrived late on 2026-11-05?", icon: Clock, tag: 'Attendance' },
@@ -592,6 +593,74 @@ export default function AiRotaAssistantPage() {
                         </div>
                       )}
 
+                      {m.excelReport && (
+                        <div style={{
+                          marginTop: '12px',
+                          padding: '12px 16px',
+                          backgroundColor: '#f0fdf4',
+                          border: '1.5px solid #86efac',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          flexWrap: 'wrap'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '8px',
+                              backgroundColor: '#dcfce7',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#16a34a'
+                            }}>
+                              <FileSpreadsheet size={20} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534' }}>
+                                {m.excelReport.title || 'Official Excel Spreadsheet'}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#15803d' }}>
+                                {m.excelReport.fileName}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadPdf(m.excelReport)}
+                            disabled={downloadingToken === m.excelReport.token}
+                            style={{
+                              backgroundColor: '#16a34a',
+                              color: '#ffffff',
+                              padding: '8px 14px',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: downloadingToken === m.excelReport.token ? 'wait' : 'pointer',
+                              border: 'none',
+                              boxShadow: '0 2px 6px rgba(22,163,74,0.3)',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {downloadingToken === m.excelReport.token ? (
+                              <>
+                                <RefreshCw size={14} className="spin" />
+                                <span>Downloading...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download size={14} />
+                                <span>Download Excel</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
                       {/* Bot Message Footer */}
                       <div style={{
                         marginTop: '10px',
@@ -743,7 +812,7 @@ export default function AiRotaAssistantPage() {
             <RefreshCw size={18} className="spin" />
           ) : (
             <>
-              <span>Ask AI</span>
+              <span>Assistant</span>
               <Send size={16} />
             </>
           )}

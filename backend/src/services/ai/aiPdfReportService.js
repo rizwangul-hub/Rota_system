@@ -1,5 +1,6 @@
 require('../../utils/pdfkitFontPatch');
 const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
 const crypto = require('crypto');
 const Employee = require('../../models/Employee');
 const Shop = require('../../models/Shop');
@@ -9,6 +10,15 @@ const WeeklyRota = require('../../models/WeeklyRota');
 const { getUKDateString, formatUKDate, getWeekRange, getDayOfWeekUK } = require('../../utils/calc');
 const { findEmployee, findShop } = require('./rotaTools');
 const { parseRelativeDate, extractShopName, extractWorker } = require('./naturalLanguageResolver');
+function isFinancialAuthorized(user) {
+  const role = user?.role || '';
+  return role === 'ADMIN' || role === 'SALARY_DISTRIBUTOR';
+}
+
+function isAdmin(user) {
+  return (user?.role || '') === 'ADMIN';
+}
+
 
 // In-memory PDF buffer store (60 min TTL)
 const pdfReportStore = new Map();
@@ -23,17 +33,24 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref();
 
-function storePdf(buffer, fileName, title, user) {
-  const token = 'rotapdf_' + crypto.randomBytes(16).toString('hex');
+function storeReportFile(buffer, fileName, title, user, mimeType = 'application/pdf', format = 'pdf') {
+  const prefix = format === 'excel' ? 'rotaexcel_' : 'rotapdf_';
+  const token = prefix + crypto.randomBytes(16).toString('hex');
   pdfReportStore.set(token, {
     buffer,
     fileName,
     title,
     userId: user?._id ? String(user._id) : null,
+    mimeType: mimeType || (format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf'),
+    format,
     createdAt: Date.now(),
     expiresAt: Date.now() + PDF_TTL_MS
   });
   return token;
+}
+
+function storePdf(buffer, fileName, title, user) {
+  return storeReportFile(buffer, fileName, title, user, 'application/pdf', 'pdf');
 }
 
 function getStoredPdf(token) {
@@ -348,71 +365,323 @@ async function buildWeeklyPayrollPdfBuffer(weekStart) {
 /**
  * Main dispatcher to generate AI PDF Report based on user query
  */
-async function generateAiPdfReport(query, user) {
-  const dateStr = parseRelativeDate(query) || getUKDateString(new Date());
-  const shopName = extractShopName(query);
-  const workerCandidate = await extractWorker(query);
 
-  // 1. Worker Specific Attendance or Salary Report
-  if (workerCandidate) {
-    const worker = await findEmployee(workerCandidate);
-    if (worker) {
-      const buffer = await buildWorkerAttendancePdfBuffer(worker);
-      const fileName = `PIXX_Attendance_${worker.employeeId}_${worker.name.replace(/\s+/g, '_')}.pdf`;
-      const title = `${worker.name} — Attendance & Wage Statement`;
-      const token = storePdf(buffer, fileName, title, user);
-      return {
-        success: true,
-        message: `📄 **I have generated the PDF Statement for ${worker.name} (${worker.employeeId}).**\n\nYou can click the button below to download the official PDF report.`,
-        pdfReport: {
-          token,
-          fileName,
-          title,
-          downloadUrl: `/api/ai/download-report/${token}`
-        }
-      };
+/**
+ * 4. Build Worker Attendance Excel Buffer
+ */
+async function buildWorkerAttendanceExcelBuffer(worker, dateRange = {}, user) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'PIXX Rota System AI Assistant';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet('Attendance Record');
+  const canFinancial = isFinancialAuthorized(user);
+
+  sheet.columns = [
+    { header: 'Date', key: 'date', width: 14 },
+    { header: 'Day', key: 'day', width: 12 },
+    { header: 'Shop Location', key: 'shop', width: 18 },
+    { header: 'Scheduled Shift', key: 'shift', width: 16 },
+    { header: 'Arrival', key: 'reached', width: 12 },
+    { header: 'Departure', key: 'left', width: 12 },
+    { header: 'Late (Mins)', key: 'lateMinutes', width: 12 },
+    { header: 'Hours Logged', key: 'hours', width: 14 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Calculated Pay', key: 'pay', width: 16 },
+    { header: 'Late Deduction', key: 'deduction', width: 16 },
+    { header: 'Approval Status', key: 'approval', width: 16 },
+    { header: 'Remarks', key: 'remarks', width: 24 }
+  ];
+
+  sheet.spliceRows(1, 0,
+    ['PIXX TECHNOLOGIES — WORKER ATTENDANCE STATEMENT'],
+    ['Worker: ' + worker.name + ' (' + worker.employeeId + ') | Assigned Shop: ' + (worker.assignedShop?.name || 'Unassigned') + ' | Exported: ' + formatUKDate(new Date())],
+    []
+  );
+
+  sheet.getRow(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  sheet.getRow(2).font = { italic: true, size: 10, color: { argb: 'FF475569' } };
+
+  const headerRow = sheet.getRow(4);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+
+  const query = { employee: worker._id };
+  if (dateRange.startDate || dateRange.endDate) {
+    query.dateString = {};
+    if (dateRange.startDate) query.dateString.$gte = dateRange.startDate;
+    if (dateRange.endDate) query.dateString.$lte = dateRange.endDate;
+  }
+
+  const records = await Attendance.find(query).sort({ dateString: -1 }).limit(100);
+
+  records.forEach(r => {
+    sheet.addRow({
+      date: formatUKDate(r.dateString),
+      day: r.dateString ? getDayOfWeekUK(r.dateString) : '—',
+      shop: r.shopName || r.shop?.name || (r.status === 'Absent' ? 'Absent' : '—'),
+      shift: r.status === 'Absent' ? 'OFF' : (r.shiftStart || '—') + ' – ' + (r.shiftEnd || '—'),
+      reached: r.timeReached || '—',
+      left: r.workerEndTime || '—',
+      lateMinutes: r.lateMinutes || 0,
+      hours: r.actualHours || 0,
+      status: r.status,
+      pay: canFinancial ? ('£' + (r.attendancePay || 0).toFixed(2)) : '[Restricted]',
+      deduction: canFinancial ? ('£' + (r.lateDeduction || 0).toFixed(2)) : '[Restricted]',
+      approval: r.approvalStatus || 'Pending Review',
+      remarks: r.remarks || '—'
+    });
+  });
+
+  return await workbook.xlsx.writeBuffer();
+}
+
+/**
+ * 5. Build Weekly Payroll Excel Buffer
+ */
+async function buildWeeklyPayrollExcelBuffer(dateStr, user) {
+  if (!isFinancialAuthorized(user)) {
+    throw new Error('Permission Denied: Your role does not have authorization to export payroll statements.');
+  }
+
+  const range = getWeekRange(dateStr);
+  const salaries = await WeeklySalary.find({ weekStartDateString: range.startDateString }).sort({ employeeName: 1 });
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'PIXX Rota System AI Assistant';
+  const sheet = workbook.addWorksheet('Weekly Payroll');
+
+  sheet.columns = [
+    { header: 'Worker Name', key: 'name', width: 20 },
+    { header: 'Employee ID', key: 'id', width: 14 },
+    { header: 'Shop', key: 'shop', width: 16 },
+    { header: 'Working Days', key: 'days', width: 14 },
+    { header: 'Actual Hours', key: 'hours', width: 14 },
+    { header: 'Gross Daily Wages', key: 'gross', width: 18 },
+    { header: 'Late Deductions', key: 'late', width: 16 },
+    { header: 'Bonus', key: 'bonus', width: 14 },
+    { header: 'Loan Deduction', key: 'loan', width: 16 },
+    { header: 'Final Salary', key: 'final', width: 16 },
+    { header: 'Total Paid', key: 'paid', width: 16 },
+    { header: 'Balance Remaining', key: 'balance', width: 18 },
+    { header: 'Payment Status', key: 'status', width: 16 }
+  ];
+
+  sheet.spliceRows(1, 0,
+    ['PIXX TECHNOLOGIES — OFFICIAL WEEKLY PAYROLL STATEMENT'],
+    ['Week: ' + range.weekLabel + ' (' + range.startDateString + ' to ' + range.endDateString + ') | Total Staff: ' + salaries.length],
+    []
+  );
+
+  sheet.getRow(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  sheet.getRow(2).font = { italic: true, size: 10, color: { argb: 'FF475569' } };
+
+  const headerRow = sheet.getRow(4);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+
+  salaries.forEach(s => {
+    sheet.addRow({
+      name: s.employeeName,
+      id: s.employeeId,
+      shop: s.shopName || '—',
+      days: s.workingDays,
+      hours: s.actualHours,
+      gross: '£' + (s.grossDailyWages || 0).toFixed(2),
+      late: '£' + (s.lateDeductions || 0).toFixed(2),
+      bonus: '£' + (s.bonus || 0).toFixed(2),
+      loan: '£' + (s.loanDeduction || 0).toFixed(2),
+      final: '£' + (s.finalSalary || 0).toFixed(2),
+      paid: '£' + (s.totalPaid || 0).toFixed(2),
+      balance: '£' + (s.balanceRemaining || 0).toFixed(2),
+      status: s.status
+    });
+  });
+
+  return await workbook.xlsx.writeBuffer();
+}
+
+/**
+ * 6. Build Daily Attendance Excel Buffer
+ */
+async function buildDailyAttendanceExcelBuffer(dateStr, shop, user) {
+  const query = { dateString: dateStr };
+  if (shop) query.shop = shop._id;
+
+  const records = await Attendance.find(query).sort({ shopName: 1, employeeName: 1 });
+  const canFinancial = isFinancialAuthorized(user);
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'PIXX Rota System AI Assistant';
+  const sheet = workbook.addWorksheet('Daily Attendance');
+
+  sheet.columns = [
+    { header: 'Worker Name', key: 'name', width: 20 },
+    { header: 'Employee ID', key: 'id', width: 14 },
+    { header: 'Shop Location', key: 'shop', width: 18 },
+    { header: 'Scheduled Shift', key: 'shift', width: 16 },
+    { header: 'Time In', key: 'timeIn', width: 12 },
+    { header: 'Time Out', key: 'timeOut', width: 12 },
+    { header: 'Hours Logged', key: 'hours', width: 14 },
+    { header: 'Late Minutes', key: 'lateMinutes', width: 14 },
+    { header: 'Status', key: 'status', width: 12 },
+    { header: 'Calculated Pay', key: 'pay', width: 16 },
+    { header: 'Late Deduction', key: 'deduction', width: 16 },
+    { header: 'Approval Status', key: 'approval', width: 16 }
+  ];
+
+  sheet.spliceRows(1, 0,
+    ['PIXX TECHNOLOGIES — DAILY ATTENDANCE REPORT (' + formatUKDate(dateStr) + ')'],
+    ['Shop Filter: ' + (shop ? shop.name : 'All Shops') + ' | Total Logged: ' + records.length],
+    []
+  );
+
+  sheet.getRow(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  sheet.getRow(2).font = { italic: true, size: 10, color: { argb: 'FF475569' } };
+
+  const headerRow = sheet.getRow(4);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+
+  records.forEach(r => {
+    sheet.addRow({
+      name: r.employeeName,
+      id: r.employeeId,
+      shop: r.status === 'Absent' ? 'Absent Workers' : (r.shopName || r.shop?.name || 'Other'),
+      shift: r.status === 'Absent' ? 'OFF' : (r.shiftStart || '—') + ' – ' + (r.shiftEnd || '—'),
+      timeIn: r.status === 'Absent' ? '—' : (r.timeReached || '—'),
+      timeOut: r.status === 'Absent' ? '—' : (r.workerEndTime || '—'),
+      hours: r.actualHours || 0,
+      lateMinutes: r.lateMinutes || 0,
+      status: r.status,
+      pay: canFinancial ? ('£' + (r.attendancePay || 0).toFixed(2)) : '[Restricted]',
+      deduction: canFinancial ? ('£' + (r.lateDeduction || 0).toFixed(2)) : '[Restricted]',
+      approval: r.approvalStatus || 'Pending Review'
+    });
+  });
+
+  return await workbook.xlsx.writeBuffer();
+}
+
+/**
+ * Universal Report Dispatcher (generates PDF and/or Excel based on user request)
+ */
+async function generateAiReport(query, user, history = []) {
+  const isExcel = /\b(excel|spreadsheet|xlsx|excel\s*sheet|in\s*excel|excel\s*report)\b/i.test(query);
+  const isPdf = /\b(pdf|in\s*pdf|pdf\s*report|pdf\s*file)\b/i.test(query) || (!isExcel);
+
+  const dateStr = parseRelativeDate(query) || getUKDateString(new Date());
+  let shopName = extractShopName(query);
+  let workerCandidate = await extractWorker(query);
+
+  if (!workerCandidate && Array.isArray(history) && history.length > 0) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const prevMsg = history[i]?.content || '';
+      const prevCandidate = await extractWorker(prevMsg);
+      if (prevCandidate) {
+        workerCandidate = prevCandidate;
+        break;
+      }
     }
   }
 
-  // 2. Weekly Payroll PDF Report
-  if (/\b(payroll|salary|salaries|weekly\s*salary|earnings)\b/i.test(query)) {
-    const buffer = await buildWeeklyPayrollPdfBuffer(dateStr);
-    const range = getWeekRange(dateStr);
-    const fileName = `PIXX_Weekly_Payroll_${range.startDateString}.pdf`;
-    const title = `Weekly Payroll Statement (${range.weekLabel})`;
-    const token = storePdf(buffer, fileName, title, user);
-    return {
-      success: true,
-      message: `📄 **I have generated the Weekly Payroll Statement for ${range.weekLabel}.**\n\nClick below to download the official PDF report.`,
-      pdfReport: {
-        token,
-        fileName,
-        title,
-        downloadUrl: `/api/ai/download-report/${token}`
+  if (!shopName && Array.isArray(history) && history.length > 0) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const prevMsg = history[i]?.content || '';
+      const prevShop = extractShopName(prevMsg);
+      if (prevShop) {
+        shopName = prevShop;
+        break;
       }
-    };
+    }
+  }
+
+  let pdfReport = null;
+  let excelReport = null;
+  let message = '';
+
+  // 1. Worker Attendance / Wage Statement
+  if (workerCandidate) {
+    const worker = await findEmployee(workerCandidate);
+    if (worker) {
+      if (isPdf) {
+        const pdfBuf = await buildWorkerAttendancePdfBuffer(worker);
+        const fileName = 'PIXX_Attendance_' + worker.employeeId + '_' + worker.name.replace(/\s+/g, '_') + '.pdf';
+        const title = worker.name + ' — Attendance & Wage Statement';
+        const token = storeReportFile(pdfBuf, fileName, title, user, 'application/pdf', 'pdf');
+        pdfReport = { token, fileName, title, downloadUrl: '/api/ai/download-report/' + token };
+      }
+      if (isExcel) {
+        const xlsBuf = await buildWorkerAttendanceExcelBuffer(worker, {}, user);
+        const fileName = 'PIXX_Attendance_' + worker.employeeId + '_' + worker.name.replace(/\s+/g, '_') + '.xlsx';
+        const title = worker.name + ' — Attendance Spreadsheet';
+        const token = storeReportFile(xlsBuf, fileName, title, user, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'excel');
+        excelReport = { token, fileName, title, downloadUrl: '/api/ai/download-report/' + token };
+      }
+      message = '📄 **Official statement generated for ' + worker.name + ' (' + worker.employeeId + ').**';
+      return { success: true, message, pdfReport, excelReport };
+    }
+  }
+
+  // 2. Weekly Payroll Report
+  if (/\b(payroll|salary|salaries|weekly\s*salary|earnings)\b/i.test(query)) {
+    if (!isFinancialAuthorized(user)) {
+      return {
+        success: false,
+        message: '🔒 **Access Restricted:** Your user role (' + (user?.role || 'Guest') + ') is not authorized to export weekly payroll records.'
+      };
+    }
+    const range = getWeekRange(dateStr);
+    if (isPdf) {
+      const pdfBuf = await buildWeeklyPayrollPdfBuffer(dateStr);
+      const fileName = 'PIXX_Weekly_Payroll_' + range.startDateString + '.pdf';
+      const title = 'Weekly Payroll Statement (' + range.weekLabel + ')';
+      const token = storeReportFile(pdfBuf, fileName, title, user, 'application/pdf', 'pdf');
+      pdfReport = { token, fileName, title, downloadUrl: '/api/ai/download-report/' + token };
+    }
+    if (isExcel) {
+      const xlsBuf = await buildWeeklyPayrollExcelBuffer(dateStr, user);
+      const fileName = 'PIXX_Weekly_Payroll_' + range.startDateString + '.xlsx';
+      const title = 'Weekly Payroll Spreadsheet (' + range.weekLabel + ')';
+      const token = storeReportFile(xlsBuf, fileName, title, user, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'excel');
+      excelReport = { token, fileName, title, downloadUrl: '/api/ai/download-report/' + token };
+    }
+    message = '📄 **Weekly Payroll report generated for ' + range.weekLabel + '.**';
+    return { success: true, message, pdfReport, excelReport };
   }
 
   // 3. Shop or Daily Attendance Report
   const shop = shopName ? await findShop(shopName) : null;
-  const buffer = await buildDailyAttendancePdfBuffer(dateStr, shop);
-  const fileName = `PIXX_Daily_Attendance_${shop ? shop.name.replace(/\s+/g, '_') : 'All_Shops'}_${dateStr}.pdf`;
-  const title = `Daily Attendance Report — ${shop ? shop.name : 'All Shops'} (${formatUKDate(dateStr)})`;
-  const token = storePdf(buffer, fileName, title, user);
+  const shopLabel = shop ? shop.name : 'All Shops';
+  if (isPdf) {
+    const pdfBuf = await buildDailyAttendancePdfBuffer(dateStr, shop);
+    const fileName = 'PIXX_Daily_Attendance_' + (shop ? shop.name.replace(/\s+/g, '_') : 'All_Shops') + '_' + dateStr + '.pdf';
+    const title = 'Daily Attendance Report — ' + shopLabel + ' (' + formatUKDate(dateStr) + ')';
+    const token = storeReportFile(pdfBuf, fileName, title, user, 'application/pdf', 'pdf');
+    pdfReport = { token, fileName, title, downloadUrl: '/api/ai/download-report/' + token };
+  }
+  if (isExcel) {
+    const xlsBuf = await buildDailyAttendanceExcelBuffer(dateStr, shop, user);
+    const fileName = 'PIXX_Daily_Attendance_' + (shop ? shop.name.replace(/\s+/g, '_') : 'All_Shops') + '_' + dateStr + '.xlsx';
+    const title = 'Daily Attendance Spreadsheet — ' + shopLabel + ' (' + formatUKDate(dateStr) + ')';
+    const token = storeReportFile(xlsBuf, fileName, title, user, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'excel');
+    excelReport = { token, fileName, title, downloadUrl: '/api/ai/download-report/' + token };
+  }
+  message = '📄 **Daily Attendance report generated for ' + formatUKDate(dateStr) + ' (' + shopLabel + ').**';
+  return { success: true, message, pdfReport, excelReport };
+}
 
-  return {
-    success: true,
-    message: `📄 **I have generated the Daily Attendance PDF Report for ${formatUKDate(dateStr)} (${shop ? shop.name : 'All Shops'}).**\n\nClick below to download your report.`,
-    pdfReport: {
-      token,
-      fileName,
-      title,
-      downloadUrl: `/api/ai/download-report/${token}`
-    }
-  };
+async function generateAiPdfReport(query, user) {
+  return await generateAiReport(query, user);
 }
 
 module.exports = {
   generateAiPdfReport,
-  getStoredPdf
+  generateAiReport,
+  getStoredPdf,
+  storeReportFile,
+  storePdf
 };
