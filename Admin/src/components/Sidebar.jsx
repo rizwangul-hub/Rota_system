@@ -13,7 +13,8 @@ import {
   LogOut,
   Clock,
   CalendarDays,
-  PanelLeftClose
+  PanelLeftClose,
+  Sparkles
 } from 'lucide-react';
 const logo = '/logo.jpg';
 import { useSidebar } from '../context/SidebarContext';
@@ -108,6 +109,11 @@ export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: pro
 
             <li className="nav-section-title">Reports & System</li>
             <li className="nav-item">
+              <NavLink to="/ai-assistant" onClick={() => setMobileOpen(false)}>
+                <Sparkles size={18} color="#38bdf8" /> AI Rota Assistant
+              </NavLink>
+            </li>
+            <li className="nav-item">
               <NavLink to="/reports" onClick={() => setMobileOpen(false)}>
                 <FileBarChart size={18} /> Reports & Exports
               </NavLink>
@@ -134,7 +140,12 @@ export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: pro
                 <CalendarDays size={18} /> Weekly Rota Planner
               </NavLink>
             </li>
-            <li className="nav-section-title">Reports</li>
+            <li className="nav-section-title">Reports & AI</li>
+            <li className="nav-item">
+              <NavLink to="/ai-assistant" onClick={() => setMobileOpen(false)}>
+                <Sparkles size={18} color="#38bdf8" /> AI Rota Assistant
+              </NavLink>
+            </li>
             <li className="nav-item">
               <NavLink to="/reports" onClick={() => setMobileOpen(false)}>
                 <FileBarChart size={18} /> WhatsApp Daily Report

@@ -24,6 +24,7 @@ const settingRoutes = require('./routes/settingRoutes');
 const rotaRoutes = require('./routes/rotaRoutes');
 const loanRoutes = require('./routes/loanRoutes');
 const versionRoutes = require('./routes/versionRoutes');
+const aiAssistantRoutes = require('./routes/aiAssistantRoutes');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -148,6 +149,9 @@ app.use('/loans', loanRoutes);
 
 app.use('/api/version', versionRoutes);
 app.use('/version', versionRoutes);
+
+app.use('/api/ai', aiAssistantRoutes);
+app.use('/ai', aiAssistantRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -20,6 +20,8 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import AuditPage from './pages/AuditPage';
 import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
+import AiRotaAssistantPage from './pages/AiRotaAssistantPage';
+import AiAssistantWidget from './components/AiAssistantWidget';
 
 function ProtectedLayout({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -60,6 +62,9 @@ function ProtectedLayout({ children, allowedRoles }) {
         <Navbar />
         {children}
       </div>
+
+      {/* Floating AI Assistant Widget (accessible on every page) */}
+      <AiAssistantWidget />
 
       {/* Persistent floating button to easily restore sidebar from any page */}
       {isSidebarHidden && (
@@ -170,6 +175,16 @@ export default function App() {
             element={
               <ProtectedLayout allowedRoles={['ADMIN']}>
                 <BonusPage />
+              </ProtectedLayout>
+            }
+          />
+
+          {/* AI Workforce & Finance Assistant */}
+          <Route
+            path="/ai-assistant"
+            element={
+              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'SALARY_DISTRIBUTOR']}>
+                <AiRotaAssistantPage />
               </ProtectedLayout>
             }
           />
