@@ -861,29 +861,24 @@ exports.exportExcel = async (req, res) => {
     const employeeDayAssignments = getEmployeeDayAssignments(rota.assignments, shopsById);
 
     // Shop roster lookup
-    const allEmployeeIds = new Set();
-    (rota.shopRoster || []).forEach(sr => (sr.employeeIds || []).forEach(e => allEmployeeIds.add(id(e._id || e))));
-    (rota.assignments || []).forEach(a => { if (a.employeeId) allEmployeeIds.add(id(a.employeeId)); });
-    const allEmployees = await Employee.find({ _id: { $in: [...allEmployeeIds] } }).select('name').lean();
-    const employeesById = new Map(allEmployees.map(e => [id(e._id), e]));
-
     const rosterMap = {};
     for (const sr of (rota.shopRoster || [])) {
       const sId = id(sr.shopId?._id || sr.shopId);
       rosterMap[sId] = {
-        shopName: sr.shopId?.name || shopsById[sId] || '',
-        employees: (sr.employeeIds || []).map(e => ({
-          _id: id(e._id || e),
-          name: e.name || employeesById.get(id(e._id || e))?.name || ''
-        }))
+        shopName: sr.shopId?.name || '',
+        employees: (sr.employeeIds || []).map(e => ({ _id: id(e._id || e), name: e.name || '' }))
       };
     }
     const rosterEmployeesById = new Map(
       Object.values(rosterMap).flatMap(roster => roster.employees.map(employee => [employee._id, employee]))
     );
-    employeesById.forEach((employee, employeeId) => {
-      if (!rosterEmployeesById.has(employeeId)) rosterEmployeesById.set(employeeId, employee);
-    });
+    if (mongoose.connection?.readyState === 1) {
+      const missingEmployeeIds = [...new Set((rota.assignments || []).map(a => id(a.employeeId)))].filter(eId => !rosterEmployeesById.has(eId));
+      if (missingEmployeeIds.length > 0) {
+        const extraEmployees = await Employee.find({ _id: { $in: missingEmployeeIds } }).select('name').lean();
+        extraEmployees.forEach(e => rosterEmployeesById.set(id(e._id), { _id: id(e._id), name: e.name || '' }));
+      }
+    }
     addIncomingWorkersToRosters(rosterMap, rota.assignments || [], rosterEmployeesById, shopsById);
 
     const DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
