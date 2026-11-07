@@ -146,8 +146,8 @@ async function run() {
     assert.ok(response.buffer.subarray(0, 4).toString('ascii') === '%PDF');
     const extractedText = pdfText(response.buffer);
     const decodedStreams = pdfStreams(response.buffer);
-    assert.ok(decodedStreams.includes(pdfFillColorOperator('#fcd34d')), 'Camden should have one continuous, visible shop background');
-    assert.ok(decodedStreams.includes(pdfFillColorOperator('#93c5fd')), 'Station should have one continuous, visible shop background');
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#fff3cd')), 'Camden should have one continuous, visible shop background');
+    assert.ok(decodedStreams.includes(pdfFillColorOperator('#cce5ff')), 'Station should have one continuous, visible shop background');
     assert.ok(decodedStreams.includes('0.8 w'), 'rota cells should have clearly visible dark borders');
     assert.ok(decodedStreams.includes('0.2 0.2549019607843137 0.3333333333333333 SCN'), 'cell borders should use a dark slate color');
     assert.ok(!decodedStreams.includes(pdfFillColorOperator('#ecfdf5')), 'available cells should not be drawn as separate background boxes');
