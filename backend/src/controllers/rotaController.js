@@ -1204,19 +1204,13 @@ exports.exportPdf = async (req, res) => {
     allShops.forEach(shop => { shopsById[id(shop._id)] = shop.name; });
 
     let employeesById = null;
-    const allEmployeeIds = new Set([
-      ...(rota.shopRoster || []).flatMap(roster => (roster.employeeIds || []).map(id)),
-      ...(rota.assignments || []).map(a => id(a.employeeId))
-    ].filter(Boolean));
-
-    const employees = allEmployeeIds.size
-      ? await Employee.find({ _id: { $in: [...allEmployeeIds] } }).select('name').lean()
-      : [];
-    employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
-
     if (currentScreenSnapshot) {
-      const rosterEmployeeIds = [...new Set(rota.shopRoster.flatMap(roster => roster.employeeIds.map(id)))];
-      if (rosterEmployeeIds.some(empId => !employeesById.has(empId))) {
+      const employeeIds = [...new Set(rota.shopRoster.flatMap(roster => roster.employeeIds.map(id)) )];
+      const employees = employeeIds.length
+        ? await Employee.find({ _id: { $in: employeeIds } }).select('name').lean()
+        : [];
+      employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
+      if (employeesById.size !== employeeIds.length) {
         throw new RotaError(400, 'The current screen rota references an employee that no longer exists.');
       }
       if (rota.shopRoster.some(roster => !shopsById[id(roster.shopId)])) {
@@ -1245,6 +1239,13 @@ exports.exportPdf = async (req, res) => {
     employeesById?.forEach((employee, employeeId) => {
       if (!rosterEmployeesById.has(employeeId)) rosterEmployeesById.set(employeeId, employee);
     });
+    if (mongoose.connection?.readyState === 1) {
+      const missingEmployeeIds = [...new Set((rota.assignments || []).map(a => id(a.employeeId)))].filter(eId => !rosterEmployeesById.has(eId));
+      if (missingEmployeeIds.length > 0) {
+        const extraEmployees = await Employee.find({ _id: { $in: missingEmployeeIds } }).select('name').lean();
+        extraEmployees.forEach(e => rosterEmployeesById.set(id(e._id), { _id: id(e._id), name: e.name || '' }));
+      }
+    }
     addIncomingWorkersToRosters(rosterMap, rota.assignments || [], rosterEmployeesById, shopsById);
 
     const cellMap = {};
