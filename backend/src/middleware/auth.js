@@ -8,14 +8,21 @@ const JWT_SECRET = process.env.JWT_SECRET;
  * Protect routes: verify JWT token
  */
 async function authenticate(req, res, next) {
+  let token = null;
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ') || !authHeader.slice(7).trim()) {
+  if (authHeader && authHeader.startsWith('Bearer ') && authHeader.slice(7).trim()) {
+    token = authHeader.slice(7).trim();
+  } else if (req.query && req.query.token) {
+    token = String(req.query.token).trim();
+  }
+
+  if (!token) {
     return res.status(401).json({ success: false, message: 'Authentication required. No token provided.' });
   }
 
   let decoded;
   try {
-    decoded = jwt.verify(authHeader.slice(7).trim(), JWT_SECRET);
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../context/AuthContext';
 import { Plus, Download, RefreshCw, X, Trash2, Edit, FileText } from 'lucide-react';
 import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
+import { downloadReportFile } from '../utils/downloadReportFile';
 
 export default function BonusPage() {
   const [bonuses, setBonuses] = useState([]);
@@ -89,12 +90,28 @@ export default function BonusPage() {
     }
   };
 
-  const downloadPDF = () => {
-    window.open(`${API_BASE_URL}/reports/commission/pdf?month=${month}&year=${year}`, '_blank');
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadPDF = async () => {
+    try {
+      setDownloading(true);
+      await downloadReportFile('/reports/commission/pdf', { month, year }, `Commission_Report_${month}_${year}.pdf`);
+    } catch (err) {
+      alert(err.message || 'Failed to download PDF report');
+    } finally {
+      setDownloading(false);
+    }
   };
 
-  const downloadExcel = () => {
-    window.open(`${API_BASE_URL}/reports/commission/excel?month=${month}&year=${year}`, '_blank');
+  const downloadExcel = async () => {
+    try {
+      setDownloading(true);
+      await downloadReportFile('/reports/commission/excel', { month, year }, `Commission_Report_${month}_${year}.xlsx`);
+    } catch (err) {
+      alert(err.message || 'Failed to download Excel report');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const calculatedCommission = salesAmount ? Number(((Number(salesAmount) * Number(rate)) / 100).toFixed(2)) : 0;
@@ -113,10 +130,10 @@ export default function BonusPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-outline btn-sm" onClick={downloadPDF} title="Download PDF Report">
-            <FileText size={14} color="#dc2626" /> Download PDF
+          <button className="btn btn-outline btn-sm" onClick={downloadPDF} disabled={downloading} title="Download PDF Report">
+            <FileText size={14} color="#dc2626" /> {downloading ? 'Downloading...' : 'Download PDF'}
           </button>
-          <button className="btn btn-outline btn-sm" onClick={downloadExcel} title="Download Excel Spreadsheet">
+          <button className="btn btn-outline btn-sm" onClick={downloadExcel} disabled={downloading} title="Download Excel Spreadsheet">
             <Download size={14} /> Download Excel
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => { setNotes(''); setIsAddModalOpen(true); }}>
