@@ -789,7 +789,7 @@ export default function AiRotaAssistantPage() {
 
       {/* Input Bar */}
       <div style={{
-        padding: '14px 24px',
+        padding: '9px 18px',
         backgroundColor: '#ffffff',
         borderTop: '1px solid #e2e8f0',
         display: 'flex',
@@ -807,11 +807,11 @@ export default function AiRotaAssistantPage() {
           disabled={loading}
           style={{
             flex: 1,
-            height: '46px',
-            padding: '0 16px',
-            borderRadius: '12px',
+            height: '40px',
+            padding: '0 14px',
+            borderRadius: '10px',
             border: '1.5px solid #cbd5e1',
-            fontSize: '14px',
+            fontSize: '13.5px',
             outline: 'none',
             backgroundColor: '#f8fafc',
             color: '#0f172a'
@@ -823,28 +823,28 @@ export default function AiRotaAssistantPage() {
           onClick={() => handleSend()}
           disabled={!input.trim() || loading}
           style={{
-            height: '46px',
-            padding: '0 20px',
-            borderRadius: '12px',
+            height: '40px',
+            padding: '0 16px',
+            borderRadius: '10px',
             backgroundColor: !input.trim() || loading ? '#94a3b8' : '#2563eb',
             color: '#ffffff',
             border: 'none',
-            fontSize: '14px',
+            fontSize: '13.5px',
             fontWeight: 700,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '7px',
             cursor: !input.trim() || loading ? 'not-allowed' : 'pointer',
-            boxShadow: !input.trim() || loading ? 'none' : '0 4px 12px rgba(37,99,235,0.3)',
+            boxShadow: !input.trim() || loading ? 'none' : '0 2px 8px rgba(37,99,235,0.25)',
             transition: 'background-color 0.15s ease'
           }}
         >
           {loading ? (
-            <RefreshCw size={18} className="spin" />
+            <RefreshCw size={16} className="spin" />
           ) : (
             <>
               <span>Assistant</span>
-              <Send size={16} />
+              <Send size={15} />
             </>
           )}
         </button>
