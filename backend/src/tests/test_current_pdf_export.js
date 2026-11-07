@@ -57,10 +57,14 @@ async function test() {
 
   const rawText = pdfDecodedText(res.buffer);
   const normalized = rawText.replace(/\s+/g, ' ');
-  console.log('--- Searching for Leebridge section ---');
-  const lbIdx = normalized.indexOf('Leebridge');
-  if (lbIdx >= 0) {
-    console.log(normalized.slice(lbIdx, lbIdx + 600));
+  console.log('--- Searching for Leebridge table header ---');
+  let searchPos = 0;
+  while (true) {
+    const idx = normalized.indexOf('Leebridge', searchPos);
+    if (idx < 0) break;
+    console.log(`\nMatch at ${idx}:`);
+    console.log(normalized.slice(idx, idx + 400));
+    searchPos = idx + 1;
   }
   process.exit(0);
 }
