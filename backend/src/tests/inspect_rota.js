@@ -1,11 +1,10 @@
-const mongoose = require('mongoose');
-require('dotenv').config();
+const connectDB = require('../config/db');
 const WeeklyRota = require('../models/WeeklyRota');
 const Employee = require('../models/Employee');
 const Shop = require('../models/Shop');
 
 async function test() {
-  await mongoose.connect(process.env.MONGODB_URI);
+  await connectDB();
   const rotas = await WeeklyRota.find({}).sort({ weekStart: -1 }).limit(5).lean();
   console.log('Recent Rotas:', rotas.map(r => ({ weekStart: r.weekStart, status: r.status, assignmentsCount: r.assignments?.length, rosterCount: r.shopRoster?.length })));
   
@@ -16,7 +15,7 @@ async function test() {
   if (rota) {
     console.log('=== Rota 2026-11-08 found ===');
     console.log('Status:', rota.status);
-    console.log('shopRoster shops:');
+    console.log('shopRoster:');
     for (const sr of (rota.shopRoster || [])) {
       console.log(` Shop: ${shopMap.get(String(sr.shopId))} (${sr.shopId}) -> ${sr.employeeIds?.length} employees`);
       if (shopMap.get(String(sr.shopId)) === 'Leebridge') {
@@ -36,6 +35,6 @@ async function test() {
   } else {
     console.log('Rota 2026-11-08 not found.');
   }
-  await mongoose.disconnect();
+  process.exit(0);
 }
 test().catch(console.error);
