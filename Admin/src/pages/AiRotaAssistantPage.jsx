@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Copy,
   Check,
-  Bot
+  Bot,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { API_BASE_URL } from '../context/AuthContext';
 
@@ -228,6 +230,7 @@ export default function AiRotaAssistantPage() {
   const [loading, setLoading] = useState(false);
   const [downloadingToken, setDownloadingToken] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(true);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -347,127 +350,155 @@ export default function AiRotaAssistantPage() {
       backgroundColor: '#f8fafc',
       position: 'relative'
     }}>
-      {/* Top Banner / Header */}
+      {/* Top Banner / Header (Compact to maximize chat screen space) */}
       <div style={{
-        padding: '16px 24px',
+        padding: '7px 16px',
         backgroundColor: '#ffffff',
         borderBottom: '1px solid #e2e8f0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        flexShrink: 0
+        flexShrink: 0,
+        gap: '12px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
           <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '12px',
+            width: '28px',
+            height: '28px',
+            borderRadius: '8px',
             background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 4px 10px rgba(37,99,235,0.25)'
+            boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
+            flexShrink: 0
           }}>
-            <Sparkles size={22} color="#ffffff" />
+            <Sparkles size={15} color="#ffffff" />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                AI Workforce & Finance Assistant
-              </h1>
-              <span style={{
-                backgroundColor: '#dcfce7',
-                color: '#15803d',
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '6px'
-              }}>
-                Live Database Active
-              </span>
-            </div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-              Instant answers for any worker, shop, or date • Direct official PDF exports
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+            <h1 style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', margin: 0, whiteSpace: 'nowrap' }}>
+              AI Workforce & Finance Assistant
+            </h1>
+            <span style={{
+              backgroundColor: '#dcfce7',
+              color: '#15803d',
+              fontSize: '10px',
+              fontWeight: 700,
+              padding: '1px 6px',
+              borderRadius: '4px',
+              whiteSpace: 'nowrap'
+            }}>
+              Live Database Active
+            </span>
+            <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              • Instant answers & official PDF / Excel reports
+            </span>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleClearChat}
-          title="Clear chat history"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '7px 12px',
-            borderRadius: '8px',
-            backgroundColor: '#f1f5f9',
-            border: '1px solid #cbd5e1',
-            color: '#475569',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer'
-          }}
-        >
-          <Trash2 size={14} />
-          <span>Clear Chat</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setShowSuggestions(!showSuggestions)}
+            title={showSuggestions ? 'Hide suggested questions' : 'Show suggested questions'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 9px',
+              borderRadius: '6px',
+              backgroundColor: showSuggestions ? '#f8fafc' : '#eff6ff',
+              border: showSuggestions ? '1px solid #cbd5e1' : '1px solid #bfdbfe',
+              color: showSuggestions ? '#475569' : '#1d4ed8',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            {showSuggestions ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            <span>{showSuggestions ? 'Hide Prompts' : 'Prompts'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleClearChat}
+            title="Clear chat history"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 9px',
+              borderRadius: '6px',
+              backgroundColor: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#475569',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <Trash2 size={13} />
+            <span>Clear Chat</span>
+          </button>
+        </div>
       </div>
 
-      {/* Suggested Questions Pills */}
-      <div style={{
-        padding: '10px 24px',
-        backgroundColor: '#ffffff',
-        borderBottom: '1px solid #e2e8f0',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-        flexShrink: 0
-      }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap' }}>
-          Suggested:
-        </span>
-        {SUGGESTED_PROMPTS.map((p, idx) => {
-          const Icon = p.icon;
-          return (
-            <button
-              key={idx}
-              type="button"
-              disabled={loading}
-              onClick={() => handleSend(p.text)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 12px',
-                borderRadius: '20px',
-                backgroundColor: p.tag === 'PDF Report' ? '#eff6ff' : '#f8fafc',
-                border: p.tag === 'PDF Report' ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                color: p.tag === 'PDF Report' ? '#1d4ed8' : '#334155',
-                fontSize: '11px',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              <Icon size={12} color={p.tag === 'PDF Report' ? '#2563eb' : '#64748b'} />
-              <span>{p.text}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Suggested Questions Pills (Compact & Collapsible) */}
+      {showSuggestions && (
+        <div style={{
+          padding: '4px 16px',
+          backgroundColor: '#f8fafc',
+          borderBottom: '1px solid #e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          flexShrink: 0
+        }}>
+          <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap' }}>
+            Suggested:
+          </span>
+          {SUGGESTED_PROMPTS.map((p, idx) => {
+            const Icon = p.icon;
+            return (
+              <button
+                key={idx}
+                type="button"
+                disabled={loading}
+                onClick={() => handleSend(p.text)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 10px',
+                  borderRadius: '14px',
+                  backgroundColor: p.tag === 'PDF Report' ? '#eff6ff' : '#ffffff',
+                  border: p.tag === 'PDF Report' ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                  color: p.tag === 'PDF Report' ? '#1d4ed8' : '#334155',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                }}
+              >
+                <Icon size={11} color={p.tag === 'PDF Report' ? '#2563eb' : '#64748b'} />
+                <span>{p.text}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Messages Stream */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
-        padding: '20px 24px',
+        padding: '14px 18px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px'
+        gap: '12px'
       }}>
         {messages.map((m) => {
           const isUser = m.role === 'user';
