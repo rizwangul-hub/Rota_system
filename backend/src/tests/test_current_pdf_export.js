@@ -36,15 +36,8 @@ function pdfDecodedText(pdf) {
     for (const match of content.matchAll(/<([0-9a-f]+)>/gi)) {
       tokens.push(Buffer.from(match[1], 'hex').toString('latin1'));
     }
-    for (const match of content.matchAll(/\[([^\]]+)\]\s*TJ/gi)) {
-      // TJ array
-      const inner = match[1];
-      for (const m of inner.matchAll(/<([0-9a-f]+)>/gi)) {
-        tokens.push(Buffer.from(m[1], 'hex').toString('latin1'));
-      }
-    }
   }
-  return tokens.join(' ');
+  return tokens.join('');
 }
 
 async function test() {
@@ -62,15 +55,12 @@ async function test() {
   }, res);
   await finished;
 
-  const text = pdfDecodedText(res.buffer);
-  console.log('Decoded text length:', text.length);
-  const lbIdx = text.toLowerCase().indexOf('leebridge');
+  const rawText = pdfDecodedText(res.buffer);
+  const normalized = rawText.replace(/\s+/g, ' ');
+  console.log('--- Searching for Leebridge section ---');
+  const lbIdx = normalized.indexOf('Leebridge');
   if (lbIdx >= 0) {
-    console.log('Found Leebridge! Section:');
-    console.log(text.slice(lbIdx, lbIdx + 800));
-  } else {
-    console.log('Leebridge not found! Snippet of text:');
-    console.log(text.slice(0, 500));
+    console.log(normalized.slice(lbIdx, lbIdx + 600));
   }
   process.exit(0);
 }
