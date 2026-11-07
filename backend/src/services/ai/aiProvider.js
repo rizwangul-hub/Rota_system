@@ -12,16 +12,37 @@ const { getUKDateString } = require('../../utils/calc');
 const SYSTEM_INSTRUCTION = `You are the AI Workforce, Rota & Payroll Assistant for Pixx Technologies Ltd (UK Rota Management System).
 Your job is to answer questions about any worker, any shop, or any day/date, and provide complete, verified details from the system database.
 
-SYSTEM CONTEXT & CAPABILITIES:
-- The system manages 6 retail bike shops in London: Station Cycles, Camden Cycles, Chelsea Cycles, Edgware Cycles, Southwark Cycles, and Leebridge Cycles.
-- Roles include Admin, Attendance Operator (Usman Salahuddin), and Attendance Checker (Sarfraz Khan).
-- Shift hours are typically 9 hours (e.g. 09:00 AM to 06:00 PM / 07:00 PM). Lateness is calculated with a 15-minute grace period.
-- Weekly salaries are generated every week with deductions for lateness/early leave, bonuses, and loan deductions.
-- Understand English, Roman Urdu, and Urdu questions seamlessly (e.g. "Shiva ki attendance batao", "Camden shop mein kal kon tha", "Kis kis ka salary ban gaya", "Aaj ki attendance summary").
-- When a user asks for information, call the appropriate database tool to retrieve live, accurate records.
+ACTIVE DIRECTORY:
+- Active Workers: Shiva (PIXX001), Qasim (PIXX002), Arslan Bhai (PIXX003), Sam (PIXX004), Fardin (PIXX005), Shafique (PIXX006), Ash (PIXX007), Ubaid (PIXX008), Anas (PIXX009), Dave (PIXX010), Wali Ullah (PIXX011), Zamad (PIXX012), Shahzad (PIXX013), Ali Bhai (PIXX014), Jebran (PIXX015), Abdullah (PIXX016), Sajid (PIXX017).
+- Key Operators / Managers: Usman Salahuddin (Attendance Operator), Sarfraz Khan (Attendance Checker & Approver), Adeel Ahmed (Operator).
+- Retail Stores / Shops: Station (STAT), Camden (CAMD), Chelsea (CHEL), Edgware (EDGW), Southwark (SOUT), Leebridge (LEEB).
+
+TOOL SELECTION RULES:
+1. Salary / Payroll / Pay / Earnings / Tankhwah:
+   - Call 'getWorkerSalaryAndPayroll'.
+   - If a month is mentioned (e.g. October, "give me ubaid salary report of october month"), set startDate to '2026-10-01' and endDate to '2026-10-31'.
+   - Do NOT call getWorkerDetails when the user asks about salary or payroll.
+
+2. Attendance / Shifts / Duty / Monthly or Daily Work Report:
+   - Call 'getWorkerAttendance'.
+   - If a specific date is mentioned (e.g. "31 October", "on whicht shop Shafique work on 31 October"), set date to '2026-10-31'.
+   - If a month or range is mentioned (e.g. "give me october report fo ubaid"), set startDate to '2026-10-01' and endDate to '2026-10-31'.
+
+3. General Worker Profile / Bio:
+   - Only call 'getWorkerDetails' if the user asks generic profile or contact questions (e.g. "who is Ubaid", "what is Ubaid", "tell me about Shiva").
+
+4. Shop & Company Attendance / Rota:
+   - Call 'getShopDailyAttendance' for a shop on a date.
+   - Call 'getShopWeeklyRota' for a shop's weekly schedule.
+   - Call 'getDailyAttendanceOverview' for all-shop daily attendance.
+
+GUIDELINES:
+- Understand English, Roman Urdu, and Urdu questions seamlessly (e.g. "Shiva ki attendance batao", "Camden shop mein kal kon tha", "on whicht shop Shafique work on 31 October", "give me october report fo ubaid").
+- NEVER confuse ordinary words (like "october", "whicht", "report", "duty") as worker names. Always match against the active directory.
+- When answering which shop a worker worked at on a date, state the shop name clearly and prominently.
 - Format all financial figures in British Pounds (£).
-- Always format tabular data (like attendance logs, staff lists, daily shop logs) in clean Markdown tables.
-- If the user explicitly asks for a PDF report ("in PDF", "give me in PDF", "PDF download", "PDF do"), provide a clear, concise summary and indicate that the PDF has been generated.`;
+- Always format tabular data (attendance logs, staff lists, weekly salaries) in clean Markdown tables.
+- If the user explicitly asks for a PDF report ("in PDF", "give me in PDF", "PDF download", "PDF do"), summarize the information and confirm the PDF has been generated.`;
 
 /**
  * Format raw tool output into beautiful Markdown
@@ -66,6 +87,31 @@ function formatToolResult(toolName, result) {
 
   // 2. getWorkerAttendance
   if (toolName === 'getWorkerAttendance' && result.records) {
+    // Single-day specific attendance result (e.g. "on which shop Shafique work on 31 October")
+    if (result.records.length === 1) {
+      const r = result.records[0];
+      let out = `### 📋 Attendance Log: ${result.workerName} (${result.workerId})\n\n`;
+      if (r.status === 'Absent') {
+        out += `On **${r.date}**, **${result.workerName}** was **ABSENT / OFF**.\n\n`;
+      } else {
+        out += `On **${r.date}**, **${result.workerName}** worked at **${r.shop} Cycles**.\n\n`;
+      }
+      out += `| Detail | Logged Information |\n|---|---|\n`;
+      out += `| **Worker** | ${result.workerName} (${result.workerId}) |\n`;
+      out += `| **Date** | ${r.date} |\n`;
+      out += `| **Shop Location** | **${r.shop}** |\n`;
+      out += `| **Shift Scheduled** | ${r.shiftStart} – ${r.shiftEnd} |\n`;
+      out += `| **Actual Working Hours** | ${r.reachedTime} – ${r.leftTime} (${r.hours}h logged) |\n`;
+      out += `| **Attendance Status** | **${r.status}** |\n`;
+      out += `| **Lateness / Deductions** | ${r.lateMinutes ? `${r.lateMinutes} min late` : '0 min'} (${r.deduction}) |\n`;
+      out += `| **Calculated Daily Pay** | **${r.pay}** |\n`;
+      out += `| **Checker Approval** | ${r.approvalStatus} |\n`;
+      if (r.remarks && r.remarks !== '—') {
+        out += `| **Remarks** | ${r.remarks} |\n`;
+      }
+      return out;
+    }
+
     let out = `### 📋 Attendance Records: ${result.workerName} (${result.workerId})\n\n`;
     if (result.summary) {
       const s = result.summary;
@@ -73,7 +119,7 @@ function formatToolResult(toolName, result) {
     }
 
     if (result.records.length === 0) {
-      out += `_No attendance entries logged for this period._\n`;
+      out += `_No attendance entries logged for ${result.workerName} for this period._\n`;
       return out;
     }
 
@@ -88,8 +134,12 @@ function formatToolResult(toolName, result) {
   if (toolName === 'getWorkerSalaryAndPayroll' && result.salaries) {
     let out = `### 💰 Weekly Payroll Breakdown: ${result.workerName} (${result.workerId})\n\n`;
     if (result.salaries.length === 0) {
-      out += `_No salary calculations generated for this worker yet._\n`;
+      out += `_No salary calculations generated for this worker in the requested period._\n`;
       return out;
+    }
+
+    if (result.summary && result.salaries.length > 1) {
+      out += `**Total Period Final Salary:** ${result.summary.totalFinalSalary} | **Gross Wages:** ${result.summary.totalGrossWages} | **Total Paid:** ${result.summary.totalPaid}\n\n`;
     }
 
     out += `| Week Range | Days | Hours | Gross Wages | Deductions | Final Salary | Status |\n|---|---|---|---|---|---|---|\n`;
@@ -275,7 +325,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
 
   if (config.enabled && config.configured) {
     try {
-      const candidateModels = [config.model, 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
+      const candidateModels = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', config.model];
       const todayUK = getUKDateString(new Date());
       const systemWithDate = `${SYSTEM_INSTRUCTION}\nToday in UK: ${todayUK}.`;
 
@@ -296,7 +346,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
         try {
           const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelToTry)}:generateContent?key=${config.key}`, {
             method: 'POST',
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(10000),
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
           });
@@ -326,7 +376,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
 
   // 4. Fallback to natural language intent resolver if LLM returned no calls
   if (!calls || calls.length === 0) {
-    calls = resolveIntentAndToolCall(trimmed);
+    calls = await resolveIntentAndToolCall(trimmed);
   }
 
   // 5. Execute resolved tools against the database

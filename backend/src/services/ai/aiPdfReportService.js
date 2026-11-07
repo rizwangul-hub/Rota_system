@@ -8,7 +8,7 @@ const WeeklySalary = require('../../models/WeeklySalary');
 const WeeklyRota = require('../../models/WeeklyRota');
 const { getUKDateString, formatUKDate, getWeekRange, getDayOfWeekUK } = require('../../utils/calc');
 const { findEmployee, findShop } = require('./rotaTools');
-const { parseRelativeDate, extractShopName, extractWorkerCandidate } = require('./naturalLanguageResolver');
+const { parseRelativeDate, extractShopName, extractWorker } = require('./naturalLanguageResolver');
 
 // In-memory PDF buffer store (60 min TTL)
 const pdfReportStore = new Map();
@@ -351,7 +351,7 @@ async function buildWeeklyPayrollPdfBuffer(weekStart) {
 async function generateAiPdfReport(query, user) {
   const dateStr = parseRelativeDate(query) || getUKDateString(new Date());
   const shopName = extractShopName(query);
-  const workerCandidate = extractWorkerCandidate(query);
+  const workerCandidate = await extractWorker(query);
 
   // 1. Worker Specific Attendance or Salary Report
   if (workerCandidate) {

@@ -1,4 +1,24 @@
-const { getUKDateString, getWeekRange } = require('../../utils/calc');
+const Employee = require('../../models/Employee');
+const Shop = require('../../models/Shop');
+const { getUKDateString } = require('../../utils/calc');
+
+// In-memory employee and shop cache for fast, deterministic natural language matching
+let cachedEmployees = [];
+let cachedShops = [];
+let lastCacheUpdate = 0;
+
+async function refreshCache() {
+  if (Date.now() - lastCacheUpdate < 60000 && cachedEmployees.length > 0) {
+    return;
+  }
+  try {
+    cachedEmployees = await Employee.find().select('name employeeId assignedShop dailyWage').lean();
+    cachedShops = await Shop.find().select('name code').lean();
+    lastCacheUpdate = Date.now();
+  } catch (err) {
+    console.warn('[AI Natural Language Resolver] Cache update error:', err.message);
+  }
+}
 
 // Greetings detector
 function isGreetingOrHelp(text) {
@@ -25,49 +45,118 @@ function isPdfReportRequest(text) {
   return /\b(pdf|download\s*pdf|export\s*pdf|in\s*pdf|pdf\s*file|pdf\s*bhejo|pdf\s*do|pdf\s*chahiye|pdf\s*generate|generate\s*pdf|make\s*pdf)\b/i.test(t);
 }
 
-// Parse date from natural language (relative or explicit)
-function parseRelativeDate(text) {
+// Standard English & Roman Urdu month dictionary
+const MONTH_NAMES = {
+  january: '01', jan: '01',
+  february: '02', feb: '02',
+  march: '03', mar: '03',
+  april: '04', apr: '04',
+  may: '05',
+  june: '06', jun: '06',
+  july: '07', jul: '07',
+  august: '08', aug: '08',
+  september: '09', sep: '09', sept: '09',
+  october: '10', oct: '10',
+  november: '11', nov: '11',
+  december: '12', dec: '12'
+};
+
+/**
+ * Intelligent date and period parser for natural language
+ * Handles:
+ * - "31 October", "31st Oct", "October 31" -> { type: 'exact_date', dateStr: '2026-10-31' }
+ * - "october", "october month", "in october" -> { type: 'month_range', startDate: '2026-10-01', endDate: '2026-10-31' }
+ * - "today", "aaj" -> { type: 'exact_date', dateStr: ... }
+ * - "yesterday", "kal" -> { type: 'exact_date', dateStr: ... }
+ * - "2026-10-31", "31/10/2026"
+ */
+function parseDateOrPeriod(text) {
   const t = (text || '').toLowerCase();
   const now = new Date();
+  const defaultYear = String(now.getUTCFullYear() || 2026);
 
+  // 1. Relative keywords
   if (/\b(today|aaj|current\s*day)\b/i.test(t)) {
-    return getUKDateString(now);
+    return { type: 'exact_date', dateStr: getUKDateString(now) };
   }
-
   if (/\b(yesterday|kal|pichla\s*din|guzra\s*kal)\b/i.test(t)) {
     const y = new Date(now);
     y.setUTCDate(y.getUTCDate() - 1);
-    return getUKDateString(y);
+    return { type: 'exact_date', dateStr: getUKDateString(y) };
   }
 
-  // ISO date YYYY-MM-DD
+  // 2. ISO date YYYY-MM-DD
   const isoMatch = t.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  if (isoMatch) return isoMatch[1];
+  if (isoMatch) {
+    return { type: 'exact_date', dateStr: isoMatch[1] };
+  }
 
-  // UK date DD/MM/YYYY or DD-MM-YYYY
+  // 3. UK date DD/MM/YYYY or DD-MM-YYYY
   const ukMatch = t.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
   if (ukMatch) {
     const day = ukMatch[1].padStart(2, '0');
     const month = ukMatch[2].padStart(2, '0');
     const year = ukMatch[3];
-    return `${year}-${month}-${day}`;
+    return { type: 'exact_date', dateStr: `${year}-${month}-${day}` };
   }
 
-  // Day of week (e.g. Monday, Tuesday...)
+  // 4. "31 October", "31st October", "31-oct"
+  const dayMonthMatch = t.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\b/);
+  if (dayMonthMatch) {
+    const day = dayMonthMatch[1].padStart(2, '0');
+    const monthWord = dayMonthMatch[2];
+    if (MONTH_NAMES[monthWord]) {
+      return { type: 'exact_date', dateStr: `${defaultYear}-${MONTH_NAMES[monthWord]}-${day}` };
+    }
+  }
+
+  // 5. "October 31", "Oct 31st"
+  const monthDayMatch = t.match(/\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
+  if (monthDayMatch) {
+    const monthWord = monthDayMatch[1];
+    const day = monthDayMatch[2].padStart(2, '0');
+    if (MONTH_NAMES[monthWord]) {
+      return { type: 'exact_date', dateStr: `${defaultYear}-${MONTH_NAMES[monthWord]}-${day}` };
+    }
+  }
+
+  // 6. Standalone month (e.g. "october", "october month", "in october")
+  for (const [mName, mNum] of Object.entries(MONTH_NAMES)) {
+    if (new RegExp(`\\b${mName}\\b`, 'i').test(t)) {
+      const yr = Number(defaultYear);
+      const m = Number(mNum);
+      const lastDay = new Date(Date.UTC(yr, m, 0)).getUTCDate();
+      return {
+        type: 'month_range',
+        monthNum: mNum,
+        monthName: mName,
+        startDate: `${defaultYear}-${mNum}-01`,
+        endDate: `${defaultYear}-${mNum}-${String(lastDay).padStart(2, '0')}`
+      };
+    }
+  }
+
+  // 7. Day of week (e.g. Monday, Tuesday...)
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   for (let i = 0; i < days.length; i++) {
     const dName = days[i];
     if (new RegExp(`\\b${dName}\\b`, 'i').test(t)) {
-      // Find the most recent day of this name
       const currentDay = now.getUTCDay();
       let diff = currentDay - i;
       if (diff < 0) diff += 7;
       const target = new Date(now);
       target.setUTCDate(target.getUTCDate() - diff);
-      return getUKDateString(target);
+      return { type: 'exact_date', dateStr: getUKDateString(target) };
     }
   }
 
+  return null;
+}
+
+function parseRelativeDate(text) {
+  const parsed = parseDateOrPeriod(text);
+  if (parsed?.type === 'exact_date') return parsed.dateStr;
+  if (parsed?.type === 'month_range') return parsed.startDate;
   return null;
 }
 
@@ -90,123 +179,179 @@ function extractShopName(text) {
   return null;
 }
 
-// Resolve user intent and return fallback tool calls if external LLM fails
-function resolveIntentAndToolCall(message) {
+// Hardcoded fallback list in case DB has not yet populated cache
+const FALLBACK_EMPLOYEES = [
+  'Shiva', 'Qasim', 'Arslan Bhai', 'Sam', 'Fardin', 'Shafique', 'Ash', 'Anas',
+  'Dave', 'Wali Ullah', 'Zamad', 'Shahzad', 'Ali Bhai', 'Jebran', 'Abdullah',
+  'Sajid', 'Ubaid', 'Usman', 'Sarfraz', 'Adeel', 'Arsalan'
+];
+
+/**
+ * Robust Worker Identification:
+ * Matches query against real employees in database (or fallback list).
+ * Avoids misidentifying English words (like "october", "whicht", "report") as workers!
+ */
+async function extractWorker(text) {
+  await refreshCache();
+  const t = (text || '').toLowerCase();
+
+  const empList = cachedEmployees.length > 0 ? cachedEmployees : FALLBACK_EMPLOYEES.map(name => ({ name }));
+
+  // 1. Check for exact employeeId match (e.g. PIXX001)
+  for (const emp of empList) {
+    if (emp.employeeId && new RegExp(`\\b${emp.employeeId.toLowerCase()}\\b`, 'i').test(t)) {
+      return emp.name;
+    }
+  }
+
+  // 2. Check full employee name match (e.g. "Arslan Bhai", "Wali Ullah")
+  for (const emp of empList) {
+    if (emp.name) {
+      const full = emp.name.toLowerCase();
+      if (new RegExp(`\\b${full}\\b`, 'i').test(t)) {
+        return emp.name;
+      }
+    }
+  }
+
+  // 3. Check first name (e.g. "Arslan", "Ali", "Wali", "Shafique", "Ubaid")
+  for (const emp of empList) {
+    if (emp.name) {
+      const firstName = emp.name.toLowerCase().split(' ')[0];
+      if (firstName.length >= 3 && new RegExp(`\\b${firstName}\\b`, 'i').test(t)) {
+        return emp.name;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Intelligent Intent Resolver:
+ * Dispatches to the exact tool with validated entities and date parameters.
+ */
+async function resolveIntentAndToolCall(message) {
   const t = (message || '').trim().toLowerCase();
   const shopName = extractShopName(t);
-  const date = parseRelativeDate(t);
+  const period = parseDateOrPeriod(t);
+  const workerName = await extractWorker(message);
 
-  // 1. Check for salary / payroll query
-  if (/\b(salary|salaries|tankhwah|payroll|wage|wages|earnings|pay|bonus|paid|balance)\b/i.test(t)) {
-    // Check if for specific worker
-    const workerName = extractWorkerCandidate(t);
-    if (workerName) {
+  const isSalaryQuery = /\b(salary|salaries|tankhwah|payroll|wage|wages|earnings|pay|paid|balance)\b/i.test(t);
+  const isRotaQuery = /\b(rota|schedule|shift|planning|roster|planner)\b/i.test(t);
+  const isAttendanceQuery = /\b(attendance|hazri|present|late|absent|hours|worked|checked|reached|left|time|duty|work)\b/i.test(t);
+
+  // 1. Worker Specific Queries
+  if (workerName) {
+    // A. Worker Salary / Payroll query
+    if (isSalaryQuery) {
+      const args = { workerName };
+      if (period?.type === 'exact_date') {
+        args.weekStart = period.dateStr;
+      } else if (period?.type === 'month_range') {
+        args.startDate = period.startDate;
+        args.endDate = period.endDate;
+      }
       return [{
         name: 'getWorkerSalaryAndPayroll',
-        args: { workerName }
+        args
       }];
     }
-    return [{
-      name: 'getWeeklyPayrollSummary',
-      args: {}
-    }];
-  }
 
-  // 2. Check for rota / schedule query
-  if (/\b(rota|schedule|shift|planning|roster|roster|planner)\b/i.test(t)) {
-    if (shopName) {
-      return [{
-        name: 'getShopWeeklyRota',
-        args: { shopName }
-      }];
+    // B. Worker Attendance query with Date or Month
+    if (period) {
+      if (period.type === 'exact_date') {
+        return [{
+          name: 'getWorkerAttendance',
+          args: {
+            workerName,
+            date: period.dateStr
+          }
+        }];
+      }
+      if (period.type === 'month_range') {
+        return [{
+          name: 'getWorkerAttendance',
+          args: {
+            workerName,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            limit: 31
+          }
+        }];
+      }
     }
-    const workerName = extractWorkerCandidate(t);
-    if (workerName) {
+
+    // C. General worker attendance or rota query
+    if (isAttendanceQuery || isRotaQuery) {
       return [{
         name: 'getWorkerAttendance',
         args: { workerName }
       }];
     }
-    return [{
-      name: 'getWeeklyRotaOverview',
-      args: {}
-    }];
-  }
 
-  // 3. Check for attendance query
-  if (/\b(attendance|hazri|present|late|absent|hours|worked|checked|reached|left|time)\b/i.test(t)) {
-    const workerName = extractWorkerCandidate(t);
-    if (workerName) {
-      return [{
-        name: 'getWorkerAttendance',
-        args: { workerName, date }
-      }];
-    }
-    if (shopName) {
-      return [{
-        name: 'getShopDailyAttendance',
-        args: { shopName, date: date || getUKDateString(new Date()) }
-      }];
-    }
-    return [{
-      name: 'getDailyAttendanceOverview',
-      args: { date: date || getUKDateString(new Date()) }
-    }];
-  }
-
-  // 4. Check for shop-specific general queries
-  if (shopName) {
-    if (date || /\b(today|yesterday|kal|aaj)\b/i.test(t)) {
-      return [{
-        name: 'getShopDailyAttendance',
-        args: { shopName, date: date || getUKDateString(new Date()) }
-      }];
-    }
-    return [{
-      name: 'getShopDetails',
-      args: { shopName }
-    }];
-  }
-
-  // 5. Check if query is about a specific worker profile
-  const workerName = extractWorkerCandidate(t);
-  if (workerName) {
+    // D. General worker profile details
     return [{
       name: 'getWorkerDetails',
       args: { workerName }
     }];
   }
 
-  // 6. Default to daily attendance overview for today
-  if (date) {
+  // 2. Shop Specific Queries
+  if (shopName) {
+    if (isRotaQuery) {
+      return [{
+        name: 'getShopWeeklyRota',
+        args: {
+          shopName,
+          weekStart: period?.type === 'exact_date' ? period.dateStr : undefined
+        }
+      }];
+    }
+
+    // Daily attendance at shop
     return [{
-      name: 'getDailyAttendanceOverview',
-      args: { date }
+      name: 'getShopDailyAttendance',
+      args: {
+        shopName,
+        date: period?.type === 'exact_date' ? period.dateStr : getUKDateString(new Date())
+      }
     }];
   }
 
+  // 3. Company-wide Payroll Query
+  if (isSalaryQuery) {
+    return [{
+      name: 'getWeeklyPayrollSummary',
+      args: {
+        weekStart: period?.type === 'exact_date' ? period.dateStr : undefined
+      }
+    }];
+  }
+
+  // 4. Company-wide Weekly Rota Query
+  if (isRotaQuery) {
+    return [{
+      name: 'getWeeklyRotaOverview',
+      args: {
+        weekStart: period?.type === 'exact_date' ? period.dateStr : undefined
+      }
+    }];
+  }
+
+  // 5. Daily Attendance Overview for a specific Date or Today
+  if (period?.type === 'exact_date') {
+    return [{
+      name: 'getDailyAttendanceOverview',
+      args: { date: period.dateStr }
+    }];
+  }
+
+  // 6. Default to Today's Attendance Overview
   return [{
     name: 'getDailyAttendanceOverview',
     args: { date: getUKDateString(new Date()) }
   }];
-}
-
-// Extract potential worker name tokens from text (excluding stop words and shop names)
-const STOP_WORDS = new Set([
-  'give', 'me', 'in', 'pdf', 'the', 'show', 'tell', 'what', 'who', 'is', 'a', 'an', 'and', 'or', 'for', 'of',
-  'to', 'from', 'at', 'on', 'all', 'today', 'yesterday', 'kal', 'aaj', 'attendance', 'salary', 'rota', 'schedule',
-  'details', 'report', 'wages', 'wage', 'hours', 'status', 'shop', 'station', 'camden', 'chelsea', 'edgware',
-  'southwark', 'leebridge', 'leabridge', 'ka', 'ki', 'ke', 'ko', 'mein', 'par', 'tha', 'thi', 'the', 'batao',
-  'dikhao', 'bhejo', 'do', 'chahiye', 'worker', 'employee', 'staff'
-]);
-
-function extractWorkerCandidate(text) {
-  const words = text.replace(/[^a-zA-Z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-  const candidates = words.filter(w => !STOP_WORDS.has(w.toLowerCase()) && w.length >= 3);
-  if (candidates.length > 0) {
-    return candidates[0];
-  }
-  return null;
 }
 
 module.exports = {
@@ -214,7 +359,9 @@ module.exports = {
   getGreetingResponse,
   isPdfReportRequest,
   parseRelativeDate,
+  parseDateOrPeriod,
   extractShopName,
-  resolveIntentAndToolCall,
-  extractWorkerCandidate
+  extractWorker,
+  extractWorkerCandidate: extractWorker,
+  resolveIntentAndToolCall
 };

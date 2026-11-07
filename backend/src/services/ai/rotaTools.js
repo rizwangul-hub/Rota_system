@@ -169,7 +169,7 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
 /**
  * 3. getWorkerSalaryAndPayroll
  */
-async function getWorkerSalaryAndPayroll({ workerName, workerId, weekStart, limit = 10 }) {
+async function getWorkerSalaryAndPayroll({ workerName, workerId, weekStart, startDate, endDate, limit = 10 }) {
   const emp = await findEmployee(workerName || workerId);
   if (!emp) {
     const all = await Employee.find({ employmentStatus: 'Active' }).select('name employeeId').limit(15);
@@ -180,7 +180,19 @@ async function getWorkerSalaryAndPayroll({ workerName, workerId, weekStart, limi
   }
 
   const query = { employee: emp._id };
-  if (weekStart) {
+  if (startDate || endDate) {
+    query.$or = [];
+    if (startDate && endDate) {
+      query.$or.push(
+        { weekStartDateString: { $gte: getUKDateString(startDate), $lte: getUKDateString(endDate) } },
+        { weekEndDateString: { $gte: getUKDateString(startDate), $lte: getUKDateString(endDate) } }
+      );
+    } else if (startDate) {
+      query.weekStartDateString = { $gte: getUKDateString(startDate) };
+    } else if (endDate) {
+      query.weekEndDateString = { $lte: getUKDateString(endDate) };
+    }
+  } else if (weekStart) {
     const range = getWeekRange(weekStart);
     query.weekStartDateString = range.startDateString;
   }
@@ -205,10 +217,24 @@ async function getWorkerSalaryAndPayroll({ workerName, workerId, weekStart, limi
     status: s.status
   }));
 
+  const totalGrossWages = salaries.reduce((s, r) => s + (r.grossDailyWages || 0), 0);
+  const totalLateDeductions = salaries.reduce((s, r) => s + (r.lateDeductions || 0), 0);
+  const totalFinalSalary = salaries.reduce((s, r) => s + (r.finalSalary || 0), 0);
+  const totalPaid = salaries.reduce((s, r) => s + (r.totalPaid || 0), 0);
+  const totalBalanceRemaining = salaries.reduce((s, r) => s + (r.balanceRemaining || 0), 0);
+
   return {
     workerName: emp.name,
     workerId: emp.employeeId,
     totalWeeksFound: salaries.length,
+    period: startDate && endDate ? `${startDate} to ${endDate}` : (weekStart || 'Recent'),
+    summary: {
+      totalGrossWages: `£${totalGrossWages.toFixed(2)}`,
+      totalLateDeductions: `£${totalLateDeductions.toFixed(2)}`,
+      totalFinalSalary: `£${totalFinalSalary.toFixed(2)}`,
+      totalPaid: `£${totalPaid.toFixed(2)}`,
+      totalBalanceRemaining: `£${totalBalanceRemaining.toFixed(2)}`
+    },
     salaries: rows
   };
 }
@@ -574,13 +600,16 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
   },
   {
     name: 'getWorkerSalaryAndPayroll',
-    description: 'Get weekly salary breakdown, hours, gross wages, late deductions, bonuses, loans, final pay, and payment status for any worker.',
+    description: 'Get weekly salary breakdown, hours, gross wages, late deductions, bonuses, loans, final pay, and payment status for any worker. Use this whenever the user asks about salary, earnings, pay, payroll, or tankhwah of an employee for any week, month, or overall.',
     parameters: {
       type: 'object',
       properties: {
-        workerName: { type: 'string', description: 'Worker name' },
-        workerId: { type: 'string', description: 'Worker ID' },
-        weekStart: { type: 'string', description: 'Week start date (YYYY-MM-DD)' }
+        workerName: { type: 'string', description: 'Worker name (e.g. Shiva, Ubaid, Qasim)' },
+        workerId: { type: 'string', description: 'Worker ID (e.g. PIXX008)' },
+        weekStart: { type: 'string', description: 'Specific week start date (YYYY-MM-DD)' },
+        startDate: { type: 'string', description: 'Start date for month or range filter (YYYY-MM-DD, e.g. 2026-10-01)' },
+        endDate: { type: 'string', description: 'End date for month or range filter (YYYY-MM-DD, e.g. 2026-10-31)' },
+        limit: { type: 'number', description: 'Max records to return' }
       }
     }
   },
