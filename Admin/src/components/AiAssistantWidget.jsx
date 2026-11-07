@@ -222,7 +222,7 @@ export default function AiAssistantWidget() {
               boxShadow: '0 0 6px #10b981',
               display: 'inline-block'
             }} />
-            Ask AI
+            Assistant
           </div>
 
           {/* Overlapping Blue Circle with Animated Sparkles */}
