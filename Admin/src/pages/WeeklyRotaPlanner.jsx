@@ -1187,10 +1187,19 @@ export default function WeeklyRotaPlanner() {
   const downloadPdf = async () => {
     try {
       const token = localStorage.getItem('pixx_token');
-      const response = await axios.get(`${API}/week/${weekStart}/export.pdf`, {
-        responseType: 'blob',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const payload = buildCurrentRotaPayload();
+      let response;
+      try {
+        response = await axios.post(`${API}/week/${weekStart}/export.pdf`, payload, {
+          responseType: 'blob',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (postErr) {
+        response = await axios.get(`${API}/week/${weekStart}/export.pdf`, {
+          responseType: 'blob',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
       const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;

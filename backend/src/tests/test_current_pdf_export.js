@@ -57,15 +57,9 @@ async function test() {
 
   const rawText = pdfDecodedText(res.buffer);
   const normalized = rawText.replace(/\s+/g, ' ');
-  console.log('--- Searching for Leebridge table header ---');
-  let searchPos = 0;
-  while (true) {
-    const idx = normalized.indexOf('Leebridge', searchPos);
-    if (idx < 0) break;
-    console.log(`\nMatch at ${idx}:`);
-    console.log(normalized.slice(idx, idx + 400));
-    searchPos = idx + 1;
-  }
+  const lbIdx = normalized.lastIndexOf('LeebridgeName');
+  console.log('=== EXACT LEEBRIDGE TABLE IN PDF ===');
+  console.log(normalized.slice(lbIdx, lbIdx + 700));
   process.exit(0);
 }
 test().catch(err => {
