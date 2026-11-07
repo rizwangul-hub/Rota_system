@@ -758,17 +758,21 @@ function getRotaStatusTextColor(status) {
 }
 
 function hasAvailableDayAtShop(employeeId, shopId, weekDates, cellMap, employeeDayAssignments) {
+  const employeeIdValue = id(employeeId);
   return weekDates.some(({ iso }) => {
-    const employeeIdValue = id(employeeId);
+    const dayAssignment = employeeDayAssignments.get(`${employeeIdValue}:${iso}`);
+    if (dayAssignment?.status === 'WORKING') {
+      return dayAssignment.shopId === shopId;
+    }
+
     const cell = cellMap[`${shopId}:${employeeIdValue}:${iso}`];
     if (cell) {
       if (cell.status === 'AVAILABLE' || cell.status === 'CUSTOM') return true;
-      return cell.status === 'LOANED' && getActualShopId(cell) === shopId;
+      if (cell.status === 'LOANED') return getActualShopId(cell) === shopId;
+      if (cell.status === 'OFF') return false;
     }
 
-    const dayAssignment = employeeDayAssignments.get(`${employeeIdValue}:${iso}`);
     if (dayAssignment?.status === 'OFF') return false;
-    if (dayAssignment?.status === 'WORKING') return dayAssignment.shopId === shopId;
     return true;
   });
 }
@@ -857,17 +861,29 @@ exports.exportExcel = async (req, res) => {
     const employeeDayAssignments = getEmployeeDayAssignments(rota.assignments, shopsById);
 
     // Shop roster lookup
+    const allEmployeeIds = new Set();
+    (rota.shopRoster || []).forEach(sr => (sr.employeeIds || []).forEach(e => allEmployeeIds.add(id(e._id || e))));
+    (rota.assignments || []).forEach(a => { if (a.employeeId) allEmployeeIds.add(id(a.employeeId)); });
+    const allEmployees = await Employee.find({ _id: { $in: [...allEmployeeIds] } }).select('name').lean();
+    const employeesById = new Map(allEmployees.map(e => [id(e._id), e]));
+
     const rosterMap = {};
     for (const sr of (rota.shopRoster || [])) {
       const sId = id(sr.shopId?._id || sr.shopId);
       rosterMap[sId] = {
-        shopName: sr.shopId?.name || '',
-        employees: (sr.employeeIds || []).map(e => ({ _id: id(e._id || e), name: e.name || '' }))
+        shopName: sr.shopId?.name || shopsById[sId] || '',
+        employees: (sr.employeeIds || []).map(e => ({
+          _id: id(e._id || e),
+          name: e.name || employeesById.get(id(e._id || e))?.name || ''
+        }))
       };
     }
     const rosterEmployeesById = new Map(
       Object.values(rosterMap).flatMap(roster => roster.employees.map(employee => [employee._id, employee]))
     );
+    employeesById.forEach((employee, employeeId) => {
+      if (!rosterEmployeesById.has(employeeId)) rosterEmployeesById.set(employeeId, employee);
+    });
     addIncomingWorkersToRosters(rosterMap, rota.assignments || [], rosterEmployeesById, shopsById);
 
     const DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
@@ -1028,49 +1044,53 @@ exports.exportExcel = async (req, res) => {
           const c = row.getCell(2 + i);
           const key = `${shopId}:${emp._id}:${weekDates[i].iso}`;
           const cell = cellMap[key];
+          const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
           c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: empIdx % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC' } };
           c.border = thinBorder;
           c.alignment = { horizontal: 'center', vertical: 'middle' };
 
-          if (!cell) {
-            const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
-            if (dayAssignment?.status === 'OFF') {
-              // Worker is marked OFF anywhere in the system → show OFF in bold red
-              c.value = 'OFF';
-              c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } };
-            } else if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
-              // Worker is assigned to a different shop — show that shop name (blue, like LOANED)
-              c.value = dayAssignment.shopName;
-              c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
-            } else {
-              // No assignment anywhere — show Available and count in totals
+          if (dayAssignment?.status === 'WORKING') {
+            if (dayAssignment.shopId === shopId) {
               shopWorkersByDay[i].add(id(emp._id));
-              c.value = 'Available';
+              let customNote = '';
+              if (cell?.status === 'CUSTOM' && cell.note) {
+                customNote = cell.note;
+              } else if (dayAssignment.assignmentStatus === 'CUSTOM' && dayAssignment.note && !dayAssignment.note.startsWith('Loaned') && !dayAssignment.note.startsWith('At ')) {
+                customNote = dayAssignment.note;
+              }
+              c.value = customNote ? (customNote.startsWith('Available') ? customNote : `Available (${customNote})`) : 'Available';
               c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
-            }
-          } else if (cell.status === 'OFF') {
-            const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
-            if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
-              c.value = dayAssignment.shopName;
-              c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
             } else {
+              c.value = dayAssignment.shopName || shopsById[dayAssignment.shopId] || 'Other shop';
+              c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
+            }
+          } else if (dayAssignment?.status === 'OFF') {
+            c.value = 'OFF';
+            c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } };
+          } else if (cell) {
+            if (cell.status === 'OFF') {
               c.value = 'OFF';
               c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } };
-            }
-          } else if (cell.status === 'LOANED') {
-            const targetShop = shopsById[id(cell.targetShopId)] || cell.note || 'Loaned';
-            c.value = targetShop;
-            c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
-          } else {
-            // AVAILABLE / CUSTOM
-            shopWorkersByDay[i].add(id(emp._id));
-            if (cell.status === 'CUSTOM' && cell.note) {
-              c.value = cell.note;
-              c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
+            } else if (cell.status === 'LOANED') {
+              const actualShop = getActualShopId(cell);
+              if (actualShop === shopId) {
+                shopWorkersByDay[i].add(id(emp._id));
+                c.value = cell.note ? (cell.note.startsWith('Available') ? cell.note : `Available (${cell.note})`) : 'Available';
+                c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
+              } else {
+                const targetShop = shopsById[id(cell.shopId)] || cell.note || 'Loaned';
+                c.value = targetShop;
+                c.font = { name: 'Arial', size: 8, bold: true, color: { argb: 'FF2563EB' } };
+              }
             } else {
-              c.value = cell.note ? `Available (${cell.note})` : 'Available';
+              shopWorkersByDay[i].add(id(emp._id));
+              c.value = cell.note ? (cell.note.startsWith('Available') ? cell.note : `Available (${cell.note})`) : 'Available';
               c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
             }
+          } else {
+            shopWorkersByDay[i].add(id(emp._id));
+            c.value = 'Available';
+            c.font = { name: 'Arial', size: 8, bold: false, color: { argb: 'FF0F172A' } };
           }
         }
         currentRowNum++;
@@ -1189,13 +1209,19 @@ exports.exportPdf = async (req, res) => {
     allShops.forEach(shop => { shopsById[id(shop._id)] = shop.name; });
 
     let employeesById = null;
+    const allEmployeeIds = new Set([
+      ...(rota.shopRoster || []).flatMap(roster => (roster.employeeIds || []).map(id)),
+      ...(rota.assignments || []).map(a => id(a.employeeId))
+    ].filter(Boolean));
+
+    const employees = allEmployeeIds.size
+      ? await Employee.find({ _id: { $in: [...allEmployeeIds] } }).select('name').lean()
+      : [];
+    employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
+
     if (currentScreenSnapshot) {
-      const employeeIds = [...new Set(rota.shopRoster.flatMap(roster => roster.employeeIds.map(id)) )];
-      const employees = employeeIds.length
-        ? await Employee.find({ _id: { $in: employeeIds } }).select('name').lean()
-        : [];
-      employeesById = new Map(employees.map(employee => [id(employee._id), employee]));
-      if (employeesById.size !== employeeIds.length) {
+      const rosterEmployeeIds = [...new Set(rota.shopRoster.flatMap(roster => roster.employeeIds.map(id)))];
+      if (rosterEmployeeIds.some(empId => !employeesById.has(empId))) {
         throw new RotaError(400, 'The current screen rota references an employee that no longer exists.');
       }
       if (rota.shopRoster.some(roster => !shopsById[id(roster.shopId)])) {
@@ -1408,42 +1434,71 @@ exports.exportPdf = async (req, res) => {
 
           const key = `${shopId}:${emp._id}:${weekDates[i].iso}`;
           const cell = cellMap[key];
+          const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
 
           let label = 'Available';
           let status = 'AVAILABLE';
-          if (cell) {
-            if (cell.status === 'OFF') {
-              const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
-              if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
-                label = dayAssignment.shopName;
-                status = 'LOANED';
-              } else {
-                label = 'OFF';
-                status = 'OFF';
-              }
-            } else if (cell.status === 'LOANED') {
-              const targetShop = shopsById[id(cell.shopId)] || cell.note || 'Loaned';
-              label = targetShop;
-              status = 'LOANED';
-            } else {
-              label = cell.note ? `Avail. ${cell.note}` : 'Available';
-              status = cell.note ? 'CUSTOM' : 'AVAILABLE';
+
+          if (dayAssignment?.status === 'WORKING') {
+            if (dayAssignment.shopId === shopId) {
               shopWorkersByDay[i].add(id(emp._id));
+              let customNote = '';
+              if (cell?.status === 'CUSTOM' && cell.note) {
+                customNote = cell.note;
+              } else if (dayAssignment.assignmentStatus === 'CUSTOM' && dayAssignment.note && !dayAssignment.note.startsWith('Loaned') && !dayAssignment.note.startsWith('At ')) {
+                customNote = dayAssignment.note;
+              }
+              if (customNote) {
+                label = /^avail/i.test(customNote) ? customNote : `Avail. ${customNote}`;
+                status = 'CUSTOM';
+              } else {
+                label = 'Available';
+                status = 'AVAILABLE';
+              }
+            } else {
+              label = dayAssignment.shopName || shopsById[dayAssignment.shopId] || 'Other shop';
+              status = 'LOANED';
             }
-          } else {
-            const dayAssignment = employeeDayAssignments.get(`${emp._id}:${weekDates[i].iso}`);
-            if (dayAssignment?.status === 'OFF') {
+          } else if (dayAssignment?.status === 'OFF') {
+            label = 'OFF';
+            status = 'OFF';
+          } else if (cell) {
+            if (cell.status === 'OFF') {
               label = 'OFF';
               status = 'OFF';
-            } else if (dayAssignment?.status === 'WORKING' && dayAssignment.shopId !== shopId) {
-              label = dayAssignment.shopName;
-              status = 'LOANED';
+            } else if (cell.status === 'LOANED') {
+              const actualShop = getActualShopId(cell);
+              if (actualShop === shopId) {
+                shopWorkersByDay[i].add(id(emp._id));
+                const customNote = cell.note && !cell.note.startsWith('Loaned') && !cell.note.startsWith('At ') ? cell.note : '';
+                if (customNote) {
+                  label = /^avail/i.test(customNote) ? customNote : `Avail. ${customNote}`;
+                  status = 'CUSTOM';
+                } else {
+                  label = 'Available';
+                  status = 'AVAILABLE';
+                }
+              } else {
+                const targetShop = shopsById[id(cell.shopId)] || cell.note || 'Loaned';
+                label = targetShop;
+                status = 'LOANED';
+              }
             } else {
-              // No assignment anywhere — default to Available
-              label = 'Available';
-              status = 'AVAILABLE';
               shopWorkersByDay[i].add(id(emp._id));
+              const customNote = cell.note || '';
+              if (customNote) {
+                label = /^avail/i.test(customNote) ? customNote : `Avail. ${customNote}`;
+                status = 'CUSTOM';
+              } else {
+                label = 'Available';
+                status = 'AVAILABLE';
+              }
             }
+          } else {
+            // No assignment anywhere — default to Available
+            label = 'Available';
+            status = 'AVAILABLE';
+            shopWorkersByDay[i].add(id(emp._id));
           }
 
           if (status === 'OFF') {
