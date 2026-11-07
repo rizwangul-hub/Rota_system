@@ -101,7 +101,7 @@ async function getWorkerDetails({ workerName, workerId }) {
 /**
  * 2. getWorkerAttendance
  */
-async function getWorkerAttendance({ workerName, workerId, date, startDate, endDate, status, limit = 15 }) {
+async function getWorkerAttendance({ workerName, workerId, date, startDate, endDate, status, limit }) {
   const emp = await findEmployee(workerName || workerId);
   if (!emp) {
     const all = await Employee.find({ employmentStatus: 'Active' }).select('name employeeId').limit(15);
@@ -121,10 +121,11 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
   }
   if (status) query.status = status;
 
+  const maxRecords = Number(limit) || ((startDate && endDate) ? 50 : 20);
   const records = await Attendance.find(query)
     .populate('shop')
     .sort({ dateString: -1 })
-    .limit(Number(limit) || 20);
+    .limit(maxRecords);
 
   const formattedRows = records.map(r => ({
     date: formatUKDate(r.dateString),
@@ -149,6 +150,11 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
   const totalAbsent = records.filter(r => r.status === 'Absent').length;
   const totalHours = records.reduce((s, r) => s + (r.actualHours || 0), 0);
   const totalPay = records.reduce((s, r) => s + (r.attendancePay || 0), 0);
+  const totalLateMinutes = records.reduce((s, r) => s + (r.lateMinutes || 0), 0);
+  const totalLateDeductions = records.reduce((s, r) => s + (r.lateDeduction || 0), 0);
+
+  const lateRecords = formattedRows.filter(r => r.lateMinutes > 0);
+  const absentRecords = formattedRows.filter(r => r.status === 'Absent');
 
   return {
     workerName: emp.name,
@@ -159,9 +165,13 @@ async function getWorkerAttendance({ workerName, workerId, date, startDate, endD
       totalLate,
       totalHalf,
       totalAbsent,
+      totalLateMinutes,
+      totalLateDeductions: `£${totalLateDeductions.toFixed(2)}`,
       totalHoursLogged: Number(totalHours.toFixed(1)),
       totalEarned: `£${totalPay.toFixed(2)}`
     },
+    lateRecords,
+    absentRecords,
     records: formattedRows
   };
 }

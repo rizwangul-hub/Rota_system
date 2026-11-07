@@ -47,7 +47,7 @@ GUIDELINES:
 /**
  * Format raw tool output into beautiful Markdown
  */
-function formatToolResult(toolName, result) {
+function formatToolResult(toolName, result, originalQuery = '') {
   if (!result) return 'No data found.';
   if (result.error) {
     let out = `⚠️ **${result.error}**\n\n`;
@@ -87,6 +87,10 @@ function formatToolResult(toolName, result) {
 
   // 2. getWorkerAttendance
   if (toolName === 'getWorkerAttendance' && result.records) {
+    const q = (originalQuery || '').toLowerCase();
+    const isLateQuery = /\b(late|lateness|mints?\s*late|late\s*mints?|minutes?\s*late|late\s*minutes?|deri)\b/i.test(q);
+    const isAbsentQuery = /\b(absent|absents|absence|chutti|off\s*day|holidays?)\b/i.test(q);
+
     // Single-day specific attendance result (e.g. "on which shop Shafique work on 31 October")
     if (result.records.length === 1) {
       const r = result.records[0];
@@ -112,10 +116,49 @@ function formatToolResult(toolName, result) {
       return out;
     }
 
-    let out = `### 📋 Attendance Records: ${result.workerName} (${result.workerId})\n\n`;
-    if (result.summary) {
-      const s = result.summary;
-      out += `**Summary:** Present: **${s.totalPresent}** | Late: **${s.totalLate}** | Half-Day: **${s.totalHalf}** | Absent: **${s.totalAbsent}** | Total Hours: **${s.totalHoursLogged} hrs** | Total Earned: **${s.totalEarned}**\n\n`;
+    const s = result.summary || {};
+    let out = '';
+
+    if (isLateQuery) {
+      out += `### ⏱️ Lateness Calculation: ${result.workerName} (${result.workerId})\n\n`;
+      out += `**Total Late Minutes:** **${s.totalLateMinutes || 0} minutes** across **${s.totalLate || 0}** official Late shift(s).\n`;
+      out += `**Total Lateness Deductions:** **${s.totalLateDeductions || '£0.00'}**\n`;
+      out += `**Period Summary:** Present: **${s.totalPresent || 0}** | Late: **${s.totalLate || 0}** | Absent: **${s.totalAbsent || 0}** | Total Hours: **${s.totalHoursLogged || 0} hrs**\n\n`;
+
+      if (result.lateRecords && result.lateRecords.length > 0) {
+        out += `#### 🚨 Late Arrivals Breakdown:\n`;
+        out += `| Date | Shop | Shift Scheduled | Actual Arrival | Late Duration | Status | Deduction |\n|---|---|---|---|---|---|---|\n`;
+        result.lateRecords.forEach(r => {
+          out += `| **${r.date}** | ${r.shop} | ${r.shiftStart}–${r.shiftEnd} | ${r.reachedTime} | **${r.lateMinutes} mins late** | ${r.status} | ${r.deduction} |\n`;
+        });
+        out += `\n`;
+      } else {
+        out += `_No late arrivals recorded for this worker in the specified period._\n\n`;
+      }
+
+      out += `#### 📋 Complete Attendance Records:\n`;
+    } else if (isAbsentQuery) {
+      out += `### 🏖️ Absence Calculation: ${result.workerName} (${result.workerId})\n\n`;
+      out += `**Total Absent Days:** **${s.totalAbsent || 0} days**\n`;
+      out += `**Period Summary:** Present: **${s.totalPresent || 0}** | Late: **${s.totalLate || 0}** | Total Hours: **${s.totalHoursLogged || 0} hrs**\n\n`;
+
+      if (result.absentRecords && result.absentRecords.length > 0) {
+        out += `#### ❌ Absent Dates:\n`;
+        out += `| Date | Status | Shop | Remarks |\n|---|---|---|---|\n`;
+        result.absentRecords.forEach(r => {
+          out += `| **${r.date}** | **Absent** | ${r.shop} | ${r.remarks || '—'} |\n`;
+        });
+        out += `\n`;
+      } else {
+        out += `_No absences recorded for this worker in the specified period._\n\n`;
+      }
+
+      out += `#### 📋 Complete Attendance Records:\n`;
+    } else {
+      out += `### 📋 Attendance Records: ${result.workerName} (${result.workerId})\n\n`;
+      if (result.summary) {
+        out += `**Summary:** Present: **${s.totalPresent}** | Late: **${s.totalLate}** (${s.totalLateMinutes || 0} mins) | Half-Day: **${s.totalHalf}** | Absent: **${s.totalAbsent}** | Total Hours: **${s.totalHoursLogged} hrs** | Total Earned: **${s.totalEarned}**\n\n`;
+      }
     }
 
     if (result.records.length === 0) {
@@ -387,7 +430,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
     try {
       const res = await executeRotaTool(call.name, call.args, user);
       toolResults.push({ name: call.name, args: call.args, result: res });
-      textOutputs.push(formatToolResult(call.name, res));
+      textOutputs.push(formatToolResult(call.name, res, trimmed));
     } catch (toolExecErr) {
       console.error(`[Tool Execution Error ${call.name}]:`, toolExecErr);
       textOutputs.push(`⚠️ Error retrieving information for ${call.name}: ${toolExecErr.message}`);

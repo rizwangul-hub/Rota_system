@@ -179,6 +179,97 @@ function extractShopName(text) {
   return null;
 }
 
+// Common aliases and phonetic misspellings for Pixx employees
+const KNOWN_ALIASES = {
+  // Arslan
+  'arsaln': 'Arslan Bhai',
+  'arslan': 'Arslan Bhai',
+  'arsalan': 'Arslan Bhai',
+  'aslan': 'Arslan Bhai',
+  'arslanbhai': 'Arslan Bhai',
+  'arsalanbhai': 'Arslan Bhai',
+  // Shafique
+  'shafik': 'Shafique',
+  'shafiq': 'Shafique',
+  'shafique': 'Shafique',
+  'shafikbhai': 'Shafique',
+  // Ubaid
+  'ubaid': 'Ubaid',
+  'ubad': 'Ubaid',
+  'obaid': 'Ubaid',
+  'ubayd': 'Ubaid',
+  // Shiva
+  'sheva': 'Shiva',
+  'shiva': 'Shiva',
+  'shiba': 'Shiva',
+  // Qasim
+  'qasim': 'Qasim',
+  'kasim': 'Qasim',
+  // Fardin
+  'fardin': 'Fardin',
+  'fardeen': 'Fardin',
+  'ferdin': 'Fardin',
+  // Ash
+  'ash': 'Ash',
+  'ashraf': 'Ash',
+  // Anas
+  'anas': 'Anas',
+  'annas': 'Anas',
+  // Dave
+  'dave': 'Dave',
+  'dev': 'Dave',
+  // Wali Ullah
+  'waliullah': 'Wali Ullah',
+  'wali': 'Wali Ullah',
+  'vali': 'Wali Ullah',
+  // Zamad
+  'zamad': 'Zamad',
+  'zammad': 'Zamad',
+  // Shahzad
+  'shehzad': 'Shahzad',
+  'shahzad': 'Shahzad',
+  'shahzaad': 'Shahzad',
+  // Ali Bhai
+  'alibhai': 'Ali Bhai',
+  'ali': 'Ali Bhai',
+  // Usman
+  'usman': 'Usman',
+  'usma': 'Usman',
+  'usmaan': 'Usman',
+  // Sarfraz
+  'sarfraz': 'Sarfraz',
+  'sarfaraz': 'Sarfraz',
+  // Adeel
+  'adeel': 'Adeel',
+  'adel': 'Adeel',
+  'adil': 'Adeel',
+  // Jebran
+  'jebran': 'Jebran',
+  'jibran': 'Jebran',
+  // Abdullah
+  'abdullah': 'Abdullah',
+  'abdulla': 'Abdullah',
+  // Sajid
+  'sajid': 'Sajid'
+};
+
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+
 // Hardcoded fallback list in case DB has not yet populated cache
 const FALLBACK_EMPLOYEES = [
   'Shiva', 'Qasim', 'Arslan Bhai', 'Sam', 'Fardin', 'Shafique', 'Ash', 'Anas',
@@ -188,23 +279,39 @@ const FALLBACK_EMPLOYEES = [
 
 /**
  * Robust Worker Identification:
- * Matches query against real employees in database (or fallback list).
+ * Matches query against real employees in database, alias mapping, and fuzzy distance.
  * Avoids misidentifying English words (like "october", "whicht", "report") as workers!
  */
 async function extractWorker(text) {
   await refreshCache();
   const t = (text || '').toLowerCase();
+  const words = t.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+
+  // 1. Check known multi-word alias pairs (e.g. "arslan bhai", "wali ullah", "ali bhai")
+  for (let i = 0; i < words.length - 1; i++) {
+    const pair = `${words[i]} ${words[i + 1]}`;
+    if (KNOWN_ALIASES[pair]) {
+      return KNOWN_ALIASES[pair];
+    }
+  }
+
+  // 2. Check known single-word aliases (e.g. "arsaln", "shafik", "ubad", "adel")
+  for (const word of words) {
+    if (KNOWN_ALIASES[word]) {
+      return KNOWN_ALIASES[word];
+    }
+  }
 
   const empList = cachedEmployees.length > 0 ? cachedEmployees : FALLBACK_EMPLOYEES.map(name => ({ name }));
 
-  // 1. Check for exact employeeId match (e.g. PIXX001)
+  // 3. Check for exact employeeId match (e.g. PIXX001)
   for (const emp of empList) {
     if (emp.employeeId && new RegExp(`\\b${emp.employeeId.toLowerCase()}\\b`, 'i').test(t)) {
       return emp.name;
     }
   }
 
-  // 2. Check full employee name match (e.g. "Arslan Bhai", "Wali Ullah")
+  // 4. Check full employee name match (e.g. "Arslan Bhai", "Wali Ullah")
   for (const emp of empList) {
     if (emp.name) {
       const full = emp.name.toLowerCase();
@@ -214,12 +321,32 @@ async function extractWorker(text) {
     }
   }
 
-  // 3. Check first name (e.g. "Arslan", "Ali", "Wali", "Shafique", "Ubaid")
+  // 5. Check first name (e.g. "Arslan", "Ali", "Wali", "Shafique", "Ubaid")
   for (const emp of empList) {
     if (emp.name) {
       const firstName = emp.name.toLowerCase().split(' ')[0];
       if (firstName.length >= 3 && new RegExp(`\\b${firstName}\\b`, 'i').test(t)) {
         return emp.name;
+      }
+    }
+  }
+
+  // 6. Fuzzy Levenshtein match for slight typos in first name (distance <= 2 for words >= 5 chars, distance <= 1 for 4 chars)
+  for (const word of words) {
+    if (word.length < 4) continue;
+    // Don't fuzzy-match common calendar or functional words
+    if (/^(today|yesterday|month|october|november|december|report|salary|hours|mints|minute|minutes|which|whicht|where|store|check|total|present|daily)$/i.test(word)) {
+      continue;
+    }
+    for (const emp of empList) {
+      const firstName = (emp.name || '').toLowerCase().split(' ')[0];
+      if (firstName.length < 3) continue;
+      const maxDist = firstName.length >= 5 ? 2 : 1;
+      if (Math.abs(word.length - firstName.length) <= maxDist) {
+        const dist = levenshteinDistance(word, firstName);
+        if (dist <= maxDist) {
+          return emp.name;
+        }
       }
     }
   }
@@ -239,7 +366,7 @@ async function resolveIntentAndToolCall(message) {
 
   const isSalaryQuery = /\b(salary|salaries|tankhwah|payroll|wage|wages|earnings|pay|paid|balance)\b/i.test(t);
   const isRotaQuery = /\b(rota|schedule|shift|planning|roster|planner)\b/i.test(t);
-  const isAttendanceQuery = /\b(attendance|hazri|present|late|absent|hours|worked|checked|reached|left|time|duty|work)\b/i.test(t);
+  const isAttendanceQuery = /\b(attendance|hazri|present|late|lateness|absent|hours|worked|checked|reached|left|time|duty|work|mints|minute|minutes|deri)\b/i.test(t);
 
   // 1. Worker Specific Queries
   if (workerName) {
@@ -276,7 +403,7 @@ async function resolveIntentAndToolCall(message) {
             workerName,
             startDate: period.startDate,
             endDate: period.endDate,
-            limit: 31
+            limit: 40
           }
         }];
       }
