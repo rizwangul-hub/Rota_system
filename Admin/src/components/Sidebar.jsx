@@ -69,7 +69,9 @@ export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: pro
             </li>
             <li className="nav-item">
               <NavLink to="/ai-assistant" onClick={() => setMobileOpen(false)}>
-                <Sparkles size={18} color="#38bdf8" /> AI Rota Assistant
+                <span style={{ display: 'inline-flex', animation: 'sparkleTwinkle 2.5s infinite ease-in-out' }}>
+                  <Sparkles size={18} color="#38bdf8" />
+                </span> AI Rota Assistant
               </NavLink>
             </li>
             <li className="nav-item">
@@ -137,7 +139,9 @@ export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: pro
             </li>
             <li className="nav-item">
               <NavLink to="/ai-assistant" onClick={() => setMobileOpen(false)}>
-                <Sparkles size={18} color="#38bdf8" /> AI Rota Assistant
+                <span style={{ display: 'inline-flex', animation: 'sparkleTwinkle 2.5s infinite ease-in-out' }}>
+                  <Sparkles size={18} color="#38bdf8" />
+                </span> AI Rota Assistant
               </NavLink>
             </li>
             <li className="nav-item">

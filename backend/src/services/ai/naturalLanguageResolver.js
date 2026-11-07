@@ -394,6 +394,15 @@ async function resolveIntentAndToolCall(message) {
   const isRotaQuery = /\b(rota|schedule|shift|planning|roster|planner)\b/i.test(t);
   const isAttendanceQuery = /\b(attendance|hazri|present|late|lateness|absent|hours|worked|checked|reached|left|time|duty|work|mints|minute|minutes|deri)\b/i.test(t);
 
+  // Security & Credential Queries Protection
+  const isSecurityQuery = /\b(password|passwords|credential|credentials|login\s*detail|login\s*details|admin\s*login|secret|secrets|token|tokens|api\s*key|auth\s*token)\b/i.test(t);
+  if (isSecurityQuery) {
+    return [{
+      name: 'securityNotice',
+      args: { query: message }
+    }];
+  }
+
   // 1. Worker Specific Queries
   if (workerName) {
     // A. Worker Salary / Payroll query
@@ -492,7 +501,7 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 5. Daily Attendance Overview for a specific Date or Today
+  // 5. Daily Attendance Overview for a specific Date
   if (period?.type === 'exact_date') {
     return [{
       name: 'getDailyAttendanceOverview',
@@ -500,10 +509,19 @@ async function resolveIntentAndToolCall(message) {
     }];
   }
 
-  // 6. Default to Today's Attendance Overview
+  // 6. Explicit inquiry for today or general attendance overview
+  const isExplicitTodayOrAttendance = /\b(today|aaj|attendance|hazri|who\s*is\s*working|duty\s*list|daily\s*report)\b/i.test(t);
+  if (isAttendanceQuery || isExplicitTodayOrAttendance) {
+    return [{
+      name: 'getDailyAttendanceOverview',
+      args: { date: getUKDateString(new Date()) }
+    }];
+  }
+
+  // 7. Unknown or out-of-scope query fallback: Guide user instead of dumping daily attendance!
   return [{
-    name: 'getDailyAttendanceOverview',
-    args: { date: getUKDateString(new Date()) }
+    name: 'clarifyOrOutOfScopeNotice',
+    args: { query: message }
   }];
 }
 

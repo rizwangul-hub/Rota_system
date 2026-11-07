@@ -109,36 +109,129 @@ export default function AiAssistantWidget() {
 
   return (
     <>
-      {/* Floating Sparkle Button */}
+      <style>{`
+        @keyframes floatAiBounce {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-8px);
+          }
+        }
+        @keyframes aiHaloPulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7), 0 8px 24px rgba(37, 99, 235, 0.45);
+          }
+          70% {
+            box-shadow: 0 0 0 16px rgba(56, 189, 248, 0), 0 12px 30px rgba(37, 99, 235, 0.55);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0), 0 8px 24px rgba(37, 99, 235, 0.45);
+          }
+        }
+        @keyframes sparkleTwinkle {
+          0%, 100% {
+            transform: rotate(0deg) scale(1);
+            filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
+          }
+          25% {
+            transform: rotate(-12deg) scale(1.18);
+            filter: drop-shadow(0 0 8px rgba(56, 189, 248, 1));
+          }
+          75% {
+            transform: rotate(14deg) scale(1.08);
+            filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9));
+          }
+        }
+        @keyframes badgeShimmer {
+          0%, 100% {
+            opacity: 0.95;
+            transform: translateX(0);
+          }
+          50% {
+            opacity: 1;
+            transform: translateX(-3px);
+          }
+        }
+        .ai-floating-btn {
+          animation: floatAiBounce 3s ease-in-out infinite, aiHaloPulse 2.5s infinite;
+        }
+        .ai-floating-btn:hover {
+          animation-play-state: paused;
+          transform: scale(1.12) !important;
+        }
+        .ai-sparkle-icon {
+          animation: sparkleTwinkle 2s ease-in-out infinite;
+        }
+      `}</style>
+
+      {/* Floating Trigger Button with Moving Animation */}
       {!isOpen && (
-        <button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          title="Open AI Rota Assistant"
-          aria-label="Open AI Rota Assistant"
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            width: '54px',
-            height: '54px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
-            color: '#ffffff',
-            border: '2px solid rgba(255,255,255,0.4)',
-            boxShadow: '0 8px 24px rgba(37, 99, 235, 0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            zIndex: 9998,
-            transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
-          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-        >
-          <Sparkles size={24} color="#ffffff" />
-        </button>
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          zIndex: 9998
+        }}>
+          {/* Animated Mini Badge Pill */}
+          <div
+            onClick={() => setIsOpen(true)}
+            style={{
+              background: '#0f172a',
+              color: '#38bdf8',
+              fontSize: '12px',
+              fontWeight: 700,
+              padding: '6px 12px',
+              borderRadius: '20px',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              userSelect: 'none',
+              animation: 'badgeShimmer 2.5s ease-in-out infinite'
+            }}
+          >
+            <span style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              background: '#10b981',
+              boxShadow: '0 0 8px #10b981',
+              display: 'inline-block'
+            }} />
+            Ask AI
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            title="Open AI Rota Assistant"
+            aria-label="Open AI Rota Assistant"
+            className="ai-floating-btn"
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #4f46e5 100%)',
+              color: '#ffffff',
+              border: '2px solid rgba(255,255,255,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+            }}
+          >
+            <div className="ai-sparkle-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={25} color="#ffffff" />
+            </div>
+          </button>
+        </div>
       )}
 
       {/* Slide-over Assistant Drawer / Popup */}

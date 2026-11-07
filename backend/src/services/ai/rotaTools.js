@@ -735,6 +735,18 @@ async function executeRotaTool(name, args = {}, user) {
       return await getAllEmployeesSummary(args);
     case 'getAllShopsSummary':
       return await getAllShopsSummary(args);
+    case 'securityNotice':
+      return {
+        isNotice: true,
+        noticeType: 'security',
+        text: `🔒 **Security Notice:** For system protection and privacy compliance, I do not store or provide user passwords, admin login credentials, or secret keys.\n\nPlease log in via the official **[Admin Login](/login)** page or contact your system administrator for account credentials.`
+      };
+    case 'clarifyOrOutOfScopeNotice':
+      return {
+        isNotice: true,
+        noticeType: 'clarify',
+        text: `❓ **I didn't quite catch that:**\n\nI couldn't match a worker name, shop, or attendance request from your query: *"${args.query || ''}"*.\n\nI can help you with:\n1. 👤 **Worker Attendance & Lateness** (e.g. *"Show Shiva's attendance"*, *"how many mints late by arslan in october"*)\n2. 💰 **Weekly Salaries & Payroll** (e.g. *"Qasim salary report"*, *"Ubaid october earnings"*)\n3. 🏪 **Shop Staffing & Shifts** (e.g. *"Who worked at Camden yesterday?"*, *"Chelsea rota"*)\n4. 📄 **Official PDF Reports** (e.g. *"Give me Shiva's report in PDF"*)\n\n_Tip: If asking about a worker, check their spelling or use their ID (e.g. Arslan Bhai, Shiva, PIXX001)._`
+      };
     default:
       throw new Error(`Tool "${name}" is not implemented.`);
   }

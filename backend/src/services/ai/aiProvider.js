@@ -49,6 +49,7 @@ GUIDELINES:
  */
 function formatToolResult(toolName, result, originalQuery = '') {
   if (!result) return 'No data found.';
+  if (result.isNotice) return result.text;
   if (result.error) {
     let out = `⚠️ **${result.error}**\n\n`;
     if (Array.isArray(result.availableWorkers) && result.availableWorkers.length) {
@@ -428,6 +429,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
           if (resp.ok) {
             const data = await resp.json();
             const parts = data?.candidates?.[0]?.content?.parts || [];
+            const textParts = parts.filter(p => p.text).map(p => p.text).join('\n').trim();
             const funcCalls = parts.filter(p => p.functionCall).map(p => ({
               name: p.functionCall.name,
               args: p.functionCall.args || {}
@@ -437,6 +439,14 @@ async function askRotaAssistant(message, history = [], user = {}) {
               calls = funcCalls;
               engine = `gemini (${modelToTry})`;
               break;
+            } else if (textParts) {
+              return {
+                success: true,
+                message: textParts,
+                toolCalls: [],
+                engine: `gemini (${modelToTry})`,
+                timestamp: new Date().toISOString()
+              };
             }
           }
         } catch (modelErr) {
