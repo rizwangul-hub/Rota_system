@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../backend/.env') });
 const connectDB = require('../config/db');
 const WeeklyRota = require('../models/WeeklyRota');
 const Employee = require('../models/Employee');
