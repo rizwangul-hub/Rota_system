@@ -110,7 +110,7 @@ export default function AiAssistantWidget() {
   return (
     <>
       <style>{`
-        @keyframes floatAiBounce {
+        @keyframes floatAiMotion {
           0%, 100% {
             transform: translateY(0px);
           }
@@ -118,82 +118,100 @@ export default function AiAssistantWidget() {
             transform: translateY(-8px);
           }
         }
-        @keyframes aiHaloPulse {
+        @keyframes aiCircleGlow {
           0% {
-            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7), 0 8px 24px rgba(37, 99, 235, 0.45);
+            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7), 0 6px 20px rgba(37, 99, 235, 0.45);
           }
           70% {
-            box-shadow: 0 0 0 16px rgba(56, 189, 248, 0), 0 12px 30px rgba(37, 99, 235, 0.55);
+            box-shadow: 0 0 0 14px rgba(37, 99, 235, 0), 0 8px 24px rgba(37, 99, 235, 0.55);
           }
           100% {
-            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0), 0 8px 24px rgba(37, 99, 235, 0.45);
+            box-shadow: 0 0 0 0 rgba(37, 99, 235, 0), 0 6px 20px rgba(37, 99, 235, 0.45);
           }
         }
-        @keyframes sparkleTwinkle {
+        @keyframes sparkleTwinkleRotate {
           0%, 100% {
             transform: rotate(0deg) scale(1);
-            filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
+            filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
           }
           25% {
-            transform: rotate(-12deg) scale(1.18);
-            filter: drop-shadow(0 0 8px rgba(56, 189, 248, 1));
-          }
-          75% {
-            transform: rotate(14deg) scale(1.08);
-            filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9));
-          }
-        }
-        @keyframes badgeShimmer {
-          0%, 100% {
-            opacity: 0.95;
-            transform: translateX(0);
+            transform: rotate(-14deg) scale(1.2);
+            filter: drop-shadow(0 0 6px rgba(255, 255, 255, 1));
           }
           50% {
-            opacity: 1;
-            transform: translateX(-3px);
+            transform: rotate(0deg) scale(0.95);
+            filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7));
+          }
+          75% {
+            transform: rotate(14deg) scale(1.18);
+            filter: drop-shadow(0 0 7px rgba(56, 189, 248, 1));
           }
         }
-        .ai-floating-btn {
-          animation: floatAiBounce 3s ease-in-out infinite, aiHaloPulse 2.5s infinite;
+        @keyframes askAiPillShimmer {
+          0%, 100% {
+            border-color: rgba(255, 255, 255, 0.2);
+          }
+          50% {
+            border-color: rgba(56, 189, 248, 0.6);
+          }
         }
-        .ai-floating-btn:hover {
+        .ai-floating-trigger {
+          animation: floatAiMotion 2.8s ease-in-out infinite;
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .ai-floating-trigger:hover {
           animation-play-state: paused;
-          transform: scale(1.12) !important;
+          transform: translateY(-4px) scale(1.06);
         }
-        .ai-sparkle-icon {
-          animation: sparkleTwinkle 2s ease-in-out infinite;
+        .ai-glow-circle {
+          animation: aiCircleGlow 2.2s infinite;
+        }
+        .ai-sparkle-motion {
+          animation: sparkleTwinkleRotate 2.4s ease-in-out infinite;
+          display: flex;
+          align-items: center;
+          justifyContent: center;
+        }
+        .ai-pill-text {
+          animation: askAiPillShimmer 2.8s ease-in-out infinite;
         }
       `}</style>
 
-      {/* Floating Trigger Button with Moving Animation */}
+      {/* Floating Trigger Button with Moving Animation (Matching Exact Design) */}
       {!isOpen && (
-        <div style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          zIndex: 9998
-        }}>
-          {/* Animated Mini Badge Pill */}
+        <div
+          onClick={() => setIsOpen(true)}
+          className="ai-floating-trigger"
+          title="Open AI Rota Assistant"
+          aria-label="Open AI Rota Assistant"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            cursor: 'pointer',
+            zIndex: 9998,
+            userSelect: 'none'
+          }}
+        >
+          {/* Rounded Pill "Ask AI" */}
           <div
-            onClick={() => setIsOpen(true)}
+            className="ai-pill-text"
             style={{
-              background: '#0f172a',
-              color: '#38bdf8',
-              fontSize: '12px',
+              background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+              color: '#ffffff',
+              fontSize: '13px',
               fontWeight: 700,
-              padding: '6px 12px',
-              borderRadius: '20px',
-              border: '1px solid rgba(56, 189, 248, 0.4)',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+              padding: '9px 24px 9px 16px',
+              borderRadius: '24px',
+              marginRight: '-18px',
+              boxShadow: '0 4px 18px rgba(0,0,0,0.3)',
+              border: '1.5px solid rgba(255,255,255,0.25)',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              cursor: 'pointer',
-              userSelect: 'none',
-              animation: 'badgeShimmer 2.5s ease-in-out infinite'
+              letterSpacing: '0.2px'
             }}
           >
             <span style={{
@@ -201,36 +219,32 @@ export default function AiAssistantWidget() {
               height: '7px',
               borderRadius: '50%',
               background: '#10b981',
-              boxShadow: '0 0 8px #10b981',
+              boxShadow: '0 0 6px #10b981',
               display: 'inline-block'
             }} />
             Ask AI
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsOpen(true)}
-            title="Open AI Rota Assistant"
-            aria-label="Open AI Rota Assistant"
-            className="ai-floating-btn"
+          {/* Overlapping Blue Circle with Animated Sparkles */}
+          <div
+            className="ai-glow-circle"
             style={{
-              width: '56px',
-              height: '56px',
+              width: '50px',
+              height: '50px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #4f46e5 100%)',
-              color: '#ffffff',
-              border: '2px solid rgba(255,255,255,0.6)',
+              background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+              border: '2px solid rgba(255,255,255,0.7)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+              boxShadow: '0 6px 20px rgba(37, 99, 235, 0.5)',
+              position: 'relative'
             }}
           >
-            <div className="ai-sparkle-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles size={25} color="#ffffff" />
+            <div className="ai-sparkle-motion">
+              <Sparkles size={24} color="#ffffff" />
             </div>
-          </button>
+          </div>
         </div>
       )}
 
