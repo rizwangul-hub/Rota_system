@@ -20,13 +20,24 @@ async function refreshCache() {
   }
 }
 
-// Greetings detector
+// Greetings & Conversational detector
 function isGreetingOrHelp(text) {
   const t = (text || '').trim().toLowerCase();
-  return /^(hi|hello|hey|salam|assalam|aoa|kese ho|kaise ho|help|madad|capabilities|what can you do|tum kya kar sakte ho|options|start)\b/i.test(t);
+  return /^(hi|hello|hey|salam|assalam|aoa|kese ho|kaise ho|help|madad|capabilities|what can you do|tum kya kar sakte ho|options|start|rizwan|rizwan ullah)\b/i.test(t) ||
+         /\b(developer|who\s*(developed|created|made)\s*you|what\s*is\s*your\s*developer|who\s*is\s*your\s*developer|kisne\s*banaya|creator)\b/i.test(t);
 }
 
-function getGreetingResponse() {
+function getGreetingResponse(query = '') {
+  const t = (query || '').toLowerCase().trim();
+
+  if (/\b(developer|who\s*(developed|created|made)\s*you|what\s*is\s*your\s*developer|who\s*is\s*your\s*developer|kisne\s*banaya|creator)\b/i.test(t)) {
+    return `💻 **Developer & Engineering:**\n\nI was designed and engineered by **Rizwan Ullah** (Lead Full Stack Software Engineer, rizwangul2426@gmail.com) specifically for the **Pixx Technologies Ltd** UK Rota & Workforce System.\n\nI am powered by Gemini AI with custom live database tools to manage workforce attendance, calculate late minutes, monitor shop shifts, verify rota schedules, and generate official PDF & Excel reports.\n\nHow can I help you today?`;
+  }
+
+  if (/^(rizwan|rizwan ullah)$/i.test(t)) {
+    return `👋 **Hello Rizwan!**\n\nI am your official AI Workforce & Finance Assistant for the Pixx Rota System.\n\nI can answer any questions about our staff, shops, attendance logs, and salaries, or export official reports in PDF and Excel.\n\nWhat would you like to review today?`;
+  }
+
   return `👋 **Hello! I am your AI Workforce & Finance Assistant for the Pixx Rota System.**
 
 I can instantly provide full details and export PDF reports for:

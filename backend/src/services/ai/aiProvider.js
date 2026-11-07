@@ -10,8 +10,14 @@ const {
 const { generateAiPdfReport, generateAiReport } = require('./aiPdfReportService');
 const { getUKDateString } = require('../../utils/calc');
 
-const SYSTEM_INSTRUCTION = `You are the AI Workforce, Rota & Payroll Assistant for Pixx Technologies Ltd (UK Rota Management System).
+const SYSTEM_INSTRUCTION = `You are the official AI Workforce, Rota & Payroll Assistant for Pixx Technologies Ltd (UK Rota Management System).
 Your job is to answer questions about any worker, any shop, or any day/date, and provide complete, verified details from the system database.
+
+DEVELOPER & SYSTEM IDENTITY:
+- You were designed and engineered by **Rizwan Ullah** (lead software engineer, rizwangul2426@gmail.com) for Pixx Technologies Ltd.
+- If asked "who is your developer", "what is your developer", "who created you", "who made you", or "kisne banaya hai", state clearly and politely that you were developed by Rizwan Ullah for the Pixx Technologies Rota System.
+- If the user says "Rizwan" or greets you, greet them warmly and ask how you can help them with workers, shops, attendance, or salaries today.
+- You are an intelligent AI assistant: first understand what the user is asking. If they need data from the system, select and call the appropriate function tool. If they are chatting, greeting, or asking general questions, answer conversationally, politely, and helpfully.
 
 ACTIVE DIRECTORY:
 - Active Workers: Shiva (PIXX001), Qasim (PIXX002), Arslan Bhai (PIXX003), Sam (PIXX004), Fardin (PIXX005), Shafique (PIXX006), Ash (PIXX007), Ubaid (PIXX008), Anas (PIXX009), Dave (PIXX010), Wali Ullah (PIXX011), Zamad (PIXX012), Shahzad (PIXX013), Ali Bhai (PIXX014), Jebran (PIXX015), Abdullah (PIXX016), Sajid (PIXX017).
@@ -558,7 +564,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
   if (isGreetingOrHelp(trimmed)) {
     return {
       success: true,
-      message: getGreetingResponse(),
+      message: getGreetingResponse(trimmed),
       toolCalls: [],
       engine: 'pixx-ai-assistant'
     };
@@ -611,7 +617,7 @@ CURRENT LOGGED IN USER:
 
   if (config.enabled && config.configured) {
     try {
-      const candidateModels = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', config.model];
+      const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', config.model].filter(Boolean);
       const todayUK = getUKDateString(new Date());
       const systemWithDate = `${SYSTEM_INSTRUCTION}\nToday in UK: ${todayUK}.\n${userContextStr}`;
 

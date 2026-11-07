@@ -4,7 +4,7 @@
 function getAiConfig() {
   const enabled = process.env.AI_ENABLED !== 'false';
   const provider = process.env.AI_PROVIDER || 'gemini';
-  const model = process.env.AI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.AI_MODEL || 'gemini-3.5-flash-lite';
   const key = process.env.GEMINI_API_KEY || '';
 
   return {
