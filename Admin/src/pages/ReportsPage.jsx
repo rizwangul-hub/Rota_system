@@ -835,200 +835,208 @@ export default function ReportsPage() {
       {/* ======================================================== */}
       {/* 2.5 TAB: TIMING UK SALES STAFF (ARRIVAL TIMES)          */}
       {/* ======================================================== */}
-      {activeTab === 'timing_sheet' && (
-        <div>
-          {/* Action Header & Stats */}
-          <div className="card" style={{ marginBottom: '20px', padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '20px' }}>⏱️</span>
-                  <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Timing UK Sales Staff</h2>
-                  <span style={{ fontSize: '11px', background: '#fef08a', color: '#854d0e', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
-                    Arrival Times & Deductions
-                  </span>
+      {activeTab === 'timing_sheet' && (() => {
+        const weekLabelStr = typeof timingSheetData?.week === 'string'
+          ? timingSheetData.week
+          : (timingSheetData?.week?.weekLabel || timingSheetData?.weekLabel || selectedWeek || 'Current Week');
+        const shopsList = timingSheetData?.shops || timingSheetData?.shopsData || [];
+        const daysList = timingSheetData?.days || (timingSheetData?.dates || []).map(d => ({ dateStr: d.formattedDate, dayName: d.dayName }));
+        return (
+          <div>
+            {/* Action Header & Stats */}
+            <div className="card" style={{ marginBottom: '20px', padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>⏱️</span>
+                    <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Timing UK Sales Staff</h2>
+                    <span style={{ fontSize: '11px', background: '#fef08a', color: '#854d0e', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                      Arrival Times & Deductions
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                    Week: <strong>{weekLabelStr}</strong> &bull; Shows official clock-in records verified by Sarfraz
+                  </div>
                 </div>
-                <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-                  Week: <strong>{timingSheetData?.week || 'Current Week'}</strong> &bull; Shows official clock-in records verified by Sarfraz
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: '#16a34a', color: '#16a34a', fontWeight: 600 }}
+                    onClick={() => handleDownload(
+                      '/reports/timing-sheet/excel',
+                      { weekLabel: weekLabelStr, date: selectedDate },
+                      `Timing_UK_Sales_Staff_${weekLabelStr.replace(/\s+/g, '_')}.xlsx`
+                    )}
+                    disabled={downloading.includes('timing-sheet/excel')}
+                  >
+                    <Download size={14} />
+                    {downloading.includes('timing-sheet/excel') ? 'Generating Excel...' : 'Export Excel (.xlsx)'}
+                  </button>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#dc2626', borderColor: '#dc2626', fontWeight: 600 }}
+                    onClick={() => handleDownload(
+                      '/reports/timing-sheet/pdf',
+                      { weekLabel: weekLabelStr, date: selectedDate },
+                      `Timing_UK_Sales_Staff_${weekLabelStr.replace(/\s+/g, '_')}.pdf`
+                    )}
+                    disabled={downloading.includes('timing-sheet/pdf')}
+                  >
+                    <FileText size={14} />
+                    {downloading.includes('timing-sheet/pdf') ? 'Generating PDF...' : 'Export PDF'}
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <button
-                  className="btn btn-outline btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: '#16a34a', color: '#16a34a', fontWeight: 600 }}
-                  onClick={() => handleDownload(
-                    '/reports/timing-sheet/excel',
-                    { weekLabel: timingSheetData?.week || selectedWeek, date: selectedDate },
-                    `Timing_UK_Sales_Staff_${(timingSheetData?.week || 'week').replace(/\s+/g, '_')}.xlsx`
-                  )}
-                  disabled={downloading.includes('timing-sheet/excel')}
-                >
-                  <Download size={14} />
-                  {downloading.includes('timing-sheet/excel') ? 'Generating Excel...' : 'Export Excel (.xlsx)'}
-                </button>
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#dc2626', borderColor: '#dc2626', fontWeight: 600 }}
-                  onClick={() => handleDownload(
-                    '/reports/timing-sheet/pdf',
-                    { weekLabel: timingSheetData?.week || selectedWeek, date: selectedDate },
-                    `Timing_UK_Sales_Staff_${(timingSheetData?.week || 'week').replace(/\s+/g, '_')}.pdf`
-                  )}
-                  disabled={downloading.includes('timing-sheet/pdf')}
-                >
-                  <FileText size={14} />
-                  {downloading.includes('timing-sheet/pdf') ? 'Generating PDF...' : 'Export PDF'}
-                </button>
+              {/* Quick Metrics Bar */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Total Shops</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>{shopsList.length}</div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Active Workers</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#2563eb' }}>
+                    {shopsList.reduce((acc, s) => acc + (s.workers?.length || 0), 0)}
+                  </div>
+                </div>
+                <div style={{ background: '#fef3c7', padding: '10px 14px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#92400e', textTransform: 'uppercase', fontWeight: 600 }}>Verified By</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#b45309' }}>Sarfraz &amp; Operators</div>
+                </div>
               </div>
             </div>
 
-            {/* Quick Metrics Bar */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
-              <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Total Shops</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>{timingSheetData?.shops?.length || 0}</div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Active Workers</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#2563eb' }}>
-                  {timingSheetData?.shops?.reduce((acc, s) => acc + (s.workers?.length || 0), 0) || 0}
-                </div>
-              </div>
-              <div style={{ background: '#fef3c7', padding: '10px 14px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '11px', color: '#92400e', textTransform: 'uppercase', fontWeight: 600 }}>Verified By</div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#b45309' }}>Sarfraz &amp; Operators</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Table Container Matching User Sheet */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', fontFamily: 'inherit' }}>
-                <thead>
-                  {/* Title Bar */}
-                  <tr style={{ background: '#ffffff' }}>
-                    <th colSpan={8} style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #cbd5e1' }}>
-                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e1b4b' }}>Timing UK Sales Staff</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', textDecoration: 'underline', marginTop: '2px' }}>
-                        {timingSheetData?.week || 'Weekly Timesheet'}
-                      </div>
-                    </th>
-                  </tr>
-                  {/* Dates Header Row */}
-                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #cbd5e1' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #cbd5e1', width: '160px', color: '#0f172a' }}>
-                      Shop
-                    </th>
-                    {(timingSheetData?.days || []).map((day, dIdx) => (
-                      <th key={dIdx} style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #cbd5e1', fontSize: '11px', color: '#334155' }}>
-                        {day.dateStr}
+            {/* Table Container Matching User Sheet */}
+            <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', fontFamily: 'inherit' }}>
+                  <thead>
+                    {/* Title Bar */}
+                    <tr style={{ background: '#ffffff' }}>
+                      <th colSpan={8} style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #cbd5e1' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e1b4b' }}>Timing UK Sales Staff</div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#334155', textDecoration: 'underline', marginTop: '2px' }}>
+                          {weekLabelStr}
+                        </div>
                       </th>
-                    ))}
-                  </tr>
-                  {/* Day Names Header Row */}
-                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #0f172a' }}>
-                    <th style={{ padding: '4px', borderRight: '1px solid #cbd5e1' }}></th>
-                    {(timingSheetData?.days || []).map((day, dIdx) => (
-                      <th key={dIdx} style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #cbd5e1', fontSize: '12px', color: '#0f172a' }}>
-                        {day.dayName}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(!timingSheetData || !timingSheetData.shops || timingSheetData.shops.length === 0) ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-                        No attendance records found for this week. Pick another date or week above.
-                      </td>
                     </tr>
-                  ) : (
-                    timingSheetData.shops.map((shop, sIdx) => (
-                      <React.Fragment key={sIdx}>
-                        {/* Shop Yellow Banner Row */}
-                        <tr style={{ background: '#ffff00', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
-                          <td
-                            colSpan={8}
-                            style={{
-                              padding: '6px 12px',
-                              textAlign: 'center',
-                              fontWeight: 700,
-                              fontSize: '13px',
-                              color: '#000000',
-                              letterSpacing: '0.3px'
-                            }}
-                          >
-                            {shop.shopName}
-                          </td>
-                        </tr>
-
-                        {/* Workers */}
-                        {shop.workers.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} style={{ padding: '6px 12px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '11px' }}>
-                              No staff assigned or logged at this shop for this week
-                            </td>
-                          </tr>
-                        ) : (
-                          shop.workers.map((worker, wIdx) => (
-                            <tr
-                              key={wIdx}
+                    {/* Dates Header Row */}
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #cbd5e1' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #cbd5e1', width: '160px', color: '#0f172a' }}>
+                        Shop
+                      </th>
+                      {daysList.map((day, dIdx) => (
+                        <th key={dIdx} style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #cbd5e1', fontSize: '11px', color: '#334155' }}>
+                          {day.dateStr}
+                        </th>
+                      ))}
+                    </tr>
+                    {/* Day Names Header Row */}
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #0f172a' }}>
+                      <th style={{ padding: '4px', borderRight: '1px solid #cbd5e1' }}></th>
+                      {daysList.map((day, dIdx) => (
+                        <th key={dIdx} style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, borderRight: '1px solid #cbd5e1', fontSize: '12px', color: '#0f172a' }}>
+                          {day.dayName}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shopsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                          No attendance records found for this week. Pick another date or week above.
+                        </td>
+                      </tr>
+                    ) : (
+                      shopsList.map((shop, sIdx) => (
+                        <React.Fragment key={sIdx}>
+                          {/* Shop Yellow Banner Row */}
+                          <tr style={{ background: '#ffff00', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
+                            <td
+                              colSpan={8}
                               style={{
-                                background: wIdx % 2 === 0 ? '#ffffff' : '#fafafa',
-                                borderBottom: '1px solid #e2e8f0'
+                                padding: '6px 12px',
+                                textAlign: 'center',
+                                fontWeight: 700,
+                                fontSize: '13px',
+                                color: '#000000',
+                                letterSpacing: '0.3px'
                               }}
                             >
-                              {/* Worker Name in Italic */}
-                              <td
+                              {shop.shopName}
+                            </td>
+                          </tr>
+
+                          {/* Workers */}
+                          {(!shop.workers || shop.workers.length === 0) ? (
+                            <tr>
+                              <td colSpan={8} style={{ padding: '6px 12px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '11px' }}>
+                                No staff assigned or logged at this shop for this week
+                              </td>
+                            </tr>
+                          ) : (
+                            shop.workers.map((worker, wIdx) => (
+                              <tr
+                                key={wIdx}
                                 style={{
-                                  padding: '7px 12px',
-                                  fontStyle: 'italic',
-                                  fontWeight: 600,
-                                  color: '#0f172a',
-                                  borderRight: '1px solid #cbd5e1',
-                                  whiteSpace: 'nowrap'
+                                  background: wIdx % 2 === 0 ? '#ffffff' : '#fafafa',
+                                  borderBottom: '1px solid #e2e8f0'
                                 }}
                               >
-                                {worker.workerName}
-                              </td>
+                                {/* Worker Name in Italic */}
+                                <td
+                                  style={{
+                                    padding: '7px 12px',
+                                    fontStyle: 'italic',
+                                    fontWeight: 600,
+                                    color: '#0f172a',
+                                    borderRight: '1px solid #cbd5e1',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {worker.workerName}
+                                </td>
 
-                              {/* Daily Cells */}
-                              {worker.days.map((cell, cIdx) => {
-                                const isAlert = cell.isAlert;
-                                return (
-                                  <td
-                                    key={cIdx}
-                                    style={{
-                                      padding: '6px 8px',
-                                      textAlign: 'center',
-                                      borderRight: '1px solid #cbd5e1',
-                                      fontWeight: isAlert ? 700 : 500,
-                                      color: isAlert ? '#dc2626' : (cell.text ? '#0f172a' : '#cbd5e1'),
-                                      fontSize: '11px',
-                                      background: cell.text === 'OFF' ? '#fef2f2' : (isAlert ? '#fff1f2' : 'transparent'),
-                                      lineHeight: 1.3
-                                    }}
-                                  >
-                                    {cell.text || '—'}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))
-                        )}
-                      </React.Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                                {/* Daily Cells */}
+                                {(worker.days || []).map((cell, cIdx) => {
+                                  const isAlert = cell.isAlert;
+                                  return (
+                                    <td
+                                      key={cIdx}
+                                      style={{
+                                        padding: '6px 8px',
+                                        textAlign: 'center',
+                                        borderRight: '1px solid #cbd5e1',
+                                        fontWeight: isAlert ? 700 : 500,
+                                        color: isAlert ? '#dc2626' : (cell.text ? '#0f172a' : '#cbd5e1'),
+                                        fontSize: '11px',
+                                        background: cell.text === 'OFF' ? '#fef2f2' : (isAlert ? '#fff1f2' : 'transparent'),
+                                        lineHeight: 1.3
+                                      }}
+                                    >
+                                      {cell.text || '—'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* 3. TAB: WEEKLY SALARY REPORT                             */}
+      {/* ======================================================== */}
+{/* 3. TAB: WEEKLY SALARY REPORT                             */}
       {/* ======================================================== */}
       {activeTab === 'weekly_salary' && weeklySalaryData && (
         <div>

@@ -29,6 +29,7 @@ export default function Navbar() {
   useEffect(() => {
     let isSubscribed = true;
     const checkCompliance = async () => {
+      if (!user || user.role !== 'ADMIN') return;
       try {
         const res = await axios.get(`${API_BASE_URL}/employees/compliance/expiring-documents`);
         if (isSubscribed && res.data?.counts) {

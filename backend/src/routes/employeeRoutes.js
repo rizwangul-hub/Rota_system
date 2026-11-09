@@ -11,7 +11,7 @@ const upload = multer({
 
 router.get('/', authenticate, employeeController.getAllEmployees);
 router.get('/next-id', authenticate, authorize('ADMIN'), employeeController.getNextEmployeeId);
-router.get('/compliance/expiring-documents', authenticate, authorize('ADMIN'), employeeController.getExpiringDocuments);
+router.get('/compliance/expiring-documents', authenticate, authorize('ADMIN', 'ATTENDANCE_CHECKER', 'SALARY_DISTRIBUTOR'), employeeController.getExpiringDocuments);
 router.post('/upload-document', authenticate, authorize('ADMIN'), upload.single('file'), employeeController.uploadDocument);
 router.get('/:id/joining-form/pdf', authenticate, authorize('ADMIN'), employeeController.downloadJoiningFormPDF);
 router.post('/:id/documents', authenticate, authorize('ADMIN'), employeeController.addEmployeeDocument);

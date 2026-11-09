@@ -999,8 +999,11 @@ exports.getTimingSheetReport = async (req, res) => {
     return res.json({
       success: true,
       weekLabel: targetWeekLabel,
-      week,
+      week: targetWeekLabel,
+      weekRange: week,
       dates: timingData.dates,
+      days: timingData.dates.map(d => ({ dateStr: d.formattedDate, dayName: d.dayName })),
+      shops: timingData.shopsData,
       shopsData: timingData.shopsData,
       summary: timingData.summary
     });
