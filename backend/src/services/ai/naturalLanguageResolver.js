@@ -435,7 +435,8 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
   const isPaymentQuery = /\b(payment|payments|disburs|disbursement|cash\s*paid|bank\s*transfer|cash\s*vs\s*bank|was\s*paid|paid\s*out)\b/i.test(t);
   const isPendingQuery = /\b(pending|pending\s*review|unverified|unapproved|pending\s*attendance|needs\s*approval|to\s*be\s*checked|awaiting\s*check)\b/i.test(t);
   const isCheckedQuery = /\b(checked\s*attendance|verified\s*attendance|approved\s*attendance|finalized\s*attendance)\b/i.test(t);
-  const isHoursQuery = /\b(opening\s*hours?|closing\s*hours?|opening\s*time|closing\s*time|shop\s*hours?|timing|timings)\b/i.test(t);
+  const isTimingSheetQuery = /\b(timing\s*sheet|timing\s*uk|arrival\s*times?|arrival\s*sheet|timing\s*staff|worker\s*arrival|timing\s*table)\b/i.test(t);
+  const isHoursQuery = !isTimingSheetQuery && /\b(opening\s*hours?|closing\s*hours?|opening\s*time|closing\s*time|shop\s*hours?|shop\s*timings?)\b/i.test(t);
   const isAuditQuery = /\b(audit|audit\s*log|audit\s*trail|system\s*log|activity\s*log|who\s*changed|who\s*deleted)\b/i.test(t);
   const isBonusQuery = /\b(bonus|bonuses|sales\s*bonus|target\s*bonus|monthly\s*bonus)\b/i.test(t);
   const isLoanQuery = /\b(loan|loans|qarz|advance|advances|loan\s*balance)\b/i.test(t);
@@ -527,6 +528,16 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
         shopName,
         date: period?.type === 'exact_date' ? period.dateStr : undefined,
         limit: 50
+      }
+    }];
+  }
+
+  // 5.5 Weekly Timing Sheet (Timing UK Sales Staff - worker arrival times)
+  if (isTimingSheetQuery) {
+    return [{
+      name: 'getWeeklyTimingSheet',
+      args: {
+        date: period?.type === 'exact_date' ? period.dateStr : undefined
       }
     }];
   }
@@ -660,17 +671,6 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
       name: 'getWeeklyRotaOverview',
       args: {
         weekStart: period?.type === 'exact_date' ? period.dateStr : undefined
-      }
-    }];
-  }
-
-  // 12.5 Weekly Timing Sheet (Timing UK Sales Staff - worker arrival times)
-  const isTimingSheetQuery = /\b(timing\s*sheet|timing\s*uk|arrival\s*times?|arrival\s*sheet|timing\s*staff|worker\s*arrival)\b/i.test(t);
-  if (isTimingSheetQuery) {
-    return [{
-      name: 'getWeeklyTimingSheet',
-      args: {
-        date: period?.type === 'exact_date' ? period.dateStr : undefined
       }
     }];
   }
