@@ -11,6 +11,7 @@ const SalaryPayment = require('../../models/SalaryPayment');
 const ShopSchedule = require('../../models/ShopSchedule');
 const AuditLog = require('../../models/AuditLog');
 const { getUKDateString, formatUKDate, getWeekRange, calculateAttendanceRecord } = require('../../utils/calc');
+const { buildTimingSheetData } = require('../../utils/reports');
 
 // Helper to determine if a user role is permitted for financial operations
 function isFinancialAuthorized(user) {
@@ -488,6 +489,40 @@ async function getDailyAttendanceOverview({ date, shopName, status }, user) {
       totalLateDeductions: canViewFinancials ? `£${totalLateDeductions.toFixed(2)}` : '[Restricted]'
     },
     shopBreakdown
+  };
+}
+
+/**
+ * 7.5 getWeeklyTimingSheet
+ * Weekly worker arrival times sheet grouped by shop (Timing UK Sales Staff)
+ */
+async function getWeeklyTimingSheet({ date, weekLabel }, user) {
+  const targetDate = date ? new Date(date) : new Date();
+  const week = weekLabel || getWeekRange(targetDate).label;
+  const [attendances, allShops] = await Promise.all([
+    Attendance.find({ week }).sort({ dateString: 1 }),
+    Shop.find({ isActive: { $ne: false } }).sort({ name: 1 })
+  ]);
+
+  const timingData = buildTimingSheetData(attendances, week, allShops);
+  return {
+    title: 'Timing UK Sales Staff',
+    week: timingData.week,
+    days: timingData.days,
+    totalShops: timingData.shops.length,
+    activeWorkers: timingData.shops.reduce((acc, s) => acc + s.workers.length, 0),
+    shops: timingData.shops.map(s => ({
+      shopName: s.shopName,
+      workerCount: s.workers.length,
+      workers: s.workers.map(w => ({
+        name: w.workerName,
+        days: w.days.map(d => ({ date: d.dateStr, day: d.dayName, value: d.text, isAlert: d.isAlert }))
+      }))
+    })),
+    downloadLinks: {
+      excel: `/api/reports/timing-sheet/excel?weekLabel=${encodeURIComponent(timingData.week)}`,
+      pdf: `/api/reports/timing-sheet/pdf?weekLabel=${encodeURIComponent(timingData.week)}`
+    }
   };
 }
 
@@ -1271,6 +1306,17 @@ const ALL_ROTA_TOOL_DECLARATIONS = [
     }
   },
   {
+    name: 'getWeeklyTimingSheet',
+    description: 'Get weekly worker arrival times and deductions across all shops (Timing UK Sales Staff sheet) verified by Sarfraz and operators.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'Date to target the week for (YYYY-MM-DD or today)' },
+        weekLabel: { type: 'string', description: 'Optional exact week range string (e.g. 27/09/2026 – 03/10/2026)' }
+      }
+    }
+  },
+  {
     name: 'getWeeklyRotaOverview',
     description: 'Get the weekly planned rota summary, assignment count, and publication status for any week.',
     parameters: {
@@ -1397,6 +1443,8 @@ async function executeRotaTool(name, args = {}, user) {
       return await getShopWeeklyRota(args);
     case 'getDailyAttendanceOverview':
       return await getDailyAttendanceOverview(args, user);
+    case 'getWeeklyTimingSheet':
+      return await getWeeklyTimingSheet(args, user);
     case 'getWeeklyRotaOverview':
       return await getWeeklyRotaOverview(args);
     case 'getWeeklyPayrollSummary':

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 import CelebrationOverlay from '../components/celebrations/CelebrationOverlay';
+import TimingSheetModal from '../components/TimingSheetModal';
 
 // Module-level cache for attendance reports across tab navigation
 const _attendanceCache = new Map();
@@ -128,6 +129,7 @@ export default function SarfrazAttendance() {
   const [detailModalRecord, setDetailModalRecord] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ open: false, type: 'single', recordId: null, count: 0 });
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [timingSheetModalOpen, setTimingSheetModalOpen] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [approvedCelebrationCount, setApprovedCelebrationCount] = useState(0);
   const [whatsAppText, setWhatsAppText] = useState('');
@@ -496,6 +498,14 @@ export default function SarfrazAttendance() {
             title="Download formatted Excel report"
           >
             <Download size={15} /> Export Excel
+          </button>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={() => setTimingSheetModalOpen(true)}
+            title="Weekly arrival timesheet (Timing UK Sales Staff)"
+            style={{ borderColor: '#ca8a04', color: '#854d0e', fontWeight: 600, background: '#fefce8' }}
+          >
+            <Clock size={15} color="#ca8a04" /> Timing Sheet
           </button>
 
           <button
@@ -1294,6 +1304,13 @@ export default function SarfrazAttendance() {
           </div>
         </div>
       )}
+
+      {/* Timing Sheet Modal (Timing UK Sales Staff) */}
+      <TimingSheetModal
+        isOpen={timingSheetModalOpen}
+        onClose={() => setTimingSheetModalOpen(false)}
+        initialDate={selectedDate}
+      />
 
       {/* ── Daily Attendance Approval Celebration ─────────────────── */}
       <CelebrationOverlay

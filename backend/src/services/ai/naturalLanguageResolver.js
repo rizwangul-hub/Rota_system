@@ -664,6 +664,17 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
     }];
   }
 
+  // 12.5 Weekly Timing Sheet (Timing UK Sales Staff - worker arrival times)
+  const isTimingSheetQuery = /\b(timing\s*sheet|timing\s*uk|arrival\s*times?|arrival\s*sheet|timing\s*staff|worker\s*arrival)\b/i.test(t);
+  if (isTimingSheetQuery) {
+    return [{
+      name: 'getWeeklyTimingSheet',
+      args: {
+        date: period?.type === 'exact_date' ? period.dateStr : undefined
+      }
+    }];
+  }
+
   // 13. Daily Attendance Overview for a specific Date
   if (period?.type === 'exact_date') {
     return [{

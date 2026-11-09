@@ -41,6 +41,7 @@ import InstallAppBanner from './components/InstallAppBanner';
 import UserProfileModal from './components/UserProfileModal';
 import AttendanceReminderBanner from './components/AttendanceReminderBanner';
 import AttendanceReminderModal from './components/AttendanceReminderModal';
+import TimingSheetModal from './components/TimingSheetModal';
 import UpdateHeaderBadge from './components/updates/UpdateHeaderBadge';
 import {
   startDailyReminderScheduler,
@@ -154,6 +155,7 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(true);
   const [savingAll, setSavingAll] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [timingSheetModalOpen, setTimingSheetModalOpen] = useState(false);
 
   // Daily attendance reminder notification states
   const [reminderConfig, setReminderConfig] = useState({
@@ -1229,6 +1231,28 @@ export default function App() {
           </button>
 
           <button
+            type="button"
+            onClick={() => setTimingSheetModalOpen(true)}
+            title="Weekly arrival timesheet (Timing UK Sales Staff)"
+            style={{
+              backgroundColor: '#ca8a04',
+              color: '#ffffff',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <Clock size={14} />
+            <span>Timing Sheet</span>
+          </button>
+
+          <button
             onClick={logout}
             style={{
               backgroundColor: '#1e293b',
@@ -1377,6 +1401,32 @@ export default function App() {
               </div>
             )}
             <span>{exportingPdf ? 'Preparing WhatsApp Export...' : 'Export to WhatsApp'}</span>
+          </button>
+
+          {/* Timing Sheet (Weekly Worker Arrival Times) */}
+          <button
+            type="button"
+            onClick={() => setTimingSheetModalOpen(true)}
+            style={{
+              marginTop: '8px',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              backgroundColor: '#ca8a04',
+              color: '#ffffff',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              fontSize: '13px',
+              fontWeight: 800,
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(202, 138, 4, 0.3)'
+            }}
+          >
+            <Clock size={16} />
+            <span>Timing Sheet (Weekly Arrival Times)</span>
           </button>
         </div>
 
@@ -1823,6 +1873,13 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Timing Sheet Modal (Timing UK Sales Staff) */}
+      <TimingSheetModal
+        isOpen={timingSheetModalOpen}
+        onClose={() => setTimingSheetModalOpen(false)}
+        initialDate={rawDateString}
+      />
     </div>
   );
 }
