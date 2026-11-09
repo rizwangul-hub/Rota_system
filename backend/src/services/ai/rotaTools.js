@@ -499,12 +499,13 @@ async function getDailyAttendanceOverview({ date, shopName, status }, user) {
 async function getWeeklyTimingSheet({ date, weekLabel }, user) {
   const targetDate = date ? new Date(date) : new Date();
   const week = weekLabel || getWeekRange(targetDate).label;
-  const [attendances, allShops] = await Promise.all([
+  const [attendances, allShops, allEmployees] = await Promise.all([
     Attendance.find({ week }).sort({ dateString: 1 }),
-    Shop.find({ isActive: { $ne: false } }).sort({ name: 1 })
+    Shop.find({ isActive: { $ne: false } }).sort({ name: 1 }),
+    Employee.find({ isActive: true }).select('name employeeId assignedShop').lean()
   ]);
 
-  const timingData = buildTimingSheetData(attendances, week, allShops);
+  const timingData = buildTimingSheetData(attendances, week, allShops, allEmployees);
   return {
     title: 'Timing UK Sales Staff',
     week: timingData.week,

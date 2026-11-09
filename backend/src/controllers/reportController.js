@@ -989,12 +989,13 @@ exports.getTimingSheetReport = async (req, res) => {
       ]
     };
 
-    const [attendances, allShops] = await Promise.all([
+    const [attendances, allShops, allEmployees] = await Promise.all([
       Attendance.find(query).populate('employee').populate('shop').sort({ dateString: 1, timeReached: 1 }).lean(),
-      Shop.find({ isActive: true }).select('name code assignedStaff').lean()
+      Shop.find({ isActive: true }).select('name code assignedStaff').lean(),
+      Employee.find({ isActive: true }).select('name employeeId assignedShop').lean()
     ]);
 
-    const timingData = buildTimingSheetData(attendances, week, allShops);
+    const timingData = buildTimingSheetData(attendances, week, allShops, allEmployees);
 
     return res.json({
       success: true,
@@ -1030,12 +1031,13 @@ exports.exportTimingSheetExcel = async (req, res) => {
       ]
     };
 
-    const [attendances, allShops] = await Promise.all([
+    const [attendances, allShops, allEmployees] = await Promise.all([
       Attendance.find(query).populate('employee').populate('shop').sort({ dateString: 1, timeReached: 1 }).lean(),
-      Shop.find({ isActive: true }).select('name code assignedStaff').lean()
+      Shop.find({ isActive: true }).select('name code assignedStaff').lean(),
+      Employee.find({ isActive: true }).select('name employeeId assignedShop').lean()
     ]);
 
-    const timingData = buildTimingSheetData(attendances, week, allShops);
+    const timingData = buildTimingSheetData(attendances, week, allShops, allEmployees);
     const workbook = await buildTimingSheetExcel(timingData, targetWeekLabel);
 
     await logAction({
@@ -1073,12 +1075,13 @@ exports.exportTimingSheetPDF = async (req, res) => {
       ]
     };
 
-    const [attendances, allShops] = await Promise.all([
+    const [attendances, allShops, allEmployees] = await Promise.all([
       Attendance.find(query).populate('employee').populate('shop').sort({ dateString: 1, timeReached: 1 }).lean(),
-      Shop.find({ isActive: true }).select('name code assignedStaff').lean()
+      Shop.find({ isActive: true }).select('name code assignedStaff').lean(),
+      Employee.find({ isActive: true }).select('name employeeId assignedShop').lean()
     ]);
 
-    const timingData = buildTimingSheetData(attendances, week, allShops);
+    const timingData = buildTimingSheetData(attendances, week, allShops, allEmployees);
 
     await logAction({
       user: req.user,

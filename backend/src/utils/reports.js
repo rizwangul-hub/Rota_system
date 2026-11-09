@@ -3092,47 +3092,46 @@ function formatArrivalTime12H(timeStr) {
 
 function formatTimingCell(record) {
   if (!record) return { text: '', isAlert: false };
+
   if (record.status === 'Absent') {
     return { text: 'OFF', isAlert: true };
   }
 
-  const arrival = formatArrivalTime12H(record.timeReached);
   const remarks = (record.remarks || '').trim();
+  const lower = remarks.toLowerCase();
 
-  if (remarks) {
-    const lower = remarks.toLowerCase();
-    if (lower === 'off' || lower === 'day off' || lower === 'absent') {
-      return { text: 'OFF', isAlert: true };
-    }
-    if (lower.includes('deduction') || lower.includes('van') || lower.includes('late') || lower.includes('half')) {
-      if (arrival && !remarks.includes(arrival)) {
-        return { text: `${arrival} (${remarks})`, isAlert: true };
-      }
-      return { text: remarks, isAlert: true };
-    }
-    if (arrival) {
-      return { text: `${arrival} (${remarks})`, isAlert: true };
-    }
+  if (lower === 'off' || lower === 'day off' || lower === 'absent') {
+    return { text: 'OFF', isAlert: true };
+  }
+
+  // Arrival time formatted as 12-hour AM/PM with seconds (e.g. 11:00:00 AM)
+  const arrival = formatArrivalTime12H(record.timeReached);
+
+  // Special non-deduction remarks (like Boss van)
+  if (lower.includes('van')) {
     return { text: remarks, isAlert: true };
   }
 
-  if (Number(record.lateDeduction) > 0) {
-    const dedText = `£${Number(record.lateDeduction).toFixed(2)} ded`;
-    return { text: arrival ? `${arrival} (${dedText})` : dedText, isAlert: true };
-  }
-
-  if (record.status === 'Late' && Number(record.lateMinutes) > 15) {
-    const lateText = `${record.lateMinutes}m late`;
-    return { text: arrival ? `${arrival} (${lateText})` : lateText, isAlert: true };
-  }
+  // Late check: marked Late or lateMinutes > 0
+  const isLate = record.status === 'Late' || Number(record.lateMinutes) > 0;
 
   if (arrival) {
-    return { text: arrival, isAlert: false };
+    // Just show the arrival time! No deduction text with it! If late, red font (isAlert: true)
+    return { text: arrival, isAlert: isLate };
   }
+
+  if (isLate) {
+    return { text: 'Late', isAlert: true };
+  }
+
+  if (record.status === 'Present') {
+    return { text: 'Present', isAlert: false };
+  }
+
   return { text: '', isAlert: false };
 }
 
-function buildTimingSheetData(attendances, week, allShops) {
+function buildTimingSheetData(attendances, week, allShops, allEmployees = []) {
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dates = [];
   const base = new Date(`${week.startDateString}T12:00:00.000Z`);
@@ -3166,10 +3165,15 @@ function buildTimingSheetData(attendances, week, allShops) {
 
   const getId = (v) => String(v?._id || v || '');
 
-  // Index attendances by shopId:employeeId:dateString
-  // Also index by shopName:employeeName:dateString for robust fallback
+  // Index attendances:
+  // 1. By shopId:employeeId:dateString (and shopName:employeeName:dateString)
+  // 2. Track Absent records by employeeId:dateString (and employeeName:dateString)
+  // 3. Track dates with recorded attendance across the company
   const attByKey = new Map();
+  const absentByWorker = new Map();
   const shopWorkersMap = new Map(); // shopId -> Map<employeeId, { employeeId, employeeName }>
+  const loggedDates = new Set();
+  const shiftsByWorkerDate = new Map(); // employeeId:dateString -> [shopIds]
 
   (attendances || []).forEach(att => {
     const sId = getId(att.shop);
@@ -3178,17 +3182,44 @@ function buildTimingSheetData(attendances, week, allShops) {
     const eName = String(att.employeeName || '').trim();
     const dStr = String(att.dateString || '').slice(0, 10);
 
+    if (dStr) loggedDates.add(dStr);
+
+    if (att.status === 'Absent' || sName.toLowerCase() === 'absent') {
+      if (eId && dStr) absentByWorker.set(`${eId}:${dStr}`, att);
+      if (eName && dStr) absentByWorker.set(`${eName.toLowerCase()}:${dStr}`, att);
+      return;
+    }
+
     if (sId && eId && dStr) {
       attByKey.set(`${sId}:${eId}:${dStr}`, att);
+      const wkKey = `${eId}:${dStr}`;
+      if (!shiftsByWorkerDate.has(wkKey)) shiftsByWorkerDate.set(wkKey, []);
+      shiftsByWorkerDate.get(wkKey).push(sId);
     }
     if (sName && eName && dStr) {
       attByKey.set(`${sName.toLowerCase()}:${eName.toLowerCase()}:${dStr}`, att);
+      const wkNameKey = `${eName.toLowerCase()}:${dStr}`;
+      if (!shiftsByWorkerDate.has(wkNameKey)) shiftsByWorkerDate.set(wkNameKey, []);
+      shiftsByWorkerDate.get(wkNameKey).push(sName.toLowerCase());
     }
 
-    // Register worker under shop
-    if (sId) {
+    // Register worker under shop where they logged shifts
+    if (sId && eId) {
       if (!shopWorkersMap.has(sId)) shopWorkersMap.set(sId, new Map());
       shopWorkersMap.get(sId).set(eId, { employeeId: eId, employeeName: eName });
+    }
+  });
+
+  // Also register active employees under their assigned shops
+  (allEmployees || []).forEach(emp => {
+    const sId = getId(emp.assignedShop);
+    const eId = getId(emp._id);
+    const eName = emp.name;
+    if (sId && eId && eName) {
+      if (!shopWorkersMap.has(sId)) shopWorkersMap.set(sId, new Map());
+      if (!shopWorkersMap.get(sId).has(eId)) {
+        shopWorkersMap.get(sId).set(eId, { employeeId: eId, employeeName: eName });
+      }
     }
   });
 
@@ -3206,17 +3237,53 @@ function buildTimingSheetData(attendances, week, allShops) {
     for (const { employeeId, employeeName } of workerMap.values()) {
       const days = [];
       let hasAnyShift = false;
+
       for (const day of dates) {
+        // 1. Direct attendance at this shop
         const att = attByKey.get(`${sId}:${employeeId}:${day.dateString}`) ||
                     attByKey.get(`${sName.toLowerCase()}:${employeeName.toLowerCase()}:${day.dateString}`);
-        const cell = formatTimingCell(att);
-        days.push(cell);
-        if (cell.text) {
-          hasAnyShift = true;
-          totalLogs++;
-          if (cell.isAlert) totalAlerts++;
+
+        if (att) {
+          const cell = formatTimingCell(att);
+          days.push(cell);
+          if (cell.text) {
+            hasAnyShift = true;
+            totalLogs++;
+            if (cell.isAlert) totalAlerts++;
+          }
+          continue;
         }
+
+        // 2. Was worker marked Absent on this day?
+        const absAtt = absentByWorker.get(`${employeeId}:${day.dateString}`) ||
+                       absentByWorker.get(`${employeeName.toLowerCase()}:${day.dateString}`);
+        if (absAtt) {
+          days.push({ text: 'OFF', isAlert: true });
+          hasAnyShift = true;
+          totalAlerts++;
+          continue;
+        }
+
+        // 3. Did worker work at another shop on this day?
+        const otherShops = shiftsByWorkerDate.get(`${employeeId}:${day.dateString}`) ||
+                           shiftsByWorkerDate.get(`${employeeName.toLowerCase()}:${day.dateString}`) || [];
+        if (otherShops.length > 0) {
+          days.push({ text: '', isAlert: false });
+          continue;
+        }
+
+        // 4. If attendance was logged for that date across the system, but this worker had no shift: they are OFF!
+        if (loggedDates.has(day.dateString)) {
+          days.push({ text: 'OFF', isAlert: true });
+          hasAnyShift = true;
+          totalAlerts++;
+          continue;
+        }
+
+        // Future day with no attendance recorded yet
+        days.push({ text: '', isAlert: false });
       }
+
       if (hasAnyShift) {
         workers.push({
           employeeId,
