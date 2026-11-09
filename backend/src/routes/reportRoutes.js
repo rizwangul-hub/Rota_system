@@ -47,6 +47,26 @@ router.get(
   reportController.exportWeeklyAttendancePDF
 );
 
+// Timing UK Sales Staff - Weekly Arrival Times Report (Admin, Sarfraz, Usman, Adil, Distributor)
+router.get(
+  '/timing-sheet',
+  authenticate,
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'SALARY_DISTRIBUTOR'),
+  reportController.getTimingSheetReport
+);
+router.get(
+  '/timing-sheet/excel',
+  authenticate,
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'SALARY_DISTRIBUTOR'),
+  reportController.exportTimingSheetExcel
+);
+router.get(
+  '/timing-sheet/pdf',
+  authenticate,
+  authorize('ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'SALARY_DISTRIBUTOR'),
+  reportController.exportTimingSheetPDF
+);
+
 // Weekly Staff Grouped Report (Preserved for backwards compatibility)
 router.get(
   '/weekly-staff',

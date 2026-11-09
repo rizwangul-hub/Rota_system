@@ -3068,7 +3068,423 @@ async function buildSystemBackupExcel(backupData = {}) {
   return workbook;
 }
 
+/**
+ * ------------------------------------------------------------------
+ * TIMING UK SALES STAFF (WEEKLY ARRIVAL TIMES & DEDUCTIONS REPORT)
+ * ------------------------------------------------------------------
+ */
+
+function formatArrivalTime12H(timeStr) {
+  if (!timeStr) return '';
+  const clean = String(timeStr).trim();
+  if (/am|pm/i.test(clean)) return clean;
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return clean;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const seconds = match[3] || '00';
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const strHours = String(hours).padStart(2, '0');
+  return `${strHours}:${minutes}:${seconds} ${ampm}`;
+}
+
+function formatTimingCell(record) {
+  if (!record) return { text: '', isAlert: false };
+  if (record.status === 'Absent') {
+    return { text: 'OFF', isAlert: true };
+  }
+
+  const arrival = formatArrivalTime12H(record.timeReached);
+  const remarks = (record.remarks || '').trim();
+
+  if (remarks) {
+    const lower = remarks.toLowerCase();
+    if (lower === 'off' || lower === 'day off' || lower === 'absent') {
+      return { text: 'OFF', isAlert: true };
+    }
+    if (lower.includes('deduction') || lower.includes('van') || lower.includes('late') || lower.includes('half')) {
+      if (arrival && !remarks.includes(arrival)) {
+        return { text: `${arrival} (${remarks})`, isAlert: true };
+      }
+      return { text: remarks, isAlert: true };
+    }
+    if (arrival) {
+      return { text: `${arrival} (${remarks})`, isAlert: true };
+    }
+    return { text: remarks, isAlert: true };
+  }
+
+  if (Number(record.lateDeduction) > 0) {
+    const dedText = `£${Number(record.lateDeduction).toFixed(2)} ded`;
+    return { text: arrival ? `${arrival} (${dedText})` : dedText, isAlert: true };
+  }
+
+  if (record.status === 'Late' && Number(record.lateMinutes) > 15) {
+    const lateText = `${record.lateMinutes}m late`;
+    return { text: arrival ? `${arrival} (${lateText})` : lateText, isAlert: true };
+  }
+
+  if (arrival) {
+    return { text: arrival, isAlert: false };
+  }
+  return { text: '', isAlert: false };
+}
+
+function buildTimingSheetData(attendances, week, allShops) {
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dates = [];
+  const base = new Date(`${week.startDateString}T12:00:00.000Z`);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() + i);
+    const dateString = d.toISOString().slice(0, 10);
+    const dNum = String(d.getUTCDate()).padStart(2, '0');
+    const mNum = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yNum = d.getUTCFullYear();
+    const formattedDate = `${dNum}/${mNum}/${yNum}`;
+    dates.push({
+      dateString,
+      formattedDate,
+      dayName: DAY_NAMES[i],
+      dayIndex: i
+    });
+  }
+
+  const PREFERRED_SHOPS = ['camden', 'chelsea', 'station', 'edgware', 'southwark', 'leebridge', 'leabridge'];
+  const sortedShops = [...(allShops || [])].sort((a, b) => {
+    const aName = (a.name || '').toLowerCase();
+    const bName = (b.name || '').toLowerCase();
+    const aIdx = PREFERRED_SHOPS.findIndex(p => aName.includes(p));
+    const bIdx = PREFERRED_SHOPS.findIndex(p => bName.includes(p));
+    if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx;
+    if (aIdx >= 0) return -1;
+    if (bIdx >= 0) return 1;
+    return aName.localeCompare(bName);
+  });
+
+  const getId = (v) => String(v?._id || v || '');
+
+  // Index attendances by shopId:employeeId:dateString
+  // Also index by shopName:employeeName:dateString for robust fallback
+  const attByKey = new Map();
+  const shopWorkersMap = new Map(); // shopId -> Map<employeeId, { employeeId, employeeName }>
+
+  (attendances || []).forEach(att => {
+    const sId = getId(att.shop);
+    const sName = String(att.shopName || '').trim();
+    const eId = getId(att.employee);
+    const eName = String(att.employeeName || '').trim();
+    const dStr = String(att.dateString || '').slice(0, 10);
+
+    if (sId && eId && dStr) {
+      attByKey.set(`${sId}:${eId}:${dStr}`, att);
+    }
+    if (sName && eName && dStr) {
+      attByKey.set(`${sName.toLowerCase()}:${eName.toLowerCase()}:${dStr}`, att);
+    }
+
+    // Register worker under shop
+    if (sId) {
+      if (!shopWorkersMap.has(sId)) shopWorkersMap.set(sId, new Map());
+      shopWorkersMap.get(sId).set(eId, { employeeId: eId, employeeName: eName });
+    }
+  });
+
+  const shopsData = [];
+  let totalWorkers = 0;
+  let totalLogs = 0;
+  let totalAlerts = 0;
+
+  for (const shop of sortedShops) {
+    const sId = getId(shop._id);
+    const sName = shop.name || 'Shop';
+    const workerMap = shopWorkersMap.get(sId) || new Map();
+
+    const workers = [];
+    for (const { employeeId, employeeName } of workerMap.values()) {
+      const days = [];
+      let hasAnyShift = false;
+      for (const day of dates) {
+        const att = attByKey.get(`${sId}:${employeeId}:${day.dateString}`) ||
+                    attByKey.get(`${sName.toLowerCase()}:${employeeName.toLowerCase()}:${day.dateString}`);
+        const cell = formatTimingCell(att);
+        days.push(cell);
+        if (cell.text) {
+          hasAnyShift = true;
+          totalLogs++;
+          if (cell.isAlert) totalAlerts++;
+        }
+      }
+      if (hasAnyShift) {
+        workers.push({
+          employeeId,
+          employeeName,
+          days
+        });
+      }
+    }
+
+    // Sort workers alphabetically
+    workers.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+    if (workers.length > 0) {
+      totalWorkers += workers.length;
+      shopsData.push({
+        shopId: sId,
+        shopName: sName,
+        workers
+      });
+    }
+  }
+
+  return {
+    week,
+    dates,
+    shopsData,
+    summary: {
+      totalShops: shopsData.length,
+      totalWorkers,
+      totalLogs,
+      totalAlerts
+    }
+  };
+}
+
+async function buildTimingSheetExcel(timingData, weekLabel) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Timing UK Sales Staff', {
+    views: [{ showGridLines: true }]
+  });
+
+  sheet.columns = [
+    { width: 20 }, // A: Shop / Worker
+    { width: 17 }, // B: Sunday
+    { width: 17 }, // C: Monday
+    { width: 17 }, // D: Tuesday
+    { width: 17 }, // E: Wednesday
+    { width: 17 }, // F: Thursday
+    { width: 17 }, // G: Friday
+    { width: 17 }  // H: Saturday
+  ];
+
+  const thinBorder = {
+    top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+  };
+
+  const mediumBorder = {
+    top: { style: 'medium', color: { argb: 'FF000000' } },
+    left: { style: 'medium', color: { argb: 'FF000000' } },
+    bottom: { style: 'medium', color: { argb: 'FF000000' } },
+    right: { style: 'medium', color: { argb: 'FF000000' } }
+  };
+
+  // Row 1: Title
+  sheet.mergeCells('A1:H1');
+  const r1 = sheet.getCell('A1');
+  r1.value = 'Timing UK Sales Staff';
+  r1.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FF0F172A' } };
+  r1.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 28;
+
+  // Row 2: Subtitle Date Range
+  sheet.mergeCells('A2:H2');
+  const r2 = sheet.getCell('A2');
+  const weekRangeText = timingData.week?.formattedStartDate && timingData.week?.formattedEndDate
+    ? `${timingData.week.formattedStartDate.replace(/\//g, '-')}  to  ${timingData.week.formattedEndDate.replace(/\//g, '-')}`
+    : weekLabel;
+  r2.value = weekRangeText;
+  r2.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF1E293B' } };
+  r2.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(2).height = 22;
+
+  // Row 3 & 4: Table Headers
+  sheet.mergeCells('A3:A4');
+  const shopH = sheet.getCell('A3');
+  shopH.value = 'Shop';
+  shopH.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+  shopH.alignment = { horizontal: 'center', vertical: 'middle' };
+  shopH.border = thinBorder;
+  sheet.getCell('A4').border = thinBorder;
+
+  timingData.dates.forEach((d, idx) => {
+    const colLetter = String.fromCharCode(66 + idx);
+    const dateCell = sheet.getCell(`${colLetter}3`);
+    dateCell.value = d.formattedDate;
+    dateCell.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF1E293B' } };
+    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    dateCell.border = thinBorder;
+
+    const dayCell = sheet.getCell(`${colLetter}4`);
+    dayCell.value = d.dayName;
+    dayCell.font = { name: 'Arial', size: 9.5, bold: true, color: { argb: 'FF0F172A' } };
+    dayCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    dayCell.border = thinBorder;
+  });
+  sheet.getRow(3).height = 20;
+  sheet.getRow(4).height = 20;
+
+  let currentRow = 5;
+
+  for (const shop of (timingData.shopsData || [])) {
+    // Shop Banner Row (Bright Yellow)
+    sheet.mergeCells(`A${currentRow}:H${currentRow}`);
+    const bannerCell = sheet.getCell(`A${currentRow}`);
+    bannerCell.value = shop.shopName;
+    bannerCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF000000' } };
+    bannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Pure Yellow
+    bannerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    for (let c = 1; c <= 8; c++) {
+      sheet.getRow(currentRow).getCell(c).border = thinBorder;
+    }
+    sheet.getRow(currentRow).height = 24;
+    currentRow++;
+
+    // Worker Rows
+    for (const worker of (shop.workers || [])) {
+      const row = sheet.getRow(currentRow);
+      row.height = 21;
+
+      // Col A: Worker Name (Bold Italic)
+      const nameCell = row.getCell(1);
+      nameCell.value = worker.employeeName;
+      nameCell.font = { name: 'Arial', size: 10, bold: true, italic: true, color: { argb: 'FF000000' } };
+      nameCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+      nameCell.border = thinBorder;
+
+      // Col B..H: Days
+      worker.days.forEach((dayCellData, dIdx) => {
+        const c = row.getCell(2 + dIdx);
+        c.value = dayCellData.text || '';
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+        c.border = thinBorder;
+
+        if (dayCellData.isAlert) {
+          c.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FFDC2626' } }; // Bold Red
+        } else {
+          c.font = { name: 'Arial', size: 9, bold: false, color: { argb: 'FF000000' } }; // Black
+        }
+      });
+
+      currentRow++;
+    }
+  }
+
+  return workbook;
+}
+
+async function buildTimingSheetPDF(res, timingData, weekLabel, generatedBy = 'Admin') {
+  const PAGE_W = 841.89; // A4 Landscape
+  const PAGE_H = 595.28;
+  const MARGIN = 24;
+  const usableW = PAGE_W - MARGIN * 2;
+  const doc = new PDFDocument({ margin: MARGIN, size: 'A4', layout: 'landscape' });
+
+  const NAME_COL = 108;
+  const DAY_COL = (usableW - NAME_COL) / 7;
+
+  let y = MARGIN;
+
+  const drawPageHeader = () => {
+    // Title
+    doc.font('Helvetica-Bold').fontSize(14).fillColor('#0f172a')
+       .text('Timing UK Sales Staff', MARGIN, y, { width: usableW, align: 'center' });
+    y += 18;
+
+    const weekRangeText = timingData.week?.formattedStartDate && timingData.week?.formattedEndDate
+      ? `${timingData.week.formattedStartDate.replace(/\//g, '-')}  to  ${timingData.week.formattedEndDate.replace(/\//g, '-')}`
+      : weekLabel;
+    doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#1e293b')
+       .text(weekRangeText, MARGIN, y, { width: usableW, align: 'center' });
+    y += 16;
+
+    // Table Header Row 1: Shop & Dates
+    const H1 = 15;
+    doc.rect(MARGIN, y, NAME_COL, H1 * 2).strokeColor('#94a3b8').lineWidth(0.6).stroke();
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a')
+       .text('Shop', MARGIN + 2, y + (H1 * 2 - 8) / 2, { width: NAME_COL - 4, align: 'center' });
+
+    for (let i = 0; i < 7; i++) {
+      const x = MARGIN + NAME_COL + i * DAY_COL;
+      doc.rect(x, y, DAY_COL, H1).fillColor('#f8fafc').fillAndStroke('#f8fafc', '#94a3b8');
+      doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#1e293b')
+         .text(timingData.dates[i].formattedDate, x + 1, y + 4, { width: DAY_COL - 2, align: 'center', lineBreak: false });
+    }
+    y += H1;
+
+    // Table Header Row 2: Day of Week
+    for (let i = 0; i < 7; i++) {
+      const x = MARGIN + NAME_COL + i * DAY_COL;
+      doc.rect(x, y, DAY_COL, H1).fillColor('#f1f5f9').fillAndStroke('#f1f5f9', '#94a3b8');
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a')
+         .text(timingData.dates[i].dayName, x + 1, y + 4, { width: DAY_COL - 2, align: 'center', lineBreak: false });
+    }
+    y += H1;
+  };
+
+  drawPageHeader();
+
+  const BANNER_H = 17;
+  const ROW_H = 15;
+
+  for (const shop of (timingData.shopsData || [])) {
+    const shopBlockH = BANNER_H + (shop.workers?.length || 0) * ROW_H;
+    if (y + shopBlockH > PAGE_H - MARGIN - 20) {
+      doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+      y = MARGIN;
+      drawPageHeader();
+    }
+
+    // Yellow Shop Banner
+    doc.rect(MARGIN, y, usableW, BANNER_H).fillColor('#ffff00').fillAndStroke('#ffff00', '#94a3b8');
+    doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#000000')
+       .text(shop.shopName, MARGIN + 4, y + 4, { width: usableW - 8, align: 'center', lineBreak: false });
+    y += BANNER_H;
+
+    // Workers
+    for (const worker of (shop.workers || [])) {
+      if (y + ROW_H > PAGE_H - MARGIN - 20) {
+        doc.addPage({ size: 'A4', layout: 'landscape', margin: MARGIN });
+        y = MARGIN;
+        drawPageHeader();
+      }
+
+      // Name Cell
+      doc.rect(MARGIN, y, NAME_COL, ROW_H).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+      doc.font('Helvetica-BoldOblique').fontSize(7.5).fillColor('#000000')
+         .text(worker.employeeName, MARGIN + 6, y + 4, { width: NAME_COL - 10, align: 'left', lineBreak: false });
+
+      // Days
+      for (let i = 0; i < 7; i++) {
+        const x = MARGIN + NAME_COL + i * DAY_COL;
+        doc.rect(x, y, DAY_COL, ROW_H).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+
+        const cell = worker.days[i];
+        if (cell.text) {
+          if (cell.isAlert) {
+            doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#dc2626')
+               .text(cell.text, x + 1, y + 4.5, { width: DAY_COL - 2, align: 'center', lineBreak: false });
+          } else {
+            doc.font('Helvetica').fontSize(6.5).fillColor('#000000')
+               .text(cell.text, x + 1, y + 4.5, { width: DAY_COL - 2, align: 'center', lineBreak: false });
+          }
+        }
+      }
+      y += ROW_H;
+    }
+  }
+
+  const safeFilename = `Timing_UK_Sales_Staff_${(weekLabel || 'Report').replace(/[\/–\s]/g, '_')}.pdf`;
+  return await sendPdfOrBuffer(res, doc, safeFilename);
+}
+
 module.exports = {
+  buildTimingSheetData,
+  buildTimingSheetExcel,
+  buildTimingSheetPDF,
   generateWhatsAppAttendanceText,
   formatTime12Hour,
   buildDailyAttendanceExcel,

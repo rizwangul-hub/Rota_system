@@ -85,6 +85,7 @@ export default function ReportsPage() {
   // Report Specific Data States
   const [dailyData, setDailyData] = useState(null);
   const [weeklyAttendanceData, setWeeklyAttendanceData] = useState(null);
+  const [timingSheetData, setTimingSheetData] = useState(null);
   const [weeklySalaryData, setWeeklySalaryData] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
   const [yearlyData, setYearlyData] = useState(null);
@@ -139,6 +140,11 @@ export default function ReportsPage() {
           params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: cleanShop, employeeId: cleanEmp }
         });
         if (res.data.success) setWeeklyAttendanceData(res.data);
+      } else if (activeTab === 'timing_sheet') {
+        const res = await axios.get(`${API_BASE_URL}/reports/timing-sheet`, {
+          params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined }
+        });
+        if (res.data.success) setTimingSheetData(res.data);
       } else if (activeTab === 'weekly_salary' && isAdmin) {
         const res = await axios.get(`${API_BASE_URL}/reports/weekly-salary`, {
           params: { weekLabel: selectedWeek || undefined, date: selectedDate || undefined, shopId: cleanShop, employeeId: cleanEmp, status: selectedStatus || undefined }
@@ -320,6 +326,14 @@ export default function ReportsPage() {
           onClick={() => handleTabChange('weekly_attendance')}
         >
           <Calendar size={14} /> Weekly Attendance
+        </button>
+        <button
+          className={`btn ${activeTab === 'timing_sheet' ? 'btn-primary' : 'btn-outline'} btn-sm`}
+          onClick={() => handleTabChange('timing_sheet')}
+          style={activeTab === 'timing_sheet' ? { background: '#ca8a04', borderColor: '#ca8a04', color: '#ffffff' } : { borderColor: '#ca8a04', color: '#854d0e', fontWeight: 600 }}
+          title="Timing UK Sales Staff (Weekly Worker Arrival Times & Deductions)"
+        >
+          <Clock size={14} color={activeTab === 'timing_sheet' ? '#ffffff' : '#ca8a04'} /> Timing UK Sales Staff
         </button>
         {isAdmin && (
           <button

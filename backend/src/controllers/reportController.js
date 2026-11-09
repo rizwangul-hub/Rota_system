@@ -16,6 +16,9 @@ const crypto = require('crypto');
 const archiver = require('archiver');
 const { EJSON } = require('bson');
 const {
+  buildTimingSheetData,
+  buildTimingSheetExcel,
+  buildTimingSheetPDF,
   generateWhatsAppAttendanceText,
   formatTime12Hour,
   buildDailyAttendanceExcel,
@@ -962,6 +965,134 @@ exports.exportWeeklyAttendancePDF = async (req, res) => {
     );
   } catch (error) {
     return sendServerError(res, error, 'Failed to export weekly attendance PDF.');
+  }
+};
+
+/**
+ * Timing UK Sales Staff (Weekly Arrival Times & Deductions) Report
+ */
+exports.getTimingSheetReport = async (req, res) => {
+  try {
+    const { weekLabel, date } = req.query;
+    let dateToUse = date;
+    if (weekLabel) {
+      const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+      if (firstPart) dateToUse = firstPart;
+    }
+    const week = getWeekRange(dateToUse || new Date());
+    const targetWeekLabel = weekLabel || week.weekLabel;
+
+    const query = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+
+    const [attendances, allShops] = await Promise.all([
+      Attendance.find(query).populate('employee').populate('shop').sort({ dateString: 1, timeReached: 1 }).lean(),
+      Shop.find({ isActive: true }).select('name code assignedStaff').lean()
+    ]);
+
+    const timingData = buildTimingSheetData(attendances, week, allShops);
+
+    return res.json({
+      success: true,
+      weekLabel: targetWeekLabel,
+      week,
+      dates: timingData.dates,
+      shopsData: timingData.shopsData,
+      summary: timingData.summary
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to generate timing sheet report.');
+  }
+};
+
+exports.exportTimingSheetExcel = async (req, res) => {
+  try {
+    const { weekLabel, date } = req.query;
+    let dateToUse = date;
+    if (weekLabel) {
+      const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+      if (firstPart) dateToUse = firstPart;
+    }
+    const week = getWeekRange(dateToUse || new Date());
+    const targetWeekLabel = weekLabel || week.weekLabel;
+
+    const query = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+
+    const [attendances, allShops] = await Promise.all([
+      Attendance.find(query).populate('employee').populate('shop').sort({ dateString: 1, timeReached: 1 }).lean(),
+      Shop.find({ isActive: true }).select('name code assignedStaff').lean()
+    ]);
+
+    const timingData = buildTimingSheetData(attendances, week, allShops);
+    const workbook = await buildTimingSheetExcel(timingData, targetWeekLabel);
+
+    await logAction({
+      user: req.user,
+      action: 'REPORT_EXPORTED_EXCEL',
+      recordType: 'TimingSheet',
+      details: `Exported Timing UK Sales Staff Excel for ${targetWeekLabel}`,
+      req
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Timing_UK_Sales_Staff_${targetWeekLabel.replace(/[\/–\s]/g, '_')}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to export timing sheet Excel.');
+  }
+};
+
+exports.exportTimingSheetPDF = async (req, res) => {
+  try {
+    const { weekLabel, date } = req.query;
+    let dateToUse = date;
+    if (weekLabel) {
+      const firstPart = weekLabel.split(/–|-|to/)[0].trim();
+      if (firstPart) dateToUse = firstPart;
+    }
+    const week = getWeekRange(dateToUse || new Date());
+    const targetWeekLabel = weekLabel || week.weekLabel;
+
+    const query = {
+      $or: [
+        { dateString: { $gte: week.startDateString, $lte: week.endDateString } },
+        { date: { $gte: week.startDate, $lte: week.endDate } }
+      ]
+    };
+
+    const [attendances, allShops] = await Promise.all([
+      Attendance.find(query).populate('employee').populate('shop').sort({ dateString: 1, timeReached: 1 }).lean(),
+      Shop.find({ isActive: true }).select('name code assignedStaff').lean()
+    ]);
+
+    const timingData = buildTimingSheetData(attendances, week, allShops);
+
+    await logAction({
+      user: req.user,
+      action: 'REPORT_EXPORTED_PDF',
+      recordType: 'TimingSheet',
+      details: `Exported Timing UK Sales Staff PDF for ${targetWeekLabel}`,
+      req
+    });
+
+    await buildTimingSheetPDF(
+      res,
+      timingData,
+      targetWeekLabel,
+      req.user?.name || 'Admin'
+    );
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to export timing sheet PDF.');
   }
 };
 
