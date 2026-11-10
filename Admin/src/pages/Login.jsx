@@ -18,11 +18,24 @@ import {
   Sparkles,
   Monitor
 } from 'lucide-react';
+import AuthLoadingScreen from '../components/AuthLoadingScreen';
 const logo = '/logo.jpg';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { user, loading: authLoading, login, retryAuth } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (user.role === 'ATTENDANCE_CHECKER' || user.role === 'ATTENDANCE_OPERATOR') {
+        navigate('/attendance-checker', { replace: true });
+      } else if (user.role === 'SALARY_DISTRIBUTOR') {
+        navigate('/distributor', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [user, authLoading, navigate]);
 
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() =>
@@ -118,6 +131,10 @@ export default function Login() {
     }
   };
 
+
+  if (authLoading) {
+    return <AuthLoadingScreen onRetry={retryAuth} />;
+  }
 
   return (
     <div style={{

@@ -22,17 +22,14 @@ import AuditPage from './pages/AuditPage';
 import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
 import AiRotaAssistantPage from './pages/AiRotaAssistantPage';
 import AiAssistantWidget from './components/AiAssistantWidget';
+import AuthLoadingScreen from './components/AuthLoadingScreen';
 
 function ProtectedLayout({ children, allowedRoles }) {
-  const { user, loading } = useAuth();
+  const { user, loading, retryAuth } = useAuth();
   const { sidebarCollapsed, mobileOpen, setMobileOpen, toggleSidebar, isSidebarHidden } = useSidebar();
 
   if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-        <div style={{ color: '#64748b', fontSize: '15px', fontWeight: 500 }}>Authenticating session...</div>
-      </div>
-    );
+    return <AuthLoadingScreen onRetry={retryAuth} />;
   }
 
   if (!user) {
@@ -84,8 +81,8 @@ function ProtectedLayout({ children, allowedRoles }) {
 }
 
 function RoleDefaultRedirect() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, loading, retryAuth } = useAuth();
+  if (loading) return <AuthLoadingScreen onRetry={retryAuth} />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'ATTENDANCE_CHECKER' || user.role === 'ATTENDANCE_OPERATOR') return <Navigate to="/attendance-checker" replace />;
   if (user.role === 'SALARY_DISTRIBUTOR') return <Navigate to="/distributor" replace />;

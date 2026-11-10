@@ -78,8 +78,17 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const retryAuth = () => {
+    setLoading(true);
+    if (token) {
+      fetchUserProfile();
+    } else {
+      setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, retryAuth }}>
       {children}
     </AuthContext.Provider>
   );
