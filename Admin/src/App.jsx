@@ -4,6 +4,7 @@ import { PanelLeftOpen } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider, useSidebar } from './context/SidebarContext';
 import { SystemUpdateProvider } from './context/SystemUpdateContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 
@@ -91,137 +92,139 @@ function RoleDefaultRedirect() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SystemUpdateProvider>
-        <SidebarProvider>
-          <BrowserRouter>
-          <Routes>
-          <Route path="/login" element={<Login />} />
+    <ThemeProvider>
+      <AuthProvider>
+        <SystemUpdateProvider>
+          <SidebarProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<Login />} />
 
-          {/* Admin Dashboard */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <AdminDashboard />
-              </ProtectedLayout>
-            }
-          />
+                {/* Admin Dashboard */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <AdminDashboard />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Weekly Rota Planner */}
-          <Route
-            path="/rota-planner"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR']}>
-                <WeeklyRotaPlanner />
-              </ProtectedLayout>
-            }
-          />
+                {/* Weekly Rota Planner */}
+                <Route
+                  path="/rota-planner"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR']}>
+                      <WeeklyRotaPlanner />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Attendance Checker & Review */}
-          <Route
-            path="/attendance-checker"
-            element={
-              <ProtectedLayout allowedRoles={['ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'ADMIN']}>
-                <SarfrazAttendance />
-              </ProtectedLayout>
-            }
-          />
+                {/* Attendance Checker & Review */}
+                <Route
+                  path="/attendance-checker"
+                  element={
+                    <ProtectedLayout allowedRoles={['ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'ADMIN']}>
+                      <SarfrazAttendance />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Weekly Salaries (Admin) */}
-          <Route
-            path="/salaries"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <WeeklySalaryPage />
-              </ProtectedLayout>
-            }
-          />
+                {/* Weekly Salaries (Admin) */}
+                <Route
+                  path="/salaries"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <WeeklySalaryPage />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Salary Distributor (Distributor & Admin) */}
-          <Route
-            path="/distributor"
-            element={
-              <ProtectedLayout allowedRoles={['SALARY_DISTRIBUTOR', 'ADMIN']}>
-                <SalaryDistributor />
-              </ProtectedLayout>
-            }
-          />
+                {/* Salary Distributor (Distributor & Admin) */}
+                <Route
+                  path="/distributor"
+                  element={
+                    <ProtectedLayout allowedRoles={['SALARY_DISTRIBUTOR', 'ADMIN']}>
+                      <SalaryDistributor />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Employee Directory & Profile (Admin) */}
-          <Route
-            path="/employees"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <Employees />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/employees/:id"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <EmployeeDetail />
-              </ProtectedLayout>
-            }
-          />
+                {/* Employee Directory & Profile (Admin) */}
+                <Route
+                  path="/employees"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <Employees />
+                    </ProtectedLayout>
+                  }
+                />
+                <Route
+                  path="/employees/:id"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <EmployeeDetail />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Commission Details (Admin) */}
-          <Route
-            path="/bonuses"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <BonusPage />
-              </ProtectedLayout>
-            }
-          />
+                {/* Commission Details (Admin) */}
+                <Route
+                  path="/bonuses"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <BonusPage />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* AI Workforce & Finance Assistant */}
-          <Route
-            path="/ai-assistant"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'SALARY_DISTRIBUTOR']}>
-                <AiRotaAssistantPage />
-              </ProtectedLayout>
-            }
-          />
+                {/* AI Workforce & Finance Assistant */}
+                <Route
+                  path="/ai-assistant"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'SALARY_DISTRIBUTOR']}>
+                      <AiRotaAssistantPage />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Reports & Exports (Admin, Sarfraz, Adeel, Usman) */}
-          <Route
-            path="/reports"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR']}>
-                <ReportsPage />
-              </ProtectedLayout>
-            }
-          />
+                {/* Reports & Exports (Admin, Sarfraz, Adeel, Usman) */}
+                <Route
+                  path="/reports"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN', 'ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR']}>
+                      <ReportsPage />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Shop Settings & Schedules (Admin) */}
-          <Route
-            path="/settings"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <SettingsPage />
-              </ProtectedLayout>
-            }
-          />
+                {/* Shop Settings & Schedules (Admin) */}
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <SettingsPage />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Audit Logs (Admin) */}
-          <Route
-            path="/audit"
-            element={
-              <ProtectedLayout allowedRoles={['ADMIN']}>
-                <AuditPage />
-              </ProtectedLayout>
-            }
-          />
+                {/* Audit Logs (Admin) */}
+                <Route
+                  path="/audit"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <AuditPage />
+                    </ProtectedLayout>
+                  }
+                />
 
-          {/* Default Route */}
-          <Route path="*" element={<RoleDefaultRedirect />} />
-        </Routes>
-      </BrowserRouter>
-      </SidebarProvider>
-      </SystemUpdateProvider>
-    </AuthProvider>
+                {/* Default Route */}
+                <Route path="*" element={<RoleDefaultRedirect />} />
+              </Routes>
+            </BrowserRouter>
+          </SidebarProvider>
+        </SystemUpdateProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

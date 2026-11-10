@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Menu, LogOut, UserCircle, ShieldAlert, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Menu, LogOut, UserCircle, ShieldAlert, PanelLeftClose, PanelLeftOpen, Sun, Moon } from 'lucide-react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
+import { useTheme } from '../context/ThemeContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import UpdateNavbarBadge from './updates/UpdateNavbarBadge';
 
@@ -22,6 +23,7 @@ const ROUTE_TITLES = {
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { sidebarCollapsed, toggleSidebar, isSidebarHidden } = useSidebar();
+  const { theme, toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [complianceCounts, setComplianceCounts] = useState({ total: 0, expired: 0, urgent: 0 });
@@ -118,6 +120,42 @@ export default function Navbar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         {/* Smart System Update Available Badge */}
         <UpdateNavbarBadge />
+
+        {/* Dark / Light Mode Toggle */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="theme-mode-toggle-btn"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 11px',
+            borderRadius: '20px',
+            border: isDark ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+            background: isDark ? 'rgba(30, 41, 59, 0.95)' : '#ffffff',
+            color: isDark ? '#f8fafc' : '#334155',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.4)' : '0 1px 3px rgba(0, 0, 0, 0.05)'
+          }}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {isDark ? (
+            <>
+              <Sun size={15} color="#fbbf24" />
+              <span className="theme-toggle-label">Light</span>
+            </>
+          ) : (
+            <>
+              <Moon size={15} color="#6366f1" />
+              <span className="theme-toggle-label">Dark</span>
+            </>
+          )}
+        </button>
 
         {complianceCounts.total > 0 && (
           <Link
