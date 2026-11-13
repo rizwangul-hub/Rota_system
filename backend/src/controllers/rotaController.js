@@ -21,9 +21,14 @@ function formatTime12Hour(value) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(String(value).trim());
   if (!match) return value || '';
 
-  const hours = Number(match[1]);
+  let hours = Number(match[1]);
   const minutes = match[2];
   if (hours > 23 || Number(minutes) > 59) return value;
+
+  // Retail day shifts (shop open 9 AM - 7 PM): hours 1..7 are PM (13:00 - 19:59)
+  if (hours >= 1 && hours <= 7) {
+    hours += 12;
+  }
 
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;

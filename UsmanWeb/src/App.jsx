@@ -259,12 +259,25 @@ export default function App() {
           ? (workingAsg.shopId?._id || workingAsg.shopId)
           : (workingAsg.shopId?._id || workingAsg.shopId || workingAsg.homeShopId);
 
+        let asgStart = parseTimeInput(workingAsg.startTime, 'start') || workingAsg.startTime;
+        let asgEnd = parseTimeInput(workingAsg.endTime, 'end') || workingAsg.endTime;
+
+        if (workingAsg.note) {
+          const noteMatch = workingAsg.note.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+          if (noteMatch) {
+            const parsedStart = parseTimeInput(`${noteMatch[1]}:${noteMatch[2] || '00'} ${noteMatch[3] || ''}`, 'start');
+            const parsedEnd = parseTimeInput(`${noteMatch[4]}:${noteMatch[5] || '00'} ${noteMatch[6] || ''}`, 'end');
+            if (parsedStart) asgStart = parsedStart;
+            if (parsedEnd) asgEnd = parsedEnd;
+          }
+        }
+
         rotaResolution[empId] = {
           isWorking: true,
           isOff: false,
           shopId: workingShopId ? workingShopId.toString() : undefined,
-          startTime: workingAsg.startTime,
-          endTime: workingAsg.endTime,
+          startTime: asgStart,
+          endTime: asgEnd,
           assignment: workingAsg
         };
       } else if (asgs.length > 0 && asgs.every((a) => OFF_STATUSES.includes(String(a.status || '').toUpperCase()))) {
@@ -296,10 +309,10 @@ export default function App() {
           employeeName: existing.employeeName || emp.name,
           empCode: existing.employeeId || emp.employeeId,
           shopId: existing.shop?._id || existing.shop?.toString(),
-          shiftStart: isAbsent ? '' : existing.shiftStart || defaultShiftStart,
-          shiftEnd: isAbsent ? '' : existing.shiftEnd || defaultShiftEnd,
-          timeReached: isAbsent ? '' : existing.timeReached || existing.shiftStart || defaultShiftStart,
-          workerEndTime: isAbsent ? '' : existing.workerEndTime || existing.shiftEnd || defaultShiftEnd,
+          shiftStart: isAbsent ? '' : (parseTimeInput(existing.shiftStart, 'start') || defaultShiftStart),
+          shiftEnd: isAbsent ? '' : (parseTimeInput(existing.shiftEnd, 'end') || defaultShiftEnd),
+          timeReached: isAbsent ? '' : (parseTimeInput(existing.timeReached, 'start') || parseTimeInput(existing.shiftStart, 'start') || defaultShiftStart),
+          workerEndTime: isAbsent ? '' : (parseTimeInput(existing.workerEndTime, 'end') || parseTimeInput(existing.shiftEnd, 'end') || defaultShiftEnd),
           status: existing.status || 'Present',
           remarks: existing.remarks || '',
           recordedShopName: existing.shopName || '',
@@ -358,10 +371,10 @@ export default function App() {
           employeeName: emp.name,
           empCode: emp.employeeId,
           shopId: autoShopId,
-          shiftStart: existing?.shiftStart || start,
-          shiftEnd: existing?.shiftEnd || end,
-          timeReached: existing?.timeReached || start,
-          workerEndTime: existing?.workerEndTime || end,
+          shiftStart: parseTimeInput(existing?.shiftStart, 'start') || start,
+          shiftEnd: parseTimeInput(existing?.shiftEnd, 'end') || end,
+          timeReached: parseTimeInput(existing?.timeReached, 'start') || start,
+          workerEndTime: parseTimeInput(existing?.workerEndTime, 'end') || end,
           status: currentStatus,
           remarks: existing?.remarks || '',
           recordedShopName: existing?.shopName || '',
@@ -380,10 +393,10 @@ export default function App() {
           employeeName: existing.employeeName || emp.name,
           empCode: existing.employeeId || emp.employeeId,
           shopId: existing.shop?._id || existing.shop?.toString(),
-          shiftStart: isAbsent ? '' : existing.shiftStart || defaultShiftStart,
-          shiftEnd: isAbsent ? '' : existing.shiftEnd || defaultShiftEnd,
-          timeReached: isAbsent ? '' : existing.timeReached || existing.shiftStart || defaultShiftStart,
-          workerEndTime: isAbsent ? '' : existing.workerEndTime || existing.shiftEnd || defaultShiftEnd,
+          shiftStart: isAbsent ? '' : (parseTimeInput(existing.shiftStart, 'start') || defaultShiftStart),
+          shiftEnd: isAbsent ? '' : (parseTimeInput(existing.shiftEnd, 'end') || defaultShiftEnd),
+          timeReached: isAbsent ? '' : (parseTimeInput(existing.timeReached, 'start') || parseTimeInput(existing.shiftStart, 'start') || defaultShiftStart),
+          workerEndTime: isAbsent ? '' : (parseTimeInput(existing.workerEndTime, 'end') || parseTimeInput(existing.shiftEnd, 'end') || defaultShiftEnd),
           status: existing.status || 'Present',
           remarks: existing.remarks || '',
           recordedShopName: existing.shopName || '',
@@ -575,7 +588,13 @@ export default function App() {
         fromWeeklyRota: false
       };
     } else {
-      updated[index] = { ...updated[index], [field]: value };
+      let finalVal = value;
+      if (['shiftStart', 'timeReached'].includes(field)) {
+        finalVal = parseTimeInput(value, 'start') || value;
+      } else if (['shiftEnd', 'workerEndTime'].includes(field)) {
+        finalVal = parseTimeInput(value, 'end') || value;
+      }
+      updated[index] = { ...updated[index], [field]: finalVal };
     }
     setWorkerRows(updated);
   };

@@ -106,10 +106,10 @@ exports.saveAttendance = async (req, res) => {
       employeeId: employee.employeeId,
       shop: shop ? shop._id : null,
       shopName: shop ? shop.name : 'Absent',
-      shiftStart: start,
-      shiftEnd: calcResult.shiftEnd || end,
-      timeReached: reached,
-      workerEndTime: calcResult.workerEndTime || left,
+      shiftStart: isAbsent ? '' : (calcResult.shiftStart || start),
+      shiftEnd: isAbsent ? '' : (calcResult.shiftEnd || end),
+      timeReached: isAbsent ? '' : (calcResult.timeReached || reached),
+      workerEndTime: isAbsent ? '' : (calcResult.workerEndTime || left),
       scheduledHours: isAbsent ? 0 : calcResult.scheduledHours,
       actualHours: calcResult.actualHours,
       lateMinutes: calcResult.lateMinutes,
@@ -253,10 +253,10 @@ exports.saveAttendanceBatch = async (req, res) => {
         employeeId: employee.employeeId,
         shop: shop ? shop._id : null,
         shopName: shop ? shop.name : 'Absent',
-        shiftStart: start,
-        shiftEnd: calcResult.shiftEnd || end,
-        timeReached: reached,
-        workerEndTime: calcResult.workerEndTime || left,
+        shiftStart: isAbsent ? '' : (calcResult.shiftStart || start),
+        shiftEnd: isAbsent ? '' : (calcResult.shiftEnd || end),
+        timeReached: isAbsent ? '' : (calcResult.timeReached || reached),
+        workerEndTime: isAbsent ? '' : (calcResult.workerEndTime || left),
         scheduledHours: isAbsent ? 0 : calcResult.scheduledHours,
         actualHours: calcResult.actualHours,
         lateMinutes: calcResult.lateMinutes,
@@ -501,10 +501,10 @@ exports.updateAttendanceRecord = async (req, res) => {
     });
 
     record.dailyWage = dailyWage;
-    record.shiftStart = finalShiftStart;
-    record.shiftEnd = calcResult.shiftEnd || finalShiftEnd;
-    record.timeReached = finalTimeReached;
-    record.workerEndTime = calcResult.workerEndTime || finalWorkerEndTime;
+    record.shiftStart = isAbsent ? '' : (calcResult.shiftStart || finalShiftStart);
+    record.shiftEnd = isAbsent ? '' : (calcResult.shiftEnd || finalShiftEnd);
+    record.timeReached = isAbsent ? '' : (calcResult.timeReached || finalTimeReached);
+    record.workerEndTime = isAbsent ? '' : (calcResult.workerEndTime || finalWorkerEndTime);
     record.scheduledHours = isAbsent ? 0 : calcResult.scheduledHours;
     record.actualHours = calcResult.actualHours;
     record.lateMinutes = calcResult.lateMinutes;

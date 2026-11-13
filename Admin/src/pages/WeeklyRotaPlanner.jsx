@@ -797,19 +797,53 @@ export default function WeeklyRotaPlanner() {
     setActiveCell(null);
   };
 
+  const extractTimesFromNote = (note) => {
+    if (!note || typeof note !== 'string') return null;
+    const match = note.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (!match) return null;
+
+    let startH = parseInt(match[1], 10);
+    const startM = match[2] || '00';
+    let startP = (match[3] || '').toUpperCase();
+
+    let endH = parseInt(match[4], 10);
+    const endM = match[5] || '00';
+    let endP = (match[6] || '').toUpperCase();
+
+    if (!startP) {
+      if (startH >= 8 && startH <= 11) startP = 'AM';
+      else if (startH === 12 || (startH >= 1 && startH <= 7)) startP = 'PM';
+    }
+    if (startH >= 1 && startH <= 7) startP = 'PM';
+
+    if (!endP) {
+      if (endH >= 1 && endH <= 11) endP = 'PM';
+      else if (endH === 12) endP = 'PM';
+    }
+    if (endH >= 1 && endH <= 11) endP = 'PM';
+
+    const s24 = (startH % 12) + (startP === 'PM' ? 12 : 0);
+    const e24 = (endH % 12) + (endP === 'PM' ? 12 : 0);
+    return {
+      startTime: `${String(s24).padStart(2, '0')}:${startM}`,
+      endTime: `${String(e24).padStart(2, '0')}:${endM}`
+    };
+  };
+
   const updateCellStatus = (status, extra = {}) => {
     if (!activeCell) return;
     const { shopId, employeeId, dateKey } = activeCell;
     const cellKey = `${shopId}:${employeeId}:${dateKey}`;
     const empObj = employees.find(e => String(e._id) === String(employeeId));
     const defTimes = getDefaultTimesForDateKey(dateKey, empObj?.name);
+    const noteTimes = extractTimesFromNote(extra.note);
     const nextCell = {
       status,
       targetShopId: extra.targetShopId || null,
       targetShopName: extra.targetShopName || '',
       note: extra.note || '',
-      startTime: extra.startTime || defTimes.startTime,
-      endTime: extra.endTime || defTimes.endTime
+      startTime: extra.startTime || noteTimes?.startTime || defTimes.startTime,
+      endTime: extra.endTime || noteTimes?.endTime || defTimes.endTime
     };
 
     if (status === 'OFF') {
@@ -2432,25 +2466,25 @@ export default function WeeklyRotaPlanner() {
               <div className="popover-presets-row">
                 <button
                   className="preset-pill-btn"
-                  onClick={() => updateCellStatus('CUSTOM', { note: '09:00 - 17:00' })}
+                  onClick={() => updateCellStatus('CUSTOM', { note: '09:00 - 17:00', startTime: '09:00', endTime: '17:00' })}
                 >
                   09:00 – 17:00
                 </button>
                 <button
                   className="preset-pill-btn"
-                  onClick={() => updateCellStatus('CUSTOM', { note: '10:00 - 19:00' })}
+                  onClick={() => updateCellStatus('CUSTOM', { note: '10:00 - 19:00', startTime: '10:00', endTime: '19:00' })}
                 >
                   10:00 – 19:00
                 </button>
                 <button
                   className="preset-pill-btn"
-                  onClick={() => updateCellStatus('CUSTOM', { note: 'Half Day' })}
+                  onClick={() => updateCellStatus('CUSTOM', { note: 'Half Day', startTime: '14:00', endTime: '19:00' })}
                 >
                   Half Day
                 </button>
                 <button
                   className="preset-pill-btn"
-                  onClick={() => updateCellStatus('CUSTOM', { note: 'Available (02:00 pm to 07:00 pm)' })}
+                  onClick={() => updateCellStatus('CUSTOM', { note: 'Available (02:00 pm to 07:00 pm)', startTime: '14:00', endTime: '19:00' })}
                 >
                   02:00 pm – 07:00 pm
                 </button>

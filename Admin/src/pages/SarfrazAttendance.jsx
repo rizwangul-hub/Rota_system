@@ -327,6 +327,21 @@ export default function SarfrazAttendance() {
     });
   };
 
+  const normalizeTimeTo24H = (timeStr, isEnd = false) => {
+    if (!timeStr || typeof timeStr !== 'string') return '';
+    const parts = timeStr.trim().split(':');
+    if (parts.length < 2) return timeStr;
+    let h = parseInt(parts[0], 10);
+    const m = parts[1];
+    if (isNaN(h)) return timeStr;
+    if (isEnd) {
+      if (h >= 1 && h <= 11) h += 12;
+    } else {
+      if (h >= 1 && h <= 7) h += 12;
+    }
+    return `${String(h).padStart(2, '0')}:${m}`;
+  };
+
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editModalRecord) return;
@@ -343,10 +358,10 @@ export default function SarfrazAttendance() {
       const resolvedShopId = rawShop && typeof rawShop === 'object' ? rawShop._id : rawShop;
 
       const payload = {
-        shiftStart: isAbsent ? '' : editModalRecord.shiftStart,
-        shiftEnd: isAbsent ? '' : editModalRecord.shiftEnd,
-        timeReached: isAbsent ? '' : editModalRecord.timeReached,
-        workerEndTime: isAbsent ? '' : editModalRecord.workerEndTime,
+        shiftStart: isAbsent ? '' : normalizeTimeTo24H(editModalRecord.shiftStart, false),
+        shiftEnd: isAbsent ? '' : normalizeTimeTo24H(editModalRecord.shiftEnd, true),
+        timeReached: isAbsent ? '' : normalizeTimeTo24H(editModalRecord.timeReached, false),
+        workerEndTime: isAbsent ? '' : normalizeTimeTo24H(editModalRecord.workerEndTime, true),
         status: editModalRecord.status,
         remarks: editModalRecord.remarks,
         shopId: isAbsent ? null : (resolvedShopId ? String(resolvedShopId) : null)

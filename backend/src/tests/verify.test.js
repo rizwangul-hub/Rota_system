@@ -243,4 +243,22 @@ assert.strictEqual(tAccidentalAM.lateDeduction, 0, '4 mins is within 15 mins gra
 assert.strictEqual(tAccidentalAM.attendancePay, 90, 'Full daily wage should be paid');
 console.log(' 10. Accidental AM end times auto-normalization test passed');
 
+// TEST 11: Half-day PM start & arrival times (e.g. 2:00 PM to 6:00 PM) auto-normalization
+const tHalfDayPM = calculateAttendanceRecord({
+  dailyWage: 80,
+  shiftStart: '02:00', // 2 PM entered as 02:00
+  shiftEnd: '06:00',   // 6 PM entered as 06:00
+  timeReached: '02:00', // 2 PM arrival entered as 02:00
+  workerEndTime: '06:00',
+  status: 'Half'
+});
+assert.strictEqual(tHalfDayPM.shiftStart, '14:00', '02:00 start must auto-normalize to 14:00 (2:00 PM)');
+assert.strictEqual(tHalfDayPM.timeReached, '14:00', '02:00 arrival must auto-normalize to 14:00 (2:00 PM)');
+assert.strictEqual(tHalfDayPM.shiftEnd, '18:00', '06:00 end must auto-normalize to 18:00 (6:00 PM)');
+assert.strictEqual(tHalfDayPM.workerEndTime, '18:00', '06:00 leave must auto-normalize to 18:00 (6:00 PM)');
+assert.strictEqual(tHalfDayPM.scheduledHours, 4.0, 'Scheduled hours for 2pm-6pm should be 4.0 hours');
+assert.strictEqual(tHalfDayPM.lateMinutes, 0, 'Arrived on time for 14:00 shift = 0 late minutes');
+assert.strictEqual(tHalfDayPM.attendancePay, 40, 'Half day daily wage of £80 is £40');
+console.log(' 11. Half-day PM start & arrival times auto-normalization test passed');
+
 console.log('\n ALL BUSINESS LOGIC AND ACCOUNTING TESTS PASSED SUCCESSFULLY!\n');

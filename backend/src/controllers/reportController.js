@@ -362,8 +362,11 @@ exports.exportDailyAttendancePDF = async (req, res) => {
     const formatTime12hPadded = (value) => {
       const match = /^(\d{1,2}):(\d{2})$/.exec(value || '');
       if (!match) return value || '--';
-      const hours = Number(match[1]);
+      let hours = Number(match[1]);
       if (hours > 23 || Number(match[2]) > 59) return value;
+      if (hours >= 1 && hours <= 7) {
+        hours += 12;
+      }
       const period = hours >= 12 ? 'PM' : 'AM';
       const h12 = hours % 12 || 12;
       return `${String(h12).padStart(2, '0')}:${match[2]} ${period}`;

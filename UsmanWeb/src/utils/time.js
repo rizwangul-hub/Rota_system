@@ -19,67 +19,91 @@ export function toDateString(dateObj) {
   return `${year}-${month}-${day}`;
 }
 
-// Format 24-hr "18:30" to 12-hr "6:30 PM"
+// Format 24-hr "18:30" or "14:00" to 12-hr "6:30 PM" or "2:00 PM"
 export function formatTime12Hour(value) {
   if (!value || typeof value !== 'string') return '';
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
   if (!match) return value;
 
-  const hours = Number(match[1]);
+  let hours = Number(match[1]);
   const minutes = Number(match[2]);
   if (hours > 23 || minutes > 59) return value;
+
+  // Auto-correct stored 1..7 (01:00 - 07:59) that represent afternoon/evening PM (13:00 - 19:59)
+  // In retail shop operations (9 AM - 7 PM), 1:00 to 7:00 is always PM
+  if (hours >= 1 && hours <= 7) {
+    hours += 12;
+  }
+
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   return `${displayHours}:${match[2]} ${period}`;
 }
 
 // Smart parse time input with auto-detection for AM / PM
+// Rule:
+// - Times between 8:00 and 11:59 -> automatically considered AM (e.g. 8:50 AM -> 08:50)
+// - Times between 12:00 and 7:59 (12, 1, 2, 3, 4, 5, 6, 7) -> automatically considered PM (e.g. 2:00 PM -> 14:00)
+// - For end times (leaving/shift end): hours 1..11 are PM
 export function parseTimeInput(value, fieldType) {
   if (!value) return null;
   const trimmed = value.trim();
+  if (!trimmed) return null;
 
-  // Handle 12-hour format with optional AM/PM (e.g. "9:30 AM", "6:00 PM", "6:00", "06:30")
-  const twelveHour = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(trimmed);
-  if (twelveHour) {
-    let hours = Number(twelveHour[1]);
-    const minutes = Number(twelveHour[2]);
-    if (hours < 1 || hours > 12 || minutes > 59) return null;
-    let period = (twelveHour[3] || '').toUpperCase();
+  // 1. Handle flexible formats: "2", "2pm", "2 pm", "2:00", "2:00 pm", "02:00", "14:00", "8:50", "9:00 am"
+  const timeRegex = /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i.exec(trimmed);
+  if (!timeRegex) return null;
 
-    // Auto-detect AM/PM for shift end / leave times
-    if (fieldType === 'end') {
-      // In retail day shifts, shift ends (e.g. 5:00, 6:00, 6:30, 7:00, 8:00) are afternoon/evening PM
-      if (hours >= 1 && hours <= 11) {
-        period = 'PM';
-      } else if (hours === 12) {
-        period = 'PM';
-      }
-    } else if (fieldType === 'start') {
-      // Shifts starting 7:00 - 11:59 are morning AM; 1:00 - 6:59 are afternoon PM
-      if (!period) {
-        period = (hours >= 7 && hours <= 11) ? 'AM' : 'PM';
-      }
-    } else if (!period) {
-      period = (hours >= 1 && hours <= 6) ? 'PM' : 'AM';
+  let hours = Number(timeRegex[1]);
+  const minutes = timeRegex[2] !== undefined ? Number(timeRegex[2]) : 0;
+  let period = (timeRegex[3] || '').toUpperCase();
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  // If already 24-hour (> 12), format directly
+  if (hours > 12) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
+  // Auto-detection rules:
+  // If fieldType is 'end' (shift end / worker departure)
+  if (fieldType === 'end') {
+    if (!period) {
+      period = (hours >= 1 && hours <= 11) || hours === 12 ? 'PM' : 'AM';
+    } else if (hours >= 1 && hours <= 11) {
+      // In retail, worker never leaves at 1 AM - 11 AM
+      period = 'PM';
     }
-
-    const hour24 = (hours % 12) + (period === 'PM' ? 12 : 0);
-    return `${String(hour24).padStart(2, '0')}:${twelveHour[2]}`;
+  } else {
+    // Arrival / shift start:
+    // User rule:
+    // - Between 12 and 7 (12, 1, 2, 3, 4, 5, 6, 7): consider in PM
+    // - Between 8 and 11:59: consider in AM
+    if (hours >= 1 && hours <= 7) {
+      // 1:00 to 7:00 is afternoon/evening PM (half-day shifts, afternoon arrivals)
+      period = 'PM';
+    } else if (hours >= 8 && hours <= 11) {
+      // 8:00 to 11:59 is morning AM (early shop opening 8:50, regular 9:00, etc.)
+      if (!period) {
+        period = 'AM';
+      }
+    } else if (hours === 12) {
+      // 12:00 is noon PM
+      if (!period) {
+        period = 'PM';
+      }
+    }
   }
 
-  // Handle bare 24-hour format
-  const twentyFourHour = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
-  if (!twentyFourHour) return null;
-  let hours = Number(twentyFourHour[1]);
-  const minutes = Number(twentyFourHour[2]);
-  if (hours > 23 || minutes > 59) return null;
-
-  // Auto-correct accidental AM for end times
-  if (fieldType === 'end' && hours >= 1 && hours <= 11) {
-    hours += 12;
+  // Calculate 24-hour representation
+  let hour24 = hours;
+  if (period === 'PM') {
+    hour24 = (hours % 12) + 12;
+  } else if (period === 'AM') {
+    hour24 = hours % 12;
   }
 
-  return `${String(hours).padStart(2, '0')}:${twentyFourHour[2]}`;
+  return `${String(hour24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 // Calculate Sunday weekStart (YYYY-MM-DD) for any given date

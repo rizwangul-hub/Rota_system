@@ -69,6 +69,28 @@ function calculateLateMinutes(shiftStart, timeReached) {
 }
 
 /**
+ * Automatically detects and normalizes arrival and shift start times:
+ * In retail shop operations (open 9 AM - 7 PM):
+ * Hours 8 to 11 (08:00 - 11:59) are morning AM
+ * Hours 12 (12:00 - 12:59) are afternoon PM
+ * Hours 1 to 7 (01:00 - 07:59) are afternoon PM (13:00 - 19:59)
+ */
+function autoNormalizeStartTime(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return timeStr;
+  const parts = timeStr.trim().split(':');
+  if (parts.length < 2) return timeStr;
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(minutes)) return timeStr;
+
+  // Accidental AM for half-day / afternoon shifts: 01:00 - 07:59 -> 13:00 - 19:59
+  if (hours >= 1 && hours <= 7) {
+    return `${String(hours + 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+  return timeStr;
+}
+
+/**
  * Automatically detects and corrects accidental AM inputs for shift ends (e.g. "06:00" instead of "18:00")
  */
 function autoNormalizeShiftTimes(shiftStart, shiftEnd) {
@@ -178,17 +200,19 @@ function calculateAttendanceRecord({
   status = 'Present',
   gracePeriodMinutes = 15,
 }) {
-  const normShiftEnd = autoNormalizeShiftTimes(shiftStart, shiftEnd);
-  const normWorkerEndTime = autoNormalizeWorkerEndTime(timeReached, workerEndTime, normShiftEnd);
+  const normShiftStart = autoNormalizeStartTime(shiftStart);
+  const normTimeReached = autoNormalizeStartTime(timeReached);
+  const normShiftEnd = autoNormalizeShiftTimes(normShiftStart, shiftEnd);
+  const normWorkerEndTime = autoNormalizeWorkerEndTime(normTimeReached, workerEndTime, normShiftEnd);
   const wage = (dailyWage !== undefined && dailyWage !== null && dailyWage !== '' && !isNaN(Number(dailyWage)))
     ? Math.max(0, Number(dailyWage))
     : 50;
-  const scheduledHours = calculateScheduledHours(shiftStart, normShiftEnd);
+  const scheduledHours = calculateScheduledHours(normShiftStart, normShiftEnd);
   const hourlyWage = (scheduledHours > 0 && wage > 0) ? Number((wage / scheduledHours).toFixed(4)) : 0;
 
   if (status === 'Absent' || wage === 0) {
-    const actualHours = (status === 'Absent') ? 0 : calculateWorkedHours(timeReached, normWorkerEndTime, scheduledHours, status);
-    const lateMinutes = (status === 'Absent') ? 0 : calculateLateMinutes(shiftStart, timeReached);
+    const actualHours = (status === 'Absent') ? 0 : calculateWorkedHours(normTimeReached, normWorkerEndTime, scheduledHours, status);
+    const lateMinutes = (status === 'Absent') ? 0 : calculateLateMinutes(normShiftStart, normTimeReached);
     const earlyLeaveMinutes = (status === 'Absent') ? 0 : calculateEarlyLeaveMinutes(normShiftEnd, normWorkerEndTime);
     let computedStatus = status;
     if (status !== 'Absent') {
@@ -206,13 +230,15 @@ function calculateAttendanceRecord({
       arrivalDeduction: 0,
       earlyLeaveDeduction: 0,
       attendancePay: 0,
+      shiftStart: normShiftStart,
       shiftEnd: normShiftEnd,
+      timeReached: normTimeReached,
       workerEndTime: normWorkerEndTime,
       status: computedStatus || 'Present'
     };
   }
 
-  const lateMinutes = calculateLateMinutes(shiftStart, timeReached);
+  const lateMinutes = calculateLateMinutes(normShiftStart, normTimeReached);
   const earlyLeaveMinutes = calculateEarlyLeaveMinutes(normShiftEnd, normWorkerEndTime);
 
   let computedStatus = status;
@@ -252,7 +278,7 @@ function calculateAttendanceRecord({
     finalLateDeduction = Number(Math.min(wage, totalDeduction).toFixed(2));
   }
 
-  const actualHours = calculateWorkedHours(timeReached, normWorkerEndTime, scheduledHours, computedStatus);
+  const actualHours = calculateWorkedHours(normTimeReached, normWorkerEndTime, scheduledHours, computedStatus);
 
   return {
     scheduledHours,
@@ -264,7 +290,9 @@ function calculateAttendanceRecord({
     arrivalDeduction,
     earlyLeaveDeduction,
     attendancePay,
+    shiftStart: normShiftStart,
     shiftEnd: normShiftEnd,
+    timeReached: normTimeReached,
     workerEndTime: normWorkerEndTime,
     status: computedStatus
   };
@@ -531,6 +559,7 @@ module.exports = {
   calculateWorkedHours,
   calculateLateMinutes,
   calculateEarlyLeaveMinutes,
+  autoNormalizeStartTime,
   autoNormalizeShiftTimes,
   autoNormalizeWorkerEndTime,
   calculateAttendanceRecord,
