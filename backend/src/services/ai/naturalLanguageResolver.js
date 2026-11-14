@@ -24,7 +24,9 @@ async function refreshCache() {
 function isGreetingOrHelp(text) {
   const t = (text || '').trim().toLowerCase();
   return /^(hi|hello|hey|salam|assalam|aoa|kese ho|kaise ho|help|madad|capabilities|what can you do|tum kya kar sakte ho|options|start|rizwan|rizwan ullah)\b/i.test(t) ||
-         /\b(developer|who\s*(developed|created|made)\s*you|what\s*is\s*your\s*developer|who\s*is\s*your\s*developer|kisne\s*banaya|creator)\b/i.test(t);
+         /(سلام|السلام\s*علیکم|ہیلو|ہیلپ|کیسے\s*ہو|مدد)/u.test(t) ||
+         /\b(developer|who\s*(developed|created|made)\s*you|what\s*is\s*your\s*developer|who\s*is\s*your\s*developer|kisne\s*banaya|creator)\b/i.test(t) ||
+         /(کس\s*نے\s*بنایا|ڈویلپر)/u.test(t);
 }
 
 function getGreetingResponse(query = '') {
@@ -204,12 +206,12 @@ function parseRelativeDate(text) {
 
 // Known shops in Pixx system
 const KNOWN_SHOPS = [
-  { name: 'Station', regex: /\b(station|stat)\b/i },
-  { name: 'Camden', regex: /\b(camden|camd)\b/i },
-  { name: 'Chelsea', regex: /\b(chelsea|chel)\b/i },
-  { name: 'Edgware', regex: /\b(edgware|edgw)\b/i },
-  { name: 'Southwark', regex: /\b(southwark|sout)\b/i },
-  { name: 'Leebridge', regex: /\b(leebridge|leabridge|labridge|lea\s*bridge)\b/i }
+  { name: 'Station', regex: /\b(station|stat)\b|اسٹیشن|سٹیشن/i },
+  { name: 'Camden', regex: /\b(camden|camd)\b|کیمڈن/i },
+  { name: 'Chelsea', regex: /\b(chelsea|chel)\b|چیلسی/i },
+  { name: 'Edgware', regex: /\b(edgware|edgw)\b|ایڈگویر|ایجویر/i },
+  { name: 'Southwark', regex: /\b(southwark|sout)\b|ساؤتھ|ساؤتھوارک|ساوتھ/i },
+  { name: 'Leebridge', regex: /\b(leebridge|leabridge|labridge|lea\s*bridge)\b|لی\s*برج|لیبرج/i }
 ];
 
 function extractShopName(text) {
@@ -221,7 +223,7 @@ function extractShopName(text) {
   return null;
 }
 
-// Common aliases and phonetic misspellings for Pixx employees
+// Common aliases and phonetic misspellings for Pixx employees (English, Roman Urdu, and Urdu script)
 const KNOWN_ALIASES = {
   // Arslan
   'arsaln': 'Arslan Bhai',
@@ -230,69 +232,95 @@ const KNOWN_ALIASES = {
   'aslan': 'Arslan Bhai',
   'arslanbhai': 'Arslan Bhai',
   'arsalanbhai': 'Arslan Bhai',
+  'ارسلان': 'Arslan Bhai',
+  'ارسلان بھائی': 'Arslan Bhai',
   // Shafique
   'shafik': 'Shafique',
   'shafiq': 'Shafique',
   'shafique': 'Shafique',
   'shafikbhai': 'Shafique',
+  'شفیق': 'Shafique',
+  'شفیق بھائی': 'Shafique',
   // Ubaid
   'ubaid': 'Ubaid',
   'ubad': 'Ubaid',
   'obaid': 'Ubaid',
   'ubayd': 'Ubaid',
+  'عبید': 'Ubaid',
   // Shiva
   'sheva': 'Shiva',
   'shiva': 'Shiva',
   'shiba': 'Shiva',
+  'شیوہ': 'Shiva',
+  'شیوا': 'Shiva',
   // Qasim
   'qasim': 'Qasim',
   'kasim': 'Qasim',
+  'قاسم': 'Qasim',
   // Fardin
   'fardin': 'Fardin',
   'fardeen': 'Fardin',
   'ferdin': 'Fardin',
+  'فردین': 'Fardin',
   // Ash
   'ash': 'Ash',
   'ashraf': 'Ash',
+  'ایش': 'Ash',
   // Anas
   'anas': 'Anas',
   'annas': 'Anas',
+  'انس': 'Anas',
   // Dave
   'dave': 'Dave',
   'dev': 'Dave',
+  'ڈیو': 'Dave',
   // Wali Ullah
   'waliullah': 'Wali Ullah',
   'wali': 'Wali Ullah',
   'vali': 'Wali Ullah',
+  'ولی اللہ': 'Wali Ullah',
+  'ولی': 'Wali Ullah',
   // Zamad
   'zamad': 'Zamad',
   'zammad': 'Zamad',
+  'زماد': 'Zamad',
+  'ضماد': 'Zamad',
   // Shahzad
   'shehzad': 'Shahzad',
   'shahzad': 'Shahzad',
   'shahzaad': 'Shahzad',
+  'شہزاد': 'Shahzad',
   // Ali Bhai
   'alibhai': 'Ali Bhai',
   'ali': 'Ali Bhai',
+  'علی': 'Ali Bhai',
+  'علی بھائی': 'Ali Bhai',
   // Usman
   'usman': 'Usman',
   'usma': 'Usman',
   'usmaan': 'Usman',
+  'عثمان': 'Usman',
   // Sarfraz
   'sarfraz': 'Sarfraz',
   'sarfaraz': 'Sarfraz',
+  'سرفراز': 'Sarfraz',
   // Adeel
   'adeel': 'Adeel',
   'adel': 'Adeel',
   'adil': 'Adeel',
+  'عدیل': 'Adeel',
   // Jebran
   'jebran': 'Jebran',
   'jibran': 'Jebran',
+  'جبران': 'Jebran',
   // Abdullah
   'abdullah': 'Abdullah',
   'abdulla': 'Abdullah',
+  'عبداللہ': 'Abdullah',
+  'عبد اللہ': 'Abdullah',
   // Sajid
-  'sajid': 'Sajid'
+  'sajid': 'Sajid',
+  'ساجد': 'Sajid'
 };
 
 function levenshteinDistance(a, b) {
@@ -327,7 +355,7 @@ const FALLBACK_EMPLOYEES = [
 async function extractWorker(text) {
   await refreshCache();
   const t = (text || '').toLowerCase();
-  const words = t.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const words = t.replace(/[^\w\s\u0600-\u06FF]/gi, ' ').split(/\s+/).filter(Boolean);
 
   // 1. Check known multi-word alias pairs (e.g. "arslan bhai", "wali ullah", "ali bhai")
   for (let i = 0; i < words.length - 1; i++) {
@@ -410,8 +438,8 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
   const isComparisonQuery = /\b(which\s*worker|which\s*employee|who\s*is\s*most|who\s*has\s*most|who\s*is\s*least|who\s*has\s*least|most\s*active|least\s*late|less\s*late|more\s*less|most\s*late|highest\s*late|minimum\s*late|lowest\s*late|most\s*punctual|best\s*punctuality|worst\s*punctuality|who\s*worked\s*most|who\s*worked\s*least|highest\s*hours|lowest\s*hours|most\s*shifts|least\s*shifts|most\s*absent|least\s*absent|sab\s*se\s*zyada|sab\s*se\s*kam|konsa\s*worker|konsa\s*employee|top\s*worker|top\s*workers|worker\s*ranking|compare\s*workers)\b/i.test(t);
 
   // Multi-turn Context Resolution (extract recent entity from history ONLY if not a comparison/ranking question and pronouns or short follow-ups used)
-  const isPronounOrFollowup = !isComparisonQuery && !workerName && /\b(he|him|his|unka|unke|unki|uska|uske|uski|that person)\b/i.test(t);
-  const isShortFollowup = !isComparisonQuery && !workerName && (isPdfReportRequest(t) || isExcelReportRequest(t) || /^(salary|late|mints|attendance|hours|shifts|record|statement)$/i.test(t.trim()) || (/^(how many|what is|give me|show)\s+(salary|late|mints|hours|shifts)\b/i.test(t)));
+  const isPronounOrFollowup = !isComparisonQuery && !workerName && (/\b(he|him|his|unka|unke|unki|uska|uske|uski|that person|who was late|who was absent)\b/i.test(t) || /(اس کا|اس کے|اس کی|ان کا|ان کے|ان کی|وہ|اسے)/u.test(t));
+  const isShortFollowup = !isComparisonQuery && !workerName && (isPdfReportRequest(t) || isExcelReportRequest(t) || /^(salary|late|mints|attendance|hours|shifts|record|statement|tankhwah|hazri)$/i.test(t.trim()) || (/^(how many|what is|give me|show|batao|dikhao)\s+(salary|late|mints|hours|shifts|tankhwah|hazri)\b/i.test(t)));
 
   if ((isPronounOrFollowup || isShortFollowup) && Array.isArray(history) && history.length > 0) {
     for (let i = history.length - 1; i >= 0; i--) {
@@ -428,18 +456,18 @@ async function resolveIntentAndToolCall(message, history = [], user = {}) {
     }
   }
 
-  const isSalaryQuery = /\b(salary|salaries|tankhwah|payroll|wage|wages|earnings|pay|paid|balance)\b/i.test(t);
-  const isRotaQuery = /\b(rota|schedule|shift|planning|roster|planner)\b/i.test(t);
-  const isAttendanceQuery = /\b(attendance|hazri|present|late|lateness|absent|hours|worked|checked|reached|left|time|duty|work|mints|minute|minutes|deri)\b/i.test(t);
-  const isLedgerQuery = /\b(ledger|khatta|running\s*balance|ledger\s*statement|account\s*statement|running\s*account)\b/i.test(t);
-  const isPaymentQuery = /\b(payment|payments|disburs|disbursement|cash\s*paid|bank\s*transfer|cash\s*vs\s*bank|was\s*paid|paid\s*out)\b/i.test(t);
-  const isPendingQuery = /\b(pending|pending\s*review|unverified|unapproved|pending\s*attendance|needs\s*approval|to\s*be\s*checked|awaiting\s*check)\b/i.test(t);
-  const isCheckedQuery = /\b(checked\s*attendance|verified\s*attendance|approved\s*attendance|finalized\s*attendance)\b/i.test(t);
+  const isSalaryQuery = /\b(salary|salaries|tankhwah|payroll|wage|wages|earnings|pay|paid|balance)\b|تنخواہ|اجرت|پیسہ|تنخواہیں/i.test(t);
+  const isRotaQuery = /\b(rota|schedule|shift|planning|roster|planner)\b|روٹا|شیڈول|شفٹ/i.test(t);
+  const isAttendanceQuery = /\b(attendance|hazri|present|late|lateness|absent|hours|worked|checked|reached|left|time|duty|work|mints|minute|minutes|deri)\b|حاضری|غیر\s*حاضر|چھٹی|لیٹ|دیر|ڈیوٹی|کام|گھنٹے/i.test(t);
+  const isLedgerQuery = /\b(ledger|khatta|running\s*balance|ledger\s*statement|account\s*statement|running\s*account)\b|کھاتہ|لیجر|حساب/i.test(t);
+  const isPaymentQuery = /\b(payment|payments|disburs|disbursement|cash\s*paid|bank\s*transfer|cash\s*vs\s*bank|was\s*paid|paid\s*out)\b|ادائیگی|پیمنٹ/i.test(t);
+  const isPendingQuery = /\b(pending|pending\s*review|unverified|unapproved|pending\s*attendance|needs\s*approval|to\s*be\s*checked|awaiting\s*check)\b|زیر\s*التواء|پینڈنگ|منظوری/i.test(t);
+  const isCheckedQuery = /\b(checked\s*attendance|verified\s*attendance|approved\s*attendance|finalized\s*attendance)\b|تصدیق\s*شدہ|منظور\s*شدہ/i.test(t);
   const isTimingSheetQuery = /\b(timing\s*sheet|timing\s*uk|arrival\s*times?|arrival\s*sheet|timing\s*staff|worker\s*arrival|timing\s*table)\b/i.test(t);
   const isHoursQuery = !isTimingSheetQuery && /\b(opening\s*hours?|closing\s*hours?|opening\s*time|closing\s*time|shop\s*hours?|shop\s*timings?)\b/i.test(t);
   const isAuditQuery = /\b(audit|audit\s*log|audit\s*trail|system\s*log|activity\s*log|who\s*changed|who\s*deleted)\b/i.test(t);
-  const isBonusQuery = /\b(bonus|bonuses|sales\s*bonus|target\s*bonus|monthly\s*bonus)\b/i.test(t);
-  const isLoanQuery = /\b(loan|loans|qarz|advance|advances|loan\s*balance)\b/i.test(t);
+  const isBonusQuery = /\b(bonus|bonuses|sales\s*bonus|target\s*bonus|monthly\s*bonus)\b|بونس/i.test(t);
+  const isLoanQuery = /\b(loan|loans|qarz|advance|advances|loan\s*balance)\b|قرض|ادھار|ایڈوانس/i.test(t);
 
   // Security & Credential Queries Protection
   const isSecurityQuery = /\b(password|passwords|credential|credentials|login\s*detail|login\s*details|admin\s*login|secret|secrets|token|tokens|api\s*key|auth\s*token)\b/i.test(t);

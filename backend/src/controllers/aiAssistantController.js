@@ -1,6 +1,7 @@
 const { askRotaAssistant } = require('../services/ai/aiProvider');
 const { getStoredPdf } = require('../services/ai/aiPdfReportService');
 const { getAiConfig } = require('../services/ai/aiConfig');
+const { transcribeAudio, synthesizeSpeech } = require('../services/ai/voiceService');
 
 /**
  * Handle AI Assistant Chat Query
@@ -25,6 +26,69 @@ exports.handleRotaChat = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error?.message || 'Failed to process AI assistant request. Please try again.'
+    });
+  }
+};
+
+/**
+ * Handle Voice Transcription (STT)
+ * POST /api/ai/transcribe
+ */
+exports.handleTranscribeAudio = async (req, res) => {
+  try {
+    let audioBuffer = null;
+    let mimeType = 'audio/webm';
+    const languageHint = req.body?.language || 'auto';
+
+    if (req.file && req.file.buffer) {
+      audioBuffer = req.file.buffer;
+      mimeType = req.file.mimetype || 'audio/webm';
+    } else if (req.body?.audioBase64) {
+      const rawBase64 = req.body.audioBase64.replace(/^data:audio\/[^;]+;base64,/, '');
+      audioBuffer = Buffer.from(rawBase64, 'base64');
+      mimeType = req.body.mimeType || 'audio/webm';
+    }
+
+    if (!audioBuffer) {
+      return res.status(400).json({
+        success: false,
+        message: 'No audio data received. Please provide audio file or audioBase64 string.'
+      });
+    }
+
+    const result = await transcribeAudio(audioBuffer, mimeType, languageHint);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('[AI Audio Transcription Error]:', error);
+    return res.status(error?.status || 500).json({
+      success: false,
+      message: error?.message || 'Failed to transcribe audio recording.'
+    });
+  }
+};
+
+/**
+ * Handle Voice Speech Synthesis (TTS)
+ * POST /api/ai/speak
+ */
+exports.handleSynthesizeSpeech = async (req, res) => {
+  try {
+    const { text, language = 'en' } = req.body;
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Text is required for speech synthesis.'
+      });
+    }
+
+    const result = await synthesizeSpeech(text, language);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('[AI Speech Synthesis Error]:', error);
+    return res.status(500).json({
+      success: false,
+      fallbackToBrowser: true,
+      message: error?.message || 'Speech synthesis failed. Falling back to browser audio.'
     });
   }
 };

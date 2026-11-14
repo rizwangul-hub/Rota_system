@@ -555,6 +555,89 @@ function formatToolResult(toolName, result, originalQuery = '') {
 }
 
 /**
+ * Generate a natural, conversational spoken summary for voice playback
+ */
+function createSpokenSummary(finalMessage, toolResults = [], originalQuery = '') {
+  if (!finalMessage) return '';
+  const q = (originalQuery || '').toLowerCase();
+  const isUrdu = /[\u0600-\u06FF]/.test(q) || /\b(ka|ki|ke|ko|tha|thi|the|hoga|batao|dikhao|aaj|kal|par|mein|kitna|kitne|kon)\b/i.test(q);
+
+  // If greeting or help
+  if (isGreetingOrHelp(q)) {
+    if (isUrdu) {
+      return "Salam! Main Pixx Rota Assistant hoon. Aap kisi bhi worker, shop ya attendance ke bare mein pooch sakte hain.";
+    }
+    return "Hello! I am your AI Workforce and Finance Assistant for Pixx Rota System. How can I help you today?";
+  }
+
+  // Check if tool results give a clear concise punchline
+  if (Array.isArray(toolResults) && toolResults.length > 0) {
+    const first = toolResults[0];
+    const res = first.result;
+
+    if (res?.error) {
+      return isUrdu
+        ? `Maaf kijiye, ${res.error}`
+        : `Sorry, ${res.error}`;
+    }
+
+    if (first.name === 'getWorkerDetails' && res?.worker) {
+      const w = res.worker;
+      return isUrdu
+        ? `${w.name} ${w.assignedShop} par assigned hain aur unki daily wage ${w.dailyWage} hai.`
+        : `${w.name} is assigned to ${w.assignedShop} with a daily wage of ${w.dailyWage}.`;
+    }
+
+    if (first.name === 'getWorkerAttendance' && res?.records) {
+      const wName = res.worker?.name || 'The worker';
+      const count = res.totalRecords || res.records.length;
+      const lateMins = res.totalLateMinutes || 0;
+      if (isUrdu) {
+        return `${wName} ke ${count} attendance records mile hain, aur total ${lateMins} late minutes hain.`;
+      }
+      return `${wName} has ${count} attendance records logged with ${lateMins} minutes of lateness.`;
+    }
+
+    if (first.name === 'getShopDailyAttendance' && res?.attendance) {
+      const present = res.summary?.present || 0;
+      const late = res.summary?.late || 0;
+      const shop = res.shopName || 'Shop';
+      if (isUrdu) {
+        return `${shop} par ${present} workers present thay aur ${late} worker late aye.`;
+      }
+      return `At ${shop}, ${present} workers were present and ${late} arrived late.`;
+    }
+
+    if (first.name === 'getWorkerSalaryAndPayroll' && res?.salary) {
+      const s = res.salary;
+      const wName = s.employeeName || 'Worker';
+      if (isUrdu) {
+        return `${wName} ki weekly salary ${s.finalSalary} pounds hai, ${s.totalHours} ghante kaam ke liye.`;
+      }
+      return `${wName}'s total weekly salary is ${s.finalSalary} for ${s.totalHours} hours worked.`;
+    }
+  }
+
+  // Fallback: clean the markdown and take the first 1-2 punchy sentences
+  let clean = finalMessage
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/#+\s+/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\|[^\n]+\|/g, '')
+    .replace(/^[-\s*]+/gm, '')
+    .replace(/\n+/g, ' ')
+    .trim();
+
+  // Split into sentences and take first 2 sentences
+  const sentences = clean.match(/[^.!?]+[.!?]+/g) || [clean];
+  const summary = sentences.slice(0, 2).join(' ').trim();
+  return summary.length > 250 ? summary.slice(0, 247) + '...' : summary;
+}
+
+/**
  * Ask the Rota Assistant
  */
 async function askRotaAssistant(message, history = [], user = {}) {
@@ -562,9 +645,11 @@ async function askRotaAssistant(message, history = [], user = {}) {
 
   // 1. Check for greeting or generic help
   if (isGreetingOrHelp(trimmed)) {
+    const greetingMsg = getGreetingResponse(trimmed);
     return {
       success: true,
-      message: getGreetingResponse(trimmed),
+      message: greetingMsg,
+      spokenSummary: createSpokenSummary(greetingMsg, [], trimmed),
       toolCalls: [],
       engine: 'pixx-ai-assistant'
     };
@@ -575,9 +660,11 @@ async function askRotaAssistant(message, history = [], user = {}) {
     try {
       const reportRes = await generateAiReport(trimmed, user, history);
       if (reportRes && (reportRes.pdfReport || reportRes.excelReport)) {
+        const msg = reportRes.message || '📄 **Official report has been generated!** Click below to download.';
         return {
           success: true,
-          message: reportRes.message || '📄 **Official report has been generated!** Click below to download.',
+          message: msg,
+          spokenSummary: 'The official report has been generated. You can download it directly on screen.',
           pdfReport: reportRes.pdfReport || null,
           excelReport: reportRes.excelReport || null,
           engine: 'report-generation-service'
@@ -586,6 +673,7 @@ async function askRotaAssistant(message, history = [], user = {}) {
         return {
           success: false,
           message: reportRes.message,
+          spokenSummary: reportRes.message,
           engine: 'report-generation-service'
         };
       }
@@ -661,6 +749,7 @@ CURRENT LOGGED IN USER:
               return {
                 success: true,
                 message: textParts,
+                spokenSummary: createSpokenSummary(textParts, [], trimmed),
                 toolCalls: [],
                 engine: `gemini (${modelToTry})`,
                 timestamp: new Date().toISOString()
@@ -718,6 +807,7 @@ CURRENT LOGGED IN USER:
   return {
     success: true,
     message: finalMessage,
+    spokenSummary: createSpokenSummary(finalMessage, toolResults, trimmed),
     toolCalls: calls,
     pdfReport,
     excelReport,

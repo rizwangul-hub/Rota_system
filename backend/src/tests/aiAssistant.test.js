@@ -212,8 +212,55 @@ async function runComprehensiveAiTests() {
     assert.ok(t32.message.includes('Punctual') || t32.message.includes('Late Minutes') || t32.message.includes('Wali Ullah') || t32.message.includes('Leaderboard'), 'Must return punctuality rankings');
     console.log('✓ 32. Ranking & Comparison: Most Punctual / Least Late Minutes Leaderboard (does NOT erroneously lock into ubaid)');
 
+    // 33. Spoken Summary Generation (Clean voice-friendly output)
+    assert.ok(typeof t32.spokenSummary === 'string' && t32.spokenSummary.length > 0, 'Must produce a clean spoken summary');
+    assert.ok(!t32.spokenSummary.includes('```'), 'Spoken summary must not contain markdown code fences');
+    assert.ok(!t32.spokenSummary.includes('|---|'), 'Spoken summary must not contain table syntax');
+    console.log('✓ 33. Spoken Summary Generation & Markdown Cleanup for Voice');
+
+    // 34. Urdu Script Query Resolution (شیوہ کی حاضری)
+    const t34 = await askRotaAssistant('شیوہ کی حاضری بتاؤ', [], adminUser);
+    assert.strictEqual(t34.success, true);
+    assert.ok(t34.message.includes('Shiva') || t34.message.includes('Attendance') || t34.message.includes('Records'), 'Urdu script query must resolve Shiva');
+    console.log('✓ 34. Urdu Script Worker & Attendance Intent Resolution');
+
+    // 35. Roman Urdu & Mixed Language Shop Query ("Kal Camden shop par kon late aya tha?")
+    const t35 = await askRotaAssistant('Kal Camden shop par kon late aya tha?', [], adminUser);
+    assert.strictEqual(t35.success, true);
+    if (!t35.message.toLowerCase().includes('camden') && !t35.message.includes('کیمڈن')) {
+      console.log('DEBUG t35 message:', t35.message, 'engine:', t35.engine);
+    }
+    assert.ok(t35.message.toLowerCase().includes('camden') || t35.message.includes('کیمڈن'), 'Roman Urdu query must resolve Camden shop');
+    console.log('✓ 35. Roman Urdu & Mixed Language Shop Query Resolution');
+
+    // 36. Voice Service Validation (Audio input guards)
+    const { transcribeAudio, synthesizeSpeech } = require('../services/ai/voiceService');
+    let emptyRejected = false;
+    try {
+      await transcribeAudio(Buffer.alloc(50));
+    } catch (e) {
+      emptyRejected = e.code === 'EMPTY_AUDIO';
+    }
+    assert.strictEqual(emptyRejected, true, 'Transcribe audio must reject empty/too short audio buffer');
+    console.log('✓ 36. Voice Service: Empty & Short Audio Guard');
+
+    // 37. Voice Service: Large Audio Size Limit
+    let largeRejected = false;
+    try {
+      await transcribeAudio(Buffer.alloc(16 * 1024 * 1024));
+    } catch (e) {
+      largeRejected = e.code === 'AUDIO_TOO_LARGE';
+    }
+    assert.strictEqual(largeRejected, true, 'Transcribe audio must reject audio > 15MB');
+    console.log('✓ 37. Voice Service: Large Audio Size Guard (>15MB)');
+
+    // 38. Voice Speech Synthesis Fallback & Clean Text
+    const ttsRes = await synthesizeSpeech('### 👤 Worker Profile: Shiva\n- Wage: £50');
+    assert.ok(ttsRes.success || ttsRes.fallbackToBrowser, 'TTS must return audio or browser fallback');
+    console.log('✓ 38. Speech Synthesis (TTS) & Clean Text Generation');
+
     console.log('\n====================================================');
-    console.log('   ALL 32 AI ASSISTANT TEST SCENARIOS PASSED!   ');
+    console.log('   ALL 38 AI ASSISTANT & VOICE TEST SCENARIOS PASSED!   ');
     console.log('====================================================');
   } finally {
     await mongoose.disconnect();

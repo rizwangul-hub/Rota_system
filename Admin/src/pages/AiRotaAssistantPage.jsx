@@ -19,9 +19,11 @@ import {
   Check,
   Bot,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Mic
 } from 'lucide-react';
 import { API_BASE_URL } from '../context/AuthContext';
+import VoiceAssistantModal from '../components/VoiceAssistantModal';
 
 const SUGGESTED_PROMPTS = [
   { text: "Give me Shiva's attendance in PDF", icon: FileText, tag: 'PDF Report' },
@@ -231,6 +233,7 @@ export default function AiRotaAssistantPage() {
   const [downloadingToken, setDownloadingToken] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -397,6 +400,30 @@ export default function AiRotaAssistantPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setIsVoiceOpen(true)}
+            title="Open Voice Assistant (Urdu + English + Roman Urdu)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+              color: '#ffffff',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Mic size={14} />
+            <span>Voice Mode / بول کر بات کریں</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowSuggestions(!showSuggestions)}
@@ -820,6 +847,28 @@ export default function AiRotaAssistantPage() {
 
         <button
           type="button"
+          onClick={() => setIsVoiceOpen(true)}
+          title="Open Voice Assistant (Speak your query)"
+          style={{
+            height: '40px',
+            width: '40px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+            color: '#ffffff',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+            flexShrink: 0
+          }}
+        >
+          <Mic size={18} />
+        </button>
+
+        <button
+          type="button"
           onClick={() => handleSend()}
           disabled={!input.trim() || loading}
           style={{
@@ -849,6 +898,11 @@ export default function AiRotaAssistantPage() {
           )}
         </button>
       </div>
+      {/* Full-Screen Voice Conversation Modal */}
+      <VoiceAssistantModal
+        isOpen={isVoiceOpen}
+        onClose={() => setIsVoiceOpen(false)}
+      />
     </div>
   );
 }

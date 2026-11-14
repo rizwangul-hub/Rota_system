@@ -13,13 +13,16 @@ import {
   User,
   Trash2,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Mic
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../context/AuthContext';
+import VoiceAssistantModal from './VoiceAssistantModal';
 
 export default function AiAssistantWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
       id: 'w-welcome',
@@ -301,6 +304,32 @@ export default function AiAssistantWidget() {
                 type="button"
                 onClick={() => {
                   setIsOpen(false);
+                  setIsVoiceOpen(true);
+                }}
+                title="Switch to Voice Conversation (Urdu + English)"
+                style={{
+                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                  border: 'none',
+                  color: '#ffffff',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 6px rgba(124, 58, 237, 0.35)'
+                }}
+              >
+                <Mic size={12} />
+                <span>Voice</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
                   navigate('/ai-assistant');
                 }}
                 title="Expand to Full Page"
@@ -534,6 +563,29 @@ export default function AiAssistantWidget() {
             />
             <button
               type="button"
+              onClick={() => {
+                setIsOpen(false);
+                setIsVoiceOpen(true);
+              }}
+              title="Voice Mode (Urdu + English)"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                color: '#ffffff',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)'
+              }}
+            >
+              <Mic size={15} />
+            </button>
+            <button
+              type="button"
               onClick={() => handleSend()}
               disabled={!input.trim() || loading}
               style={{
@@ -554,6 +606,12 @@ export default function AiAssistantWidget() {
           </div>
         </div>
       )}
+
+      {/* Full-Screen Voice Conversation Modal */}
+      <VoiceAssistantModal
+        isOpen={isVoiceOpen}
+        onClose={() => setIsVoiceOpen(false)}
+      />
     </>
   );
 }
