@@ -238,12 +238,46 @@ function calculateAttendanceRecord({
     };
   }
 
-  const lateMinutes = calculateLateMinutes(normShiftStart, normTimeReached);
-  const earlyLeaveMinutes = calculateEarlyLeaveMinutes(normShiftEnd, normWorkerEndTime);
-
   let computedStatus = status;
-  if (!status || status === 'Present' || status === 'Late') {
-    computedStatus = lateMinutes > gracePeriodMinutes ? 'Late' : 'Present';
+  let lateMinutes = 0;
+  let earlyLeaveMinutes = 0;
+
+  if (computedStatus === 'Half') {
+    const startMin = timeToMinutes(normShiftStart);
+    const endMin = timeToMinutes(normShiftEnd);
+    const totalShiftDuration = Math.max(0, endMin - startMin);
+    const reachedMin = timeToMinutes(normTimeReached);
+    const leftMin = timeToMinutes(normWorkerEndTime);
+
+    // If shift is longer than standard half-day (e.g. retail shop shift 9 or 10 hours)
+    if (scheduledHours > 5 && totalShiftDuration > 300) {
+      const midpointMin = startMin + Math.floor(totalShiftDuration / 2);
+
+      // Check if worker worked Afternoon Half vs Morning Half
+      // Afternoon half: arrived at least 2 hours after morning start or arrived at/after 12:00 PM (720m)
+      if (reachedMin >= startMin + 120 || reachedMin >= 720) {
+        // Expected start is the afternoon midpoint (e.g. 14:00)
+        // If worker arrived before or at midpoint (e.g. 13:00 <= 14:00), they are on time (0 late minutes)
+        lateMinutes = Math.max(0, reachedMin - midpointMin);
+        // Expected end is the full shift end (e.g. 18:30)
+        earlyLeaveMinutes = Math.max(0, endMin - leftMin);
+      } else {
+        // Morning half: arrived in the morning around shiftStart
+        lateMinutes = Math.max(0, reachedMin - startMin);
+        // Expected end of morning half is the midpoint
+        earlyLeaveMinutes = Math.max(0, midpointMin - leftMin);
+      }
+    } else {
+      // Explicit half-day shift (e.g. shiftStart: '14:00', shiftEnd: '18:00')
+      lateMinutes = Math.max(0, reachedMin - startMin);
+      earlyLeaveMinutes = Math.max(0, endMin - leftMin);
+    }
+  } else {
+    lateMinutes = calculateLateMinutes(normShiftStart, normTimeReached);
+    earlyLeaveMinutes = calculateEarlyLeaveMinutes(normShiftEnd, normWorkerEndTime);
+    if (!status || status === 'Present' || status === 'Late') {
+      computedStatus = lateMinutes > gracePeriodMinutes ? 'Late' : 'Present';
+    }
   }
 
   let arrivalDeduction = 0;
@@ -252,7 +286,7 @@ function calculateAttendanceRecord({
   }
 
   let earlyLeaveDeduction = 0;
-  if (earlyLeaveMinutes > 0) {
+  if (earlyLeaveMinutes > 0 && hourlyWage > 0) {
     earlyLeaveDeduction = Number((hourlyWage * (earlyLeaveMinutes / 60)).toFixed(2));
   }
 
@@ -263,16 +297,10 @@ function calculateAttendanceRecord({
 
   if (computedStatus === 'Half') {
     const halfDayWage = Number((wage / 2).toFixed(2));
-    if (totalDeduction >= halfDayWage) {
-      // Deduction from missing hours already equals or exceeds a half day's wage:
-      // Worker receives daily wage minus the lateness/missing hours deduction
-      attendancePay = Number(Math.max(0, wage - totalDeduction).toFixed(2));
-      finalLateDeduction = Math.min(wage, totalDeduction);
-    } else {
-      // Half day with partial or no lateness: worker receives half day pay minus any lateness
-      attendancePay = Number(Math.max(0, halfDayWage - totalDeduction).toFixed(2));
-      finalLateDeduction = Number(Math.max(0, wage - attendancePay).toFixed(2));
-    }
+    // The half-day base wage is 50% of daily wage. Any lateness or early leave within the half-day shift is deducted from it.
+    attendancePay = Number(Math.max(0, halfDayWage - totalDeduction).toFixed(2));
+    // Total deduction from full daily wage includes the unworked half-day (50%) plus any lateness penalty:
+    finalLateDeduction = Number(Math.max(0, wage - attendancePay).toFixed(2));
   } else {
     attendancePay = Number(Math.max(0, wage - totalDeduction).toFixed(2));
     finalLateDeduction = Number(Math.min(wage, totalDeduction).toFixed(2));

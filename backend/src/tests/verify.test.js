@@ -261,4 +261,19 @@ assert.strictEqual(tHalfDayPM.lateMinutes, 0, 'Arrived on time for 14:00 shift =
 assert.strictEqual(tHalfDayPM.attendancePay, 40, 'Half day daily wage of £80 is £40');
 console.log(' 11. Half-day PM start & arrival times auto-normalization test passed');
 
+// TEST 12: Afternoon half-day during full shop shift (e.g. 09:30 - 18:30 shift, arrived 13:00 - 18:50)
+const tAfternoonHalfDay = calculateAttendanceRecord({
+  dailyWage: 60,
+  shiftStart: '09:30',
+  shiftEnd: '18:30',
+  timeReached: '13:00',
+  workerEndTime: '18:50',
+  status: 'Half'
+});
+assert.strictEqual(tAfternoonHalfDay.lateMinutes, 0, 'Arriving at 13:00 for afternoon half of 09:30-18:30 shift is 0 late mins');
+assert.strictEqual(tAfternoonHalfDay.earlyLeaveMinutes, 0, 'Leaving at 18:50 for 18:30 shift end is 0 early leave mins');
+assert.strictEqual(tAfternoonHalfDay.attendancePay, 30, 'Half day pay for £60 wage must equal £30');
+assert.strictEqual(tAfternoonHalfDay.lateDeduction, 30, 'Total deduction for unworked half must equal £30');
+console.log(' 12. Afternoon half-day on full shop shift test passed (£30 pay, £30 deduction, 0 late minutes)');
+
 console.log('\n ALL BUSINESS LOGIC AND ACCOUNTING TESTS PASSED SUCCESSFULLY!\n');
