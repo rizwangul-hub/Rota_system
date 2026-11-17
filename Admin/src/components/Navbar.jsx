@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Menu, LogOut, UserCircle, ShieldAlert, PanelLeftClose, PanelLeftOpen, Sun, Moon } from 'lucide-react';
+import { Menu, LogOut, UserCircle, ShieldAlert, PanelLeftClose, PanelLeftOpen, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
 import { useTheme } from '../context/ThemeContext';
+import { useAnnouncement } from '../context/AnnouncementContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import UpdateNavbarBadge from './updates/UpdateNavbarBadge';
+import VoiceAnnouncementSettingsModal from './VoiceAnnouncementSettingsModal';
 
 const ROUTE_TITLES = {
   '/dashboard': { title: 'Executive Dashboard', parent: 'Core', parentPath: '/dashboard' },
@@ -24,9 +26,11 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const { sidebarCollapsed, toggleSidebar, isSidebarHidden } = useSidebar();
   const { theme, toggleTheme, isDark } = useTheme();
+  const { settings: voiceSettings } = useAnnouncement();
   const navigate = useNavigate();
   const location = useLocation();
   const [complianceCounts, setComplianceCounts] = useState({ total: 0, expired: 0, urgent: 0 });
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -157,6 +161,41 @@ export default function Navbar() {
           )}
         </button>
 
+        {/* System Voice Announcements Quick Toggle / Settings */}
+        <button
+          type="button"
+          onClick={() => setShowVoiceSettings(true)}
+          className="voice-announcement-navbar-btn"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 10px',
+            borderRadius: '20px',
+            border: voiceSettings?.enabled ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+            background: voiceSettings?.enabled ? (isDark ? 'rgba(37, 99, 235, 0.2)' : '#eff6ff') : (isDark ? 'rgba(30, 41, 59, 0.95)' : '#f1f5f9'),
+            color: voiceSettings?.enabled ? '#2563eb' : '#64748b',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          title={voiceSettings?.enabled ? 'Voice Announcements: ON (Click to configure)' : 'Voice Announcements: MUTED (Click to configure)'}
+          aria-label="System Voice Announcements"
+        >
+          {voiceSettings?.enabled ? (
+            <>
+              <Volume2 size={15} color="#2563eb" />
+              <span style={{ fontSize: '11.5px', fontWeight: 700 }}>Voice ON</span>
+            </>
+          ) : (
+            <>
+              <VolumeX size={15} color="#64748b" />
+              <span style={{ fontSize: '11.5px', fontWeight: 600 }}>Muted</span>
+            </>
+          )}
+        </button>
+
         {complianceCounts.total > 0 && (
           <Link
             to="/employees"
@@ -205,6 +244,9 @@ export default function Navbar() {
           </button>
         </div>
       </div>
+      {showVoiceSettings && (
+        <VoiceAnnouncementSettingsModal onClose={() => setShowVoiceSettings(false)} />
+      )}
     </header>
   );
 }

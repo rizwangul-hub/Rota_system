@@ -7,6 +7,7 @@ import {
   UserCheck, UserX, Users, X
 } from 'lucide-react';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import { useAnnouncement } from '../context/AnnouncementContext';
 import CelebrationOverlay from '../components/celebrations/CelebrationOverlay';
 import './WeeklyRotaPlanner.css';
 
@@ -76,6 +77,7 @@ const _rotaCache = new Map();
 
 export default function WeeklyRotaPlanner() {
   const { user } = useAuth();
+  const { runAnnouncedOperation } = useAnnouncement();
   const isAdmin = user?.role === 'ADMIN';
 
   const initialWeek = getSundayOf(new Date().toISOString().slice(0, 10));
@@ -1052,26 +1054,38 @@ export default function WeeklyRotaPlanner() {
     setError('');
     setNotice('');
 
+    const actor = user?.name || 'Fahad Rasheed';
     try {
-      const payload = {
-        ...buildCurrentRotaPayload(),
-        revisePublished: currentRota?.status === 'PUBLISHED'
-      };
+      await runAnnouncedOperation({
+        id: `rota-save-${weekStart}`,
+        label: 'Saving Weekly Rota',
+        actor,
+        startMessage: `${actor} is saving the weekly rota. Please wait a moment.`,
+        successMessage: `${actor} has successfully saved the weekly rota.`,
+        errorMessage: `${actor} could not save the weekly rota.`,
+        action: async () => {
+          const payload = {
+            ...buildCurrentRotaPayload(),
+            revisePublished: currentRota?.status === 'PUBLISHED'
+          };
 
-      const res = await axios.put(`${API}/week/${weekStart}/draft`, payload);
-      if (res.data?.rota) {
-        setCurrentRota(res.data.rota);
-        const existing = _rotaCache.get(weekStart) || {};
-        _rotaCache.set(weekStart, {
-          ...existing,
-          rota: res.data.rota,
-          cells,
-          shopRosters,
-          fetchedAt: Date.now()
-        });
-        setShowCelebration(true);
-      }
-      setNotice('Weekly Rota draft saved successfully!');
+          const res = await axios.put(`${API}/week/${weekStart}/draft`, payload);
+          if (res.data?.rota) {
+            setCurrentRota(res.data.rota);
+            const existing = _rotaCache.get(weekStart) || {};
+            _rotaCache.set(weekStart, {
+              ...existing,
+              rota: res.data.rota,
+              cells,
+              shopRosters,
+              fetchedAt: Date.now()
+            });
+            setShowCelebration(true);
+          }
+          setNotice('Weekly Rota draft saved successfully!');
+          return res.data;
+        }
+      });
     } catch (err) {
       const responseData = err?.response?.data;
       const validationErrors = [

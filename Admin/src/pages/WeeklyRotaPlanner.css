@@ -1851,3 +1851,58 @@
   font-weight: 700 !important;
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
+
+/* ── DARK THEME OVERRIDES ────────────────────────────────────────── */
+:root[data-theme="dark"] .weekly-rota-page.rota-fullscreen-active,
+:root[data-theme="dark"] .weekly-rota-page:fullscreen {
+  background: #0b1120 !important;
+}
+
+:root[data-theme="dark"] .rota-week-navigation,
+:root[data-theme="dark"] .rota-view-switch,
+:root[data-theme="dark"] .rota-board-card,
+:root[data-theme="dark"] .rota-table-wrap,
+:root[data-theme="dark"] .rota-shop-card {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+:root[data-theme="dark"] .rota-view-switch {
+  background: #0f172a !important;
+}
+
+:root[data-theme="dark"] .switch-tab {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .switch-tab.active {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+:root[data-theme="dark"] .rota-btn-action {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+:root[data-theme="dark"] .rota-btn-action:hover {
+  background: #243046 !important;
+  border-color: #475569 !important;
+}
+
+:root[data-theme="dark"] .rota-main-title,
+:root[data-theme="dark"] .week-label-range {
+  color: #f8fafc !important;
+}
+
+:root[data-theme="dark"] .rota-sub-title {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme="dark"] .avail-empty-box {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+

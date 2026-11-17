@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { API_BASE_URL } from '../context/AuthContext';
+import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import { useAnnouncement } from '../context/AnnouncementContext';
 import { formatTime12Hour } from '../utils/formatTime';
 import {
   Calculator,
@@ -58,6 +59,8 @@ function AdjustmentTypeTag({ type }) {
 }
 
 export default function WeeklySalaryPage() {
+  const { user } = useAuth();
+  const { runAnnouncedOperation } = useAnnouncement();
   const [salaries, setSalaries] = useState([]);
   const [totals, setTotals] = useState({
     totalEmployees: 0,
@@ -246,27 +249,41 @@ export default function WeeklySalaryPage() {
 
   const handleGenerateWeeklySalaries = async () => {
     setGenerating(true);
+    const actor = user?.name || 'Fahad Rasheed';
     try {
-      const res = await axios.post(`${API_BASE_URL}/salaries/generate`, {
-        date: selectedDate,
-        shopId: selectedShop || undefined
+      await runAnnouncedOperation({
+        id: `sal-gen-${Date.now()}`,
+        label: 'Generating Weekly Salary',
+        actor,
+        startMessage: `${actor} is generating the weekly salary. Please wait a few seconds.`,
+        successMessage: `${actor} has successfully generated the weekly salary.`,
+        errorMessage: `${actor} could not generate the weekly salary. Please check the error message.`,
+        action: async () => {
+          const res = await axios.post(`${API_BASE_URL}/salaries/generate`, {
+            date: selectedDate,
+            shopId: selectedShop || undefined
+          });
+          if (res.data?.success) {
+            showNotification(res.data.message || 'Weekly salary calculated successfully.');
+            const generatedSalaries = Array.isArray(res.data.salaries) ? res.data.salaries : [];
+            const total = generatedSalaries.reduce(
+              (sum, s) => sum + (typeof s.netPayable === 'number' ? s.netPayable : (s.totalPay || s.grossAttendanceWages || 0)),
+              0
+            );
+            setCelebrationData({
+              totalAmount: total,
+              employeeCount: res.data.count || generatedSalaries.length
+            });
+            setShowCelebration(true);
+            fetchWeekInfoAndSalaries();
+            return res.data;
+          } else {
+            throw new Error(res.data?.message || 'Failed to generate weekly salaries.');
+          }
+        }
       });
-      if (res.data.success) {
-        showNotification(res.data.message || 'Weekly salary calculated successfully.');
-        const generatedSalaries = Array.isArray(res.data.salaries) ? res.data.salaries : [];
-        const total = generatedSalaries.reduce(
-          (sum, s) => sum + (typeof s.netPayable === 'number' ? s.netPayable : (s.totalPay || s.grossAttendanceWages || 0)),
-          0
-        );
-        setCelebrationData({
-          totalAmount: total,
-          employeeCount: res.data.count || generatedSalaries.length
-        });
-        setShowCelebration(true);
-        fetchWeekInfoAndSalaries();
-      }
     } catch (err) {
-      showNotification(err.response?.data?.message || 'Failed to generate weekly salaries.', true);
+      showNotification(err.response?.data?.message || err.message || 'Failed to generate weekly salaries.', true);
     } finally {
       setGenerating(false);
     }
@@ -424,15 +441,29 @@ export default function WeeklySalaryPage() {
       : '';
     if (!window.confirm(`Finalize salary for ${detailSalary.employeeName}?${loanMsg} This will lock the record and apply loan deduction.`)) return;
     setFinalizing(true);
+    const actor = user?.name || 'Fahad Rasheed';
     try {
-      const res = await axios.post(`${API_BASE_URL}/salaries/${detailSalary._id}/finalize`);
-      if (res.data.success) {
-        showNotification(`Salary for ${detailSalary.employeeName} finalized.`);
-        await handleViewDetail({ ...detailSalary, _id: detailSalary._id });
-        fetchWeekInfoAndSalaries();
-      }
+      await runAnnouncedOperation({
+        id: `sal-fin-${detailSalary._id}`,
+        label: `Finalizing Salary for ${detailSalary.employeeName}`,
+        actor,
+        startMessage: `${actor} is finalizing the salary. Please wait.`,
+        successMessage: `${actor} has successfully finalized the salary.`,
+        errorMessage: 'The salary finalization could not be completed.',
+        action: async () => {
+          const res = await axios.post(`${API_BASE_URL}/salaries/${detailSalary._id}/finalize`);
+          if (res.data?.success) {
+            showNotification(`Salary for ${detailSalary.employeeName} finalized.`);
+            await handleViewDetail({ ...detailSalary, _id: detailSalary._id });
+            fetchWeekInfoAndSalaries();
+            return res.data;
+          } else {
+            throw new Error(res.data?.message || 'Failed to finalize salary.');
+          }
+        }
+      });
     } catch (err) {
-      showNotification(err.response?.data?.message || 'Failed to finalize salary.', true);
+      showNotification(err.response?.data?.message || err.message || 'Failed to finalize salary.', true);
     } finally {
       setFinalizing(false);
     }
@@ -472,17 +503,31 @@ export default function WeeklySalaryPage() {
       return;
     }
     setFinalizing(true);
+    const actor = user?.name || 'Fahad Rasheed';
     try {
-      const res = await axios.post(`${API_BASE_URL}/salaries/finalize-all`, {
-        weekLabel,
-        salaryIds: unfinalizedSalaries.map(s => s._id)
+      await runAnnouncedOperation({
+        id: `sal-fin-all-${Date.now()}`,
+        label: `Finalizing All ${unfinalizedCount} Salaries`,
+        actor,
+        startMessage: `${actor} is finalizing all weekly salaries. Please wait a moment.`,
+        successMessage: `${actor} has successfully finalized the salary.`,
+        errorMessage: 'The salary finalization could not be completed.',
+        action: async () => {
+          const res = await axios.post(`${API_BASE_URL}/salaries/finalize-all`, {
+            weekLabel,
+            salaryIds: unfinalizedSalaries.map(s => s._id)
+          });
+          if (res.data?.success) {
+            showNotification(res.data.message || `Successfully finalized ${res.data.count || unfinalizedCount} salaries.`);
+            fetchWeekInfoAndSalaries();
+            return res.data;
+          } else {
+            throw new Error(res.data?.message || 'Failed to finalize all salaries.');
+          }
+        }
       });
-      if (res.data.success) {
-        showNotification(res.data.message || `Successfully finalized ${res.data.count || unfinalizedCount} salaries.`);
-        fetchWeekInfoAndSalaries();
-      }
     } catch (err) {
-      showNotification(err.response?.data?.message || 'Failed to finalize all salaries.', true);
+      showNotification(err.response?.data?.message || err.message || 'Failed to finalize all salaries.', true);
     } finally {
       setFinalizing(false);
     }

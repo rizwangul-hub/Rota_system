@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth, API_BASE_URL } from '../context/AuthContext';
+import { useAnnouncement } from '../context/AnnouncementContext';
 import { formatTime12Hour } from '../utils/formatTime';
 import {
   Check,
@@ -103,6 +104,7 @@ function getWorkerDefaultShift(dateStr, empName, shopName) {
 
 export default function SarfrazAttendance() {
   const { user } = useAuth();
+  const { runAnnouncedOperation } = useAnnouncement();
   const isAdmin = user?.role === 'ADMIN';
 
   const [records, setRecords] = useState([]);
@@ -264,17 +266,31 @@ export default function SarfrazAttendance() {
     const targetIds = isBatch ? selectedIds : [confirmModal.recordId];
     setConfirmModal({ open: false, type: 'single', recordId: null, count: 0 });
 
+    const actor = user?.name || 'Sarfraz Khan';
     try {
-      const res = await axios.post(`${API_BASE_URL}/attendance/approve`, { ids: targetIds });
-      if (res.data.success) {
-        _attendanceCache.clear();
-        showNotification(res.data.message || `Successfully checked and approved ${targetIds.length} record(s).`);
-        setApprovedCelebrationCount(targetIds.length);
-        setShowCelebration(true);
-        fetchAttendanceData();
-      }
+      await runAnnouncedOperation({
+        id: `att-approve-${Date.now()}`,
+        label: isBatch ? `Verifying ${targetIds.length} Attendance Records` : 'Verifying Attendance',
+        actor,
+        startMessage: `${actor} is verifying attendance. Please wait a moment.`,
+        successMessage: `${actor} has successfully verified the attendance.`,
+        errorMessage: `${actor}'s attendance verification could not be completed.`,
+        action: async () => {
+          const res = await axios.post(`${API_BASE_URL}/attendance/approve`, { ids: targetIds });
+          if (res.data?.success) {
+            _attendanceCache.clear();
+            showNotification(res.data.message || `Successfully checked and approved ${targetIds.length} record(s).`);
+            setApprovedCelebrationCount(targetIds.length);
+            setShowCelebration(true);
+            fetchAttendanceData();
+            return res.data;
+          } else {
+            throw new Error(res.data?.message || 'Approval failed.');
+          }
+        }
+      });
     } catch (err) {
-      showNotification(err.response?.data?.message || 'Approval failed.', true);
+      showNotification(err.response?.data?.message || err.message || 'Approval failed.', true);
     }
   };
 

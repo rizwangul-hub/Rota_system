@@ -48,6 +48,7 @@ import {
   getNotificationPermissionStatus,
   formatReminderTime12H
 } from './services/notificationService';
+import { speakAnnouncement } from './utils/voiceAnnouncement';
 
 // Time Input component with smart 12-hour AM/PM formatting
 function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType }) {
