@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL, useAuth } from '../context/AuthContext';
+import { useAnnouncement } from '../context/AnnouncementContext';
 import { downloadReportFile } from '../utils/downloadReportFile';
 import { formatTime12Hour } from '../utils/formatTime';
 import {
@@ -59,6 +60,7 @@ function getWeeklySalaryDays(weekStartDateString, selectedDate) {
 
 export default function ReportsPage() {
   const { user } = useAuth();
+  const { runAnnouncedOperation } = useAnnouncement();
   const isAdmin = user?.role === 'ADMIN';
 
   const [activeTab, setActiveTab] = useState('daily_attendance');
@@ -226,8 +228,19 @@ export default function ReportsPage() {
     const key = path + filename;
     setDownloading(key);
     setErrorMsg('');
+    const actor = user?.name || 'Fahad Rasheed';
     try {
-      await downloadReportFile(path, params, filename);
+      await runAnnouncedOperation({
+        id: 'rep-' + Date.now(),
+        label: 'Exporting ' + (filename || 'Report'),
+        actor,
+        startMessage: actor + ' is generating the report. Please wait a moment.',
+        successMessage: actor + ' has successfully downloaded the report.',
+        errorMessage: 'The report export could not be completed.',
+        action: async () => {
+          await downloadReportFile(path, params, filename);
+        }
+      });
     } catch (error) {
       setErrorMsg(error.message || 'Unable to download the report.');
     } finally {

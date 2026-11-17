@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { API_BASE_URL } from '../context/AuthContext';
+import { API_BASE_URL, useAuth } from '../context/AuthContext';
+import { useAnnouncement } from '../context/AnnouncementContext';
 import {
   CheckCircle2,
   DollarSign,
@@ -38,6 +39,8 @@ import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 const _distributorCache = new Map();
 
 export default function SalaryDistributor() {
+  const { user } = useAuth();
+  const { runAnnouncedOperation } = useAnnouncement();
   const defaultCacheKey = 'week:default_shop:all';
   const initialCached = _distributorCache.get(defaultCacheKey);
 
@@ -210,16 +213,34 @@ export default function SalaryDistributor() {
     }
 
     setIsPaying(true);
+    const actor = user?.name || 'Arsalan';
     try {
-      const res = await axios.post(`${API_BASE_URL}/salaries/${payModalSalary._id}/pay`, {
-        amount,
-        deductionAmount: deduct,
-        deductionReason: deductReason || 'Rounding adjustment / write-off',
-        paymentDate,
-        paymentMethod,
-        notes: payNotes,
-        clientReference: `${payModalSalary._id}-${Date.now()}`
+      await runAnnouncedOperation({
+        id: `pay-${payModalSalary._id}`,
+        label: `Recording Payment for ${payModalSalary.employeeName}`,
+        actor,
+        startMessage: `${actor} is recording salary payment for ${payModalSalary.employeeName}. Please wait.`,
+        successMessage: `${actor} has successfully recorded salary payment for ${payModalSalary.employeeName}.`,
+        errorMessage: 'The salary payment could not be recorded.',
+        action: async () => {
+          const res = await axios.post(`${API_BASE_URL}/salaries/${payModalSalary._id}/pay`, {
+            amount,
+            deductionAmount: deduct,
+            deductionReason: deductReason || 'Rounding adjustment / write-off',
+            paymentDate,
+            paymentMethod,
+            notes: payNotes,
+            clientReference: `${payModalSalary._id}-${Date.now()}`
+          });
+          if (!res.data?.success) {
+            throw new Error(res.data?.message || 'Payment recording failed');
+          }
+          return res;
+        }
       });
+      // Refresh distributor data after successful payment
+      await fetchDistributorData();
+      setPayModalSalary(null);
       if (res.data.success) {
         const openingBal = Number(payModalSalary.openingBalance || payModalSalary.employee?.openingBalance || 0);
         const weeklySalary = Number(payModalSalary.attendanceSalary ?? (payModalSalary.weeklySalary || payModalSalary.finalSalary || 0));

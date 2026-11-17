@@ -825,6 +825,8 @@ export default function App() {
 
     const submittedRows = workerRows.filter((row) => !row.isLocked);
     setSavingAll(true);
+    const actor = user?.name || 'Usman';
+    speakAnnouncement(`${actor} is submitting attendance. Please wait a few seconds.`);
     try {
       const res = await api.post(
         '/attendance/batch',
@@ -845,10 +847,12 @@ export default function App() {
       );
 
       if (res.data?.success) {
+        speakAnnouncement(`${actor}'s attendance has been submitted successfully.`);
         setShowCelebration(true);
         void refreshRotaForDate(currentDate);
       }
     } catch (err) {
+      speakAnnouncement(`${actor}'s attendance submission could not be completed. Please try again.`);
       showAlert('Save Failed', err.response?.data?.message || 'Failed to submit batch attendance.');
     } finally {
       setSavingAll(false);
