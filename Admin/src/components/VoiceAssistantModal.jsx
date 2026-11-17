@@ -19,10 +19,26 @@ import {
   AlertCircle,
   HelpCircle,
   CheckCircle2,
-  MessageSquare
+  MessageSquare,
+  PhoneCall,
+  PhoneOff,
+  Phone,
+  Gauge,
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import rotaLogo from '../assets/rota.png';
 import { API_BASE_URL } from '../context/AuthContext';
+
+/**
+ * Format seconds into mm:ss call timer
+ */
+function formatCallTimer(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
 
 /**
  * Clean markdown for screen display
@@ -99,7 +115,7 @@ function SimpleMarkdown({ content }) {
     if (line.startsWith('### ') || line.startsWith('## ') || line.startsWith('# ')) {
       const text = line.replace(/^#+\s*/, '');
       elements.push(
-        <h4 key={`h-${i}`} style={{ margin: '8px 0 4px', color: '#67e8f9', fontSize: '13px', fontWeight: 700 }}>
+        <h4 key={`h-${i}`} style={{ margin: '8px 0 4px', color: '#38bdf8', fontSize: '13px', fontWeight: 700 }}>
           {text}
         </h4>
       );
@@ -107,10 +123,11 @@ function SimpleMarkdown({ content }) {
     }
 
     if (line.startsWith('- ') || line.startsWith('* ')) {
+      const text = line.slice(2);
       elements.push(
-        <div key={`li-${i}`} style={{ display: 'flex', gap: '6px', margin: '2px 0', color: '#e2e8f0', fontSize: '13px' }}>
+        <div key={`li-${i}`} style={{ display: 'flex', gap: '6px', margin: '2px 0', fontSize: '12.5px', color: '#e2e8f0' }}>
           <span style={{ color: '#38bdf8' }}>•</span>
-          <span>{line.substring(2)}</span>
+          <span>{text}</span>
         </div>
       );
       continue;
@@ -127,49 +144,87 @@ function SimpleMarkdown({ content }) {
   return <div style={{ wordBreak: 'break-word' }}>{elements}</div>;
 }
 
-export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = '' }) {
-  // Voice states: 'ready' | 'listening' | 'processing' | 'speaking'
-  const [voiceState, setVoiceState] = useState('ready');
-  const [transcript, setTranscript] = useState('');
+export default function VoiceAssistantModal({ isOpen, onClose }) {
+  // Call Lifecycle: 'idle' (Pre-call dialer) | 'connecting' | 'connected' (In-call) | 'ended'
+  const [callStatus, setCallStatus] = useState('idle');
+  const [callDuration, setCallDuration] = useState(0);
+
+  // In-call Voice states: 'greeting' | 'listening' | 'thinking' | 'speaking' | 'muted'
+  const [voiceState, setVoiceState] = useState('idle');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [messages, setMessages] = useState([
     {
-      id: 'init-msg',
+      id: 'welcome-seed',
       role: 'assistant',
-      content: '👋 **Salam & Welcome!**\n\nI am your voice-powered Rota & Workforce Assistant. You can speak to me in **English**, **اردو (Urdu)**, or **Roman Urdu**.',
-      spokenSummary: 'Welcome to Pixx Rota System. You can ask me anything about staff, shops, attendance, or salaries.'
+      content: '👋 **Salam & Welcome!**\n\nI am your real-time hands-free Rota Phone Assistant. Click **Start Call** to begin a natural, continuous two-way conversation.',
+      spokenSummary: 'Salam! Main Pixx Rota Assistant hoon. Main aap ki kya madad kar sakta hoon?'
     }
   ]);
   const [languageMode, setLanguageMode] = useState('auto'); // 'auto' | 'ur' | 'en'
-  const [audioMuted, setAudioMuted] = useState(false);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [speechSpeed, setSpeechSpeed] = useState(1.0); // 1.0x or 0.85x
   const [errorMessage, setErrorMessage] = useState('');
+  const [showTranscript, setShowTranscript] = useState(true);
   const [textInput, setTextInput] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
 
-  // Audio & Speech references
+  // References
+  const isCallActiveRef = useRef(false);
+  const voiceStateRef = useRef('idle');
   const recognitionRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
   const audioPlayerRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const micStreamRef = useRef(null);
   const animFrameRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const silenceTimerRef = useRef(null);
+  const lastSpokenAnswerRef = useRef('');
+  const callTimerRef = useRef(null);
+  const latestSpeechTextRef = useRef('');
+
+  // Keep voiceStateRef in sync with state
+  useEffect(() => {
+    voiceStateRef.current = voiceState;
+  }, [voiceState]);
+
+  // Keep isCallActiveRef in sync
+  useEffect(() => {
+    isCallActiveRef.current = callStatus === 'connected';
+  }, [callStatus]);
 
   // Auto-scroll transcript
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, interimTranscript, voiceState]);
 
+  // Call duration counter
+  useEffect(() => {
+    if (callStatus === 'connected') {
+      setCallDuration(0);
+      callTimerRef.current = setInterval(() => {
+        setCallDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
+  }, [callStatus]);
+
   // Handle escape key
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (voiceState === 'speaking') {
-          stopSpeaking();
+        if (callStatus === 'connected') {
+          handleEndCall();
         } else {
           handleClose();
         }
@@ -177,119 +232,66 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, voiceState]);
+  }, [isOpen, callStatus]);
 
-  // Clean stop audio playback
+  // Clean stop audio playback (Barge-in / Stop)
   const stopSpeaking = useCallback(() => {
-    // 1. Cancel browser speech synthesis
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
-    // 2. Pause and reset HTML Audio player if playing Gemini TTS
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
       audioPlayerRef.current = null;
     }
-    if (voiceState === 'speaking') {
-      setVoiceState('ready');
+    if (voiceStateRef.current === 'speaking') {
+      setVoiceState('listening');
     }
-  }, [voiceState]);
-
-  // Clean stop microphone recording
-  const stopMicrophone = useCallback(() => {
-    // 1. Stop SpeechRecognition
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      recognitionRef.current = null;
-    }
-    // 2. Stop MediaRecorder
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {}
-    }
-    // 3. Stop audio visualizer tracks
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(t => t.stop());
-      micStreamRef.current = null;
-    }
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-    }
-    setVolumeLevel(0);
   }, []);
 
-  // Full cleanup on modal close or unmount
-  const handleClose = useCallback(() => {
-    stopSpeaking();
-    stopMicrophone();
-    setVoiceState('ready');
-    setInterimTranscript('');
-    setErrorMessage('');
-    onClose();
-  }, [stopSpeaking, stopMicrophone, onClose]);
-
-  // Text-To-Speech Player: tries server-side Gemini TTS first, falls back to window.speechSynthesis
-  const speakText = useCallback(async (textToSpeak, langHint = 'auto') => {
-    if (audioMuted || !textToSpeak) return;
-
-    stopSpeaking();
-    setVoiceState('speaking');
-
-    // Detect if text is mostly Urdu script or Roman Urdu
-    const isUrduScript = /[\u0600-\u06FF]/.test(textToSpeak);
-    const isRomanUrdu = /\b(ka|ki|ke|ko|tha|thi|the|hoga|batao|dikhao|aaj|kal|par|mein|kitna|kitne|kon|unka|uska)\b/i.test(textToSpeak);
-    const detectedLang = isUrduScript ? 'ur' : (isRomanUrdu ? 'ur-Latn' : 'en');
-
+  // Web Audio API Visualizer
+  const setupAudioVisualizer = useCallback((stream) => {
     try {
-      // 1. Attempt Server-side studio quality Gemini TTS
-      const res = await axios.post(`${API_BASE_URL}/ai/speak`, {
-        text: textToSpeak,
-        language: detectedLang
-      }, { timeout: 8000 });
-
-      if (res.data?.success && res.data?.audioBase64) {
-        const audioSrc = `data:${res.data.mimeType || 'audio/wav'};base64,${res.data.audioBase64}`;
-        const audio = new Audio(audioSrc);
-        audioPlayerRef.current = audio;
-
-        audio.onended = () => {
-          audioPlayerRef.current = null;
-          setVoiceState('ready');
-        };
-
-        audio.onerror = () => {
-          fallbackBrowserSpeech(textToSpeak, detectedLang);
-        };
-
-        await audio.play();
-        return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        try { audioContextRef.current.close(); } catch {}
       }
-    } catch (ttsErr) {
-      console.warn('[Gemini TTS unavailable, falling back to browser synthesis]:', ttsErr.message);
-    }
+      const ctx = new AudioCtx();
+      audioContextRef.current = ctx;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      analyserRef.current = analyser;
+      const source = ctx.createMediaStreamSource(stream);
+      source.connect(analyser);
 
-    // 2. Fallback to client browser SpeechSynthesis
-    fallbackBrowserSpeech(textToSpeak, detectedLang);
-  }, [audioMuted, stopSpeaking]);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateVolume = () => {
+        if (!analyserRef.current || !isCallActiveRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        setVolumeLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        animFrameRef.current = requestAnimationFrame(updateVolume);
+      };
+      updateVolume();
+    } catch {}
+  }, []);
 
   // Browser speech synthesis fallback
-  const fallbackBrowserSpeech = (cleanText, detectedLang) => {
+  const fallbackBrowserSpeech = useCallback((cleanText, detectedLang, onFinish) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setVoiceState('ready');
+      if (onFinish) onFinish();
       return;
     }
 
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.0;
+      utterance.rate = speechSpeed;
       utterance.pitch = 1.0;
 
-      // Select voice based on language
       const voices = window.speechSynthesis.getVoices() || [];
       if (detectedLang === 'ur' || detectedLang === 'ur-Latn') {
         const urduVoice = voices.find(v => v.lang.startsWith('ur') || v.name.toLowerCase().includes('urdu') || v.lang.startsWith('hi'));
@@ -301,28 +303,141 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
         utterance.lang = 'en-GB';
       }
 
-      utterance.onend = () => setVoiceState('ready');
-      utterance.onerror = () => setVoiceState('ready');
+      utterance.onend = () => {
+        if (onFinish) onFinish();
+      };
+      utterance.onerror = () => {
+        if (onFinish) onFinish();
+      };
 
       window.speechSynthesis.speak(utterance);
     } catch {
-      setVoiceState('ready');
+      if (onFinish) onFinish();
     }
-  };
+  }, [speechSpeed]);
 
-  // Submit recognized question to the existing AI backend
-  const submitVoiceQuery = useCallback(async (queryText) => {
-    const q = (queryText || transcript).trim();
-    if (!q) {
-      setVoiceState('ready');
+  // Speak response aloud (with automated transition back to hands-free listening)
+  const speakText = useCallback(async (textToSpeak, onCompletedCallback) => {
+    if (!textToSpeak) {
+      if (onCompletedCallback) onCompletedCallback();
       return;
     }
 
-    // Stop speaking any prior audio
     stopSpeaking();
-    stopMicrophone();
+    setVoiceState('speaking');
 
-    setVoiceState('processing');
+    // If speaker is muted by user, don't play sound, just delay briefly and resume listening
+    if (speakerMuted) {
+      setTimeout(() => {
+        if (onCompletedCallback) onCompletedCallback();
+      }, 1500);
+      return;
+    }
+
+    const isUrduScript = /[\u0600-\u06FF]/.test(textToSpeak);
+    const isRomanUrdu = /\b(ka|ki|ke|ko|tha|thi|the|hoga|batao|dikhao|aaj|kal|par|mein|kitna|kitne|kon|unka|uska)\b/i.test(textToSpeak);
+    const detectedLang = isUrduScript ? 'ur' : (isRomanUrdu ? 'ur-Latn' : 'en');
+
+    try {
+      // 1. Attempt Server-side studio quality Gemini TTS
+      const res = await axios.post(`${API_BASE_URL}/ai/speak`, {
+        text: textToSpeak,
+        language: detectedLang
+      }, { timeout: 7000 });
+
+      if (res.data?.success && res.data?.audioBase64) {
+        const audioSrc = `data:${res.data.mimeType || 'audio/wav'};base64,${res.data.audioBase64}`;
+        const audio = new Audio(audioSrc);
+        audioPlayerRef.current = audio;
+
+        audio.onended = () => {
+          audioPlayerRef.current = null;
+          if (onCompletedCallback) onCompletedCallback();
+        };
+
+        audio.onerror = () => {
+          fallbackBrowserSpeech(textToSpeak, detectedLang, onCompletedCallback);
+        };
+
+        await audio.play();
+        return;
+      }
+    } catch (ttsErr) {
+      console.warn('[Gemini TTS fallback]:', ttsErr.message);
+    }
+
+    // 2. Fallback to client browser SpeechSynthesis
+    fallbackBrowserSpeech(textToSpeak, detectedLang, onCompletedCallback);
+  }, [speakerMuted, stopSpeaking, fallbackBrowserSpeech]);
+
+  // Auto resume listening after assistant speaks
+  const resumeListeningAfterAnswer = useCallback(() => {
+    if (!isCallActiveRef.current) return;
+    setVoiceState('listening');
+    setInterimTranscript('');
+    latestSpeechTextRef.current = '';
+    // Ensure recognition is running continuously
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch {}
+    }
+  }, []);
+
+  // Submit recognized question to AI backend
+  const submitVoiceQuery = useCallback(async (queryText) => {
+    const q = (queryText || '').trim();
+    if (!q || !isCallActiveRef.current) {
+      if (isCallActiveRef.current) setVoiceState('listening');
+      return;
+    }
+
+    // Check for voice commands
+    const lower = q.toLowerCase();
+
+    // 1. Voice Command: Stop / Ruk jao
+    if (/^(stop|ruk jao|bas|khamosh|chup|pause)$/i.test(lower)) {
+      stopSpeaking();
+      setVoiceState('listening');
+      setInterimTranscript('');
+      return;
+    }
+
+    // 2. Voice Command: Repeat / Dobara batao
+    if (/^(repeat|repeat that|dobara batao|dobara bolo|phir se batao|phir se bolo)$/i.test(lower)) {
+      if (lastSpokenAnswerRef.current) {
+        speakText(lastSpokenAnswerRef.current, resumeListeningAfterAnswer);
+      } else {
+        speakText("I didn't say anything yet. How can I help you?", resumeListeningAfterAnswer);
+      }
+      return;
+    }
+
+    // 3. Voice Command: Speak slowly / Aahista bolo
+    if (/\b(speak slowly|slow down|aahista bolo|ahista bolo)\b/i.test(lower)) {
+      setSpeechSpeed(0.85);
+      const ack = /[\u0600-\u06FF]/.test(q) || /\b(bolo|karo|batao)\b/i.test(lower)
+        ? "Theek hai, ab main aahista bolunga."
+        : "Sure, I will speak more slowly now.";
+      speakText(ack, resumeListeningAfterAnswer);
+      return;
+    }
+
+    // 4. Voice Command: End Call / Call kat do
+    if (/\b(end call|hang up|call kat do|call band karo|call khatam|bye bye|goodbye|allah hafiz)\b/i.test(lower)) {
+      const farewell = /[\u0600-\u06FF]/.test(q) || /\b(kat do|band karo|allah hafiz)\b/i.test(lower)
+        ? "Khuda hafiz! Call khatam kar raha hoon."
+        : "Goodbye! Ending call now.";
+      speakText(farewell, () => {
+        handleEndCall();
+      });
+      return;
+    }
+
+    // Stop speaking prior audio
+    stopSpeaking();
+
+    setVoiceState('thinking');
     setErrorMessage('');
     setInterimTranscript('');
 
@@ -333,41 +448,38 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
     };
 
     setMessages(prev => [...prev, userMsg]);
-    setTranscript('');
 
     try {
-      // Build conversation history from recent messages (max 6)
-      const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
+      const history = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
 
-      // Call existing AI Chat endpoint with authenticated user context
       const res = await axios.post(`${API_BASE_URL}/ai/chat`, {
         message: q,
         history
       });
 
       if (res.data?.success) {
+        const spokenAnswer = res.data.spokenSummary || res.data.message || 'Done.';
+        lastSpokenAnswerRef.current = spokenAnswer;
+
         const assistantMsg = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: res.data.message || 'Done.',
-          spokenSummary: res.data.spokenSummary || '',
+          spokenSummary: spokenAnswer,
           pdfReport: res.data.pdfReport || null,
           excelReport: res.data.excelReport || null
         };
 
         setMessages(prev => [...prev, assistantMsg]);
 
-        // Speak the response aloud using the spoken summary
-        const textToSpeak = res.data.spokenSummary || res.data.message;
-        speakText(textToSpeak);
+        // Speak aloud, then IMMEDIATELY & AUTOMATICALLY resume listening!
+        speakText(spokenAnswer, resumeListeningAfterAnswer);
       } else {
         throw new Error(res.data?.message || 'Could not process voice request.');
       }
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'Failed to process voice request.';
       setErrorMessage(errMsg);
-      setVoiceState('ready');
-
       setMessages(prev => [
         ...prev,
         {
@@ -376,234 +488,248 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
           content: `⚠️ **Error:** ${errMsg}`
         }
       ]);
+      speakText("Sorry, I encountered an issue fetching that information.", resumeListeningAfterAnswer);
     }
-  }, [transcript, messages, stopSpeaking, stopMicrophone, speakText]);
+  }, [messages, stopSpeaking, speakText, resumeListeningAfterAnswer]);
 
-  // Audio level visualizer for microphone wave animation
-  const setupAudioVisualizer = (stream) => {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      audioContextRef.current = ctx;
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 64;
-      analyserRef.current = analyser;
-      const source = ctx.createMediaStreamSource(stream);
-      source.connect(analyser);
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const updateVolume = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const avg = sum / dataArray.length;
-        setVolumeLevel(Math.min(100, Math.round((avg / 128) * 100)));
-        animFrameRef.current = requestAnimationFrame(updateVolume);
-      };
-      updateVolume();
-    } catch {}
-  };
-
-  // Start microphone listening with dual engine (Browser SpeechRecognition + MediaRecorder fallback)
-  const startListening = async () => {
-    // If assistant is currently speaking, stop it immediately (Barge-in / Interrupt)
-    stopSpeaking();
-    setErrorMessage('');
-    setInterimTranscript('');
-    setTranscript('');
-
+  // Start continuous, hands-free listening supervisor
+  const startContinuousListening = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    // Check if Web Speech API is supported
     if (SpeechRecognition) {
       try {
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch {}
+          recognitionRef.current = null;
+        }
+
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.interimResults = true;
 
-        // Set recognition language
         if (languageMode === 'ur') {
           recognition.lang = 'ur-PK';
         } else if (languageMode === 'en') {
           recognition.lang = 'en-GB';
         } else {
-          // Auto mode: default to ur-PK or en-GB depending on platform locale
+          // Auto mode: default to ur-PK which understands Roman Urdu phonetics & English loanwords
           recognition.lang = 'ur-PK';
         }
 
         recognition.onstart = () => {
-          setVoiceState('listening');
+          if (voiceStateRef.current !== 'speaking' && voiceStateRef.current !== 'thinking') {
+            setVoiceState('listening');
+          }
         };
 
         recognition.onresult = (event) => {
+          if (!isCallActiveRef.current) return;
+
           let currentInterim = '';
-          let finalTranscript = '';
+          let currentFinal = '';
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const piece = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
-              finalTranscript += piece;
+              currentFinal += piece;
             } else {
               currentInterim += piece;
             }
           }
 
+          const activeText = (currentFinal || currentInterim).trim();
+
+          // ── BARGE-IN INTERRUPTION ──────────────────────────────────────────
+          // If assistant is speaking and user begins talking, INSTANTLY stop assistant audio!
+          if (voiceStateRef.current === 'speaking' && activeText.length > 1) {
+            stopSpeaking();
+            setVoiceState('listening');
+          }
+
           if (currentInterim) {
             setInterimTranscript(currentInterim);
+            latestSpeechTextRef.current = currentInterim;
           }
-          if (finalTranscript) {
-            setTranscript(finalTranscript);
-            submitVoiceQuery(finalTranscript);
+
+          // Voice Activity Detection (VAD) Debounce:
+          // Wait 1.4 seconds of silence after speech before submitting the turn
+          clearTimeout(silenceTimerRef.current);
+
+          if (currentFinal) {
+            latestSpeechTextRef.current = currentFinal;
+            setInterimTranscript(currentFinal);
+            silenceTimerRef.current = setTimeout(() => {
+              if (latestSpeechTextRef.current.trim()) {
+                const turnText = latestSpeechTextRef.current.trim();
+                latestSpeechTextRef.current = '';
+                setInterimTranscript('');
+                submitVoiceQuery(turnText);
+              }
+            }, 900);
+          } else if (currentInterim.length > 2) {
+            silenceTimerRef.current = setTimeout(() => {
+              if (latestSpeechTextRef.current.trim()) {
+                const turnText = latestSpeechTextRef.current.trim();
+                latestSpeechTextRef.current = '';
+                setInterimTranscript('');
+                submitVoiceQuery(turnText);
+              }
+            }, 1400);
           }
         };
 
-        recognition.onerror = async (event) => {
-          console.warn('[SpeechRecognition Error]:', event.error);
-          // If browser speech recognition failed or language was not supported, fallback to MediaRecorder + Gemini
+        recognition.onerror = (event) => {
+          console.warn('[SpeechRecognition Notice]:', event.error);
           if (event.error === 'not-allowed') {
-            setErrorMessage('Microphone access was denied. Please allow microphone permissions in your browser.');
-            setVoiceState('ready');
-          } else {
-            // Attempt Gemini server-side speech recognition
-            recognitionRef.current = null;
-            startMediaRecorderFallback();
+            setErrorMessage('Microphone permission was denied. Please allow microphone in browser settings.');
           }
         };
 
+        // Continuous Watchdog: Auto-restart recognition if it stops unexpectedly during an active call
         recognition.onend = () => {
-          if (voiceState === 'listening' && !interimTranscript && !transcript) {
-            setVoiceState('ready');
+          if (isCallActiveRef.current && voiceStateRef.current !== 'thinking') {
+            try {
+              recognition.start();
+            } catch {
+              setTimeout(() => {
+                if (isCallActiveRef.current && voiceStateRef.current !== 'thinking') {
+                  try { recognition.start(); } catch {}
+                }
+              }, 250);
+            }
           }
         };
-
-        // Also setup audio level visualizer
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          micStreamRef.current = stream;
-          setupAudioVisualizer(stream);
-        } catch {}
 
         recognition.start();
         return;
       } catch (recErr) {
-        console.warn('[Web Speech API start error, using MediaRecorder fallback]:', recErr.message);
+        console.warn('[SpeechRecognition initialization error]:', recErr.message);
       }
     }
+  }, [languageMode, stopSpeaking, submitVoiceQuery]);
 
-    // MediaRecorder + Gemini STT fallback
-    startMediaRecorderFallback();
-  };
+  // Start Call Handler (Single click initiates continuous telephone conversation)
+  const handleStartCall = async () => {
+    setCallStatus('connecting');
+    setErrorMessage('');
+    setVoiceState('connecting');
 
-  // MediaRecorder + Gemini audio transcription fallback
-  const startMediaRecorderFallback = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 1. Request microphone permission with echo cancellation & noise suppression
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       micStreamRef.current = stream;
       setupAudioVisualizer(stream);
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
+      // 2. Set connected call status
+      setCallStatus('connected');
+      isCallActiveRef.current = true;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
+      // 3. Play natural welcoming greeting aloud, then seamlessly enter continuous listening
+      const initialGreeting = languageMode === 'ur'
+        ? "Salam! Main Pixx Rota Assistant hoon. Main aap ki kya madad kar sakta hoon?"
+        : languageMode === 'en'
+        ? "Hello! I am your Rota System Assistant. How can I help you today?"
+        : "Salam! Main Pixx Rota Assistant hoon. Aap kisi bhi worker, shop ya attendance ke bare mein pooch sakte hain.";
 
-      recorder.onstop = async () => {
-        setVoiceState('processing');
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+      lastSpokenAnswerRef.current = initialGreeting;
 
-        if (audioBlob.size < 500) {
-          setErrorMessage("Recording was too short. Please try again.");
-          setVoiceState('ready');
-          return;
-        }
+      // Start recognition immediately in background
+      startContinuousListening();
 
-        try {
-          const formData = new FormData();
-          formData.append('audio', audioBlob, `speech.${mimeType === 'audio/webm' ? 'webm' : 'mp4'}`);
-          formData.append('language', languageMode);
-
-          const res = await axios.post(`${API_BASE_URL}/ai/transcribe`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-
-          if (res.data?.success && res.data?.text) {
-            setTranscript(res.data.text);
-            submitVoiceQuery(res.data.text);
-          } else {
-            throw new Error(res.data?.message || 'Could not transcribe speech.');
-          }
-        } catch (transcribeErr) {
-          setErrorMessage(transcribeErr.response?.data?.message || transcribeErr.message || 'Speech recognition failed.');
-          setVoiceState('ready');
-        }
-      };
-
-      recorder.start();
-      setVoiceState('listening');
+      // Speak greeting, and as soon as it ends, start listening hands-free!
+      speakText(initialGreeting, () => {
+        resumeListeningAfterAnswer();
+      });
     } catch (micErr) {
-      setErrorMessage('Microphone access is required. Please check your browser permissions.');
-      setVoiceState('ready');
+      console.error('[Microphone Access Error]:', micErr);
+      setCallStatus('idle');
+      setVoiceState('idle');
+      setErrorMessage('Microphone access was denied. Please enable your microphone to start the call.');
     }
   };
 
-  // Stop recording button click
-  const handleMicButtonClick = () => {
-    if (voiceState === 'listening') {
-      // User tapped mic to finish speaking
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-    } else if (voiceState === 'speaking') {
-      // User tapped mic while assistant was speaking: Interrupt & listen
-      stopSpeaking();
-      startListening();
-    } else if (voiceState === 'ready') {
-      startListening();
+  // End Call Handler
+  const handleEndCall = () => {
+    isCallActiveRef.current = false;
+    clearTimeout(silenceTimerRef.current);
+
+    stopSpeaking();
+
+    // 1. Stop SpeechRecognition
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
+    }
+
+    // 2. Stop audio tracks
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(t => t.stop());
+      micStreamRef.current = null;
+    }
+
+    // 3. Stop visualizer animation
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+
+    // 4. Close audio context
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try { audioContextRef.current.close(); } catch {}
+      audioContextRef.current = null;
+    }
+
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+
+    setCallStatus('ended');
+    setVoiceState('idle');
+    setVolumeLevel(0);
+    setInterimTranscript('');
+  };
+
+  // Reset to idle pre-call screen
+  const handleResetToPreCall = () => {
+    handleEndCall();
+    setCallStatus('idle');
+    setCallDuration(0);
+  };
+
+  // Toggle Microphone Mute
+  const handleToggleMicMute = () => {
+    if (!micStreamRef.current) return;
+    const newMuted = !micMuted;
+    setMicMuted(newMuted);
+    micStreamRef.current.getAudioTracks().forEach(t => {
+      t.enabled = !newMuted;
+    });
+    if (newMuted) {
+      setVoiceState('muted');
+    } else {
+      setVoiceState('listening');
     }
   };
 
-  // Initial trigger if modal opened with query
-  useEffect(() => {
-    if (isOpen && initialQuery) {
-      submitVoiceQuery(initialQuery);
-    }
-  }, [isOpen, initialQuery, submitVoiceQuery]);
+  // Full Close Modal
+  const handleClose = () => {
+    handleEndCall();
+    setCallStatus('idle');
+    setCallDuration(0);
+    onClose();
+  };
 
   if (!isOpen) return null;
-
-  // Determine status text based on state
-  let statusHeadline = 'How can I help you?';
-  let statusSubline = 'Press the microphone and ask in Urdu, English or Roman Urdu';
-  let ringColor = 'rgba(56, 189, 248, 0.4)';
-  let glowEffect = '0 0 25px rgba(56, 189, 248, 0.35)';
-
-  if (voiceState === 'listening') {
-    statusHeadline = 'Listening...';
-    statusSubline = interimTranscript ? `"${interimTranscript}"` : 'Aapki baat sun raha hoon... speak naturally';
-    ringColor = 'rgba(34, 197, 94, 0.8)';
-    glowEffect = `0 0 ${30 + volumeLevel * 0.4}px rgba(34, 197, 94, 0.6)`;
-  } else if (voiceState === 'processing') {
-    statusHeadline = 'Understanding your request...';
-    statusSubline = 'Searching live database and calculating verified details...';
-    ringColor = 'rgba(168, 85, 247, 0.8)';
-    glowEffect = '0 0 35px rgba(168, 85, 247, 0.6)';
-  } else if (voiceState === 'speaking') {
-    statusHeadline = 'Rota Assistant is speaking...';
-    statusSubline = 'Tap Stop Speaking or ask another question anytime';
-    ringColor = 'rgba(14, 165, 233, 0.9)';
-    glowEffect = '0 0 40px rgba(14, 165, 233, 0.7)';
-  }
 
   return (
     <div style={{
@@ -612,62 +738,74 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
       left: 0,
       right: 0,
       bottom: 0,
-      zIndex: 9999,
+      zIndex: 99999,
+      backgroundColor: '#070b19',
+      backgroundImage: 'radial-gradient(ellipse at 50% 15%, #1e1b4b 0%, #070b19 75%)',
       display: 'flex',
       flexDirection: 'column',
-      background: 'radial-gradient(ellipse at 50% 20%, #0d1b3e 0%, #080e1e 65%, #040711 100%)',
       color: '#ffffff',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      boxSizing: 'border-box',
-      overflow: 'hidden'
+      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+      animation: 'fadeIn 0.25s ease-out'
     }}>
-      {/* ── TOP HEADER ────────────────────────────────────────────────────────── */}
+      {/* ── HEADER NAVIGATION & STATUS ───────────────────────────────────────── */}
       <header style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '16px 24px',
         borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        backdropFilter: 'blur(10px)',
-        background: 'rgba(8, 14, 30, 0.7)',
+        background: 'rgba(7, 11, 25, 0.85)',
+        backdropFilter: 'blur(12px)',
         zIndex: 10
       }}>
-        {/* Brand & Logo */}
+        {/* Branding & Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img
             src={rotaLogo}
-            alt="Rota System Logo"
+            alt="Rota System"
             style={{
-              width: '38px',
               height: '38px',
+              width: 'auto',
               objectFit: 'contain',
-              filter: 'drop-shadow(0 0 10px rgba(56, 189, 248, 0.5))'
+              filter: 'drop-shadow(0 2px 8px rgba(56, 189, 248, 0.3))'
             }}
           />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.5px', color: '#f8fafc' }}>
-                ROTA VOICE ASSISTANT
+              <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '0.5px' }}>
+                ROTA PHONE ASSISTANT
               </span>
               <span style={{
                 fontSize: '10px',
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: '12px',
-                background: 'linear-gradient(135deg, #0ea5e9, #8b5cf6)',
+                background: callStatus === 'connected' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #0ea5e9, #8b5cf6)',
                 color: '#ffffff',
-                textTransform: 'uppercase'
+                textTransform: 'uppercase',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
               }}>
-                Urdu + English
+                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  animation: callStatus === 'connected' ? 'ping 1.5s infinite' : 'none'
+                }} />
+                {callStatus === 'connected' ? 'Live Call' : 'Phone Mode'}
               </span>
             </div>
             <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-              Smart Workforce, Attendance & Payroll Conversational AI
+              {callStatus === 'connected'
+                ? `Call in progress • ${formatCallTimer(callDuration)} • Hands-Free Continuous`
+                : 'Real-Time Conversational Call • English + Urdu + Roman Urdu'}
             </span>
           </div>
         </div>
 
-        {/* Header Controls */}
+        {/* Top Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Language Selector */}
           <div style={{
@@ -675,21 +813,22 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
             alignItems: 'center',
             gap: '4px',
             background: 'rgba(255, 255, 255, 0.06)',
-            padding: '4px 8px',
+            padding: '5px 10px',
             borderRadius: '20px',
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
             <Globe size={14} color="#38bdf8" />
             <select
               value={languageMode}
+              disabled={callStatus === 'connected'}
               onChange={(e) => setLanguageMode(e.target.value)}
               style={{
                 background: 'transparent',
                 border: 'none',
                 color: '#e2e8f0',
-                fontSize: '11px',
+                fontSize: '11.5px',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: callStatus === 'connected' ? 'not-allowed' : 'pointer',
                 outline: 'none'
               }}
             >
@@ -699,34 +838,10 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
             </select>
           </div>
 
-          {/* Mute / Unmute */}
+          {/* Close Window */}
           <button
-            onClick={() => {
-              if (!audioMuted && voiceState === 'speaking') stopSpeaking();
-              setAudioMuted(!audioMuted);
-            }}
-            title={audioMuted ? "Unmute Voice" : "Mute Voice"}
-            style={{
-              background: audioMuted ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-              border: audioMuted ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%',
-              width: '36px',
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: audioMuted ? '#f87171' : '#cbd5e1',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            {audioMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-          </button>
-
-          {/* Close Modal */}
-          <button
-            onClick={handleClose}
-            title="Close Voice Assistant (Esc)"
+            onClick={callStatus === 'connected' ? handleEndCall : handleClose}
+            title="Close / Exit"
             style={{
               background: 'rgba(255, 255, 255, 0.06)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -745,378 +860,706 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
         </div>
       </header>
 
-      {/* ── MAIN CONTENT AREA ─────────────────────────────────────────────────── */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflowY: 'auto',
-        padding: '20px 24px',
-        position: 'relative',
-        boxSizing: 'border-box'
-      }}>
-        {/* Central Visualizer & Hero Section */}
+      {/* ── PRE-CALL DIALER SCREEN (Before the call) ─────────────────────────── */}
+      {callStatus === 'idle' && (
         <div style={{
+          flex: 1,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '20px 0 30px',
+          padding: '24px',
+          textAlign: 'center',
+          maxWidth: '560px',
+          margin: '0 auto',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
+          {/* Logo & Ambient Glow */}
+          <div style={{
+            position: 'relative',
+            width: '120px',
+            height: '120px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(124, 58, 237, 0.2))',
+            border: '2px solid rgba(56, 189, 248, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px',
+            boxShadow: '0 0 40px rgba(56, 189, 248, 0.25)'
+          }}>
+            <img
+              src={rotaLogo}
+              alt="Rota System Logo"
+              style={{ width: '70px', height: 'auto', objectFit: 'contain' }}
+            />
+          </div>
+
+          <h2 style={{ fontSize: '26px', fontWeight: 800, margin: '0 0 8px', letterSpacing: '0.3px' }}>
+            AI Workforce Voice Call
+          </h2>
+          <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 28px', lineHeight: 1.6 }}>
+            Experience natural, hands-free phone conversation with the Pixx Rota System.
+            Ask about any worker, shop, daily attendance, rota shifts, or weekly salaries in English or Urdu.
+          </p>
+
+          {/* Large START CALL Button */}
+          <button
+            onClick={handleStartCall}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              padding: '16px 42px',
+              borderRadius: '36px',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              fontSize: '18px',
+              fontWeight: 800,
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 0 35px rgba(16, 185, 129, 0.55)',
+              transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              letterSpacing: '0.4px'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1.0)'}
+          >
+            <PhoneCall size={24} />
+            <span>Start Call / کال شروع کریں</span>
+          </button>
+
+          {/* Feature Highlights */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '12px',
+            marginTop: '36px',
+            width: '100%',
+            textAlign: 'left'
+          }}>
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '12px 14px',
+              borderRadius: '12px'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#38bdf8', marginBottom: '4px' }}>
+                🎙️ Hands-Free
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.4 }}>
+                Click once. Assistant listens and responds continuously.
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '12px 14px',
+              borderRadius: '12px'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#a855f7', marginBottom: '4px' }}>
+                ⚡ Interruption
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.4 }}>
+                Interrupt anytime by speaking over the assistant.
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '12px 14px',
+              borderRadius: '12px'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#34d399', marginBottom: '4px' }}>
+                🌐 Multilingual
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.4 }}>
+                Speaks and understands Urdu, English, and Roman Urdu.
+              </div>
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div style={{
+              marginTop: '20px',
+              padding: '10px 16px',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '10px',
+              color: '#fca5a5',
+              fontSize: '12px'
+            }}>
+              {errorMessage}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── CALL CONNECTING STATE ────────────────────────────────────────────── */}
+      {callStatus === 'connecting' && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px'
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            animation: 'pulse 1.5s infinite'
+          }}>
+            <Phone size={36} color="#ffffff" />
+          </div>
+          <h3 style={{ fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>Connecting Voice Call...</h3>
+          <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>Establishing secure microphone audio stream</p>
+        </div>
+      )}
+
+      {/* ── CALL ENDED SUMMARY SCREEN ────────────────────────────────────────── */}
+      {callStatus === 'ended' && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
           textAlign: 'center'
         }}>
-          {/* Animated Glowing Microphone Orb */}
-          <div style={{ position: 'relative', width: '130px', height: '130px', marginBottom: '20px' }}>
-            {/* Outer Pulsing Wave Ring */}
-            <div style={{
-              position: 'absolute',
-              top: '-15px',
-              left: '-15px',
-              right: '-15px',
-              bottom: '-15px',
-              borderRadius: '50%',
-              border: `2px solid ${ringColor}`,
-              boxShadow: glowEffect,
-              opacity: voiceState === 'listening' || voiceState === 'speaking' ? 0.8 : 0.25,
-              animation: voiceState === 'listening' || voiceState === 'speaking' ? 'pulse 1.8s infinite' : 'none',
-              transition: 'all 0.3s ease'
-            }} />
-
-            {/* Inner Interactive Button */}
+          <div style={{
+            width: '70px',
+            height: '70px',
+            borderRadius: '50%',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '2px solid rgba(239, 68, 68, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '16px'
+          }}>
+            <PhoneOff size={32} color="#f87171" />
+          </div>
+          <h3 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 6px' }}>Call Ended</h3>
+          <p style={{ fontSize: '13.5px', color: '#94a3b8', margin: '0 0 24px' }}>
+            Call duration: {formatCallTimer(callDuration)} • {messages.length - 1} questions answered
+          </p>
+          <div style={{ display: 'flex', gap: '12px' }}>
             <button
-              onClick={handleMicButtonClick}
-              title={
-                voiceState === 'listening'
-                  ? "Tap to send speech"
-                  : voiceState === 'speaking'
-                  ? "Interrupt and speak"
-                  : "Tap to speak"
-              }
+              onClick={handleStartCall}
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 28px',
+                borderRadius: '24px',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              <PhoneCall size={18} />
+              Call Again
+            </button>
+            <button
+              onClick={handleClose}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '24px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#cbd5e1',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── ACTIVE CALL INTERFACE (During the call) ───────────────────────────── */}
+      {callStatus === 'connected' && (
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflowY: 'auto',
+          padding: '16px 24px 100px',
+          boxSizing: 'border-box'
+        }}>
+          {/* Main Calling Stage: Pulsing Calling Orb + Real-time Audio Waves */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px 0 20px',
+            textAlign: 'center'
+          }}>
+            {/* Animated Calling Orb */}
+            <div style={{
+              position: 'relative',
+              width: '120px',
+              height: '120px',
+              marginBottom: '16px'
+            }}>
+              {/* Outer Pulsing Soundwave Glow */}
+              <div style={{
+                position: 'absolute',
+                top: '-16px',
+                left: '-16px',
+                right: '-16px',
+                bottom: '-16px',
+                borderRadius: '50%',
+                border: voiceState === 'listening'
+                  ? '2px solid rgba(74, 222, 128, 0.5)'
+                  : voiceState === 'speaking'
+                  ? '2px solid rgba(168, 85, 247, 0.5)'
+                  : '2px solid rgba(56, 189, 248, 0.3)',
+                boxShadow: voiceState === 'listening'
+                  ? '0 0 30px rgba(74, 222, 128, 0.4)'
+                  : voiceState === 'speaking'
+                  ? '0 0 35px rgba(168, 85, 247, 0.5)'
+                  : '0 0 20px rgba(56, 189, 248, 0.25)',
+                animation: 'pulse 1.6s infinite'
+              }} />
+
+              {/* Inner Orb */}
+              <div style={{
                 width: '100%',
                 height: '100%',
                 borderRadius: '50%',
                 background: voiceState === 'listening'
                   ? 'linear-gradient(135deg, #15803d, #22c55e)'
                   : voiceState === 'speaking'
+                  ? 'linear-gradient(135deg, #7c3aed, #a855f7)'
+                  : voiceState === 'thinking'
                   ? 'linear-gradient(135deg, #0284c7, #38bdf8)'
-                  : 'linear-gradient(135deg, #1e1b4b, #312e81)',
-                border: '3px solid rgba(255, 255, 255, 0.2)',
+                  : 'linear-gradient(135deg, #334155, #475569)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#ffffff',
-                cursor: 'pointer',
-                boxShadow: glowEffect,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                transform: voiceState === 'listening' ? `scale(${1 + volumeLevel * 0.003})` : 'scale(1)'
-              }}
-            >
-              {voiceState === 'listening' ? (
-                <Mic size={52} color="#ffffff" />
-              ) : voiceState === 'speaking' ? (
-                <Volume2 size={52} color="#ffffff" />
-              ) : (
-                <Mic size={52} color="#38bdf8" />
-              )}
-            </button>
-          </div>
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+                transform: `scale(${1 + volumeLevel * 0.0035})`,
+                transition: 'transform 0.1s ease'
+              }}>
+                {voiceState === 'listening' ? (
+                  <Mic size={46} color="#ffffff" />
+                ) : voiceState === 'speaking' ? (
+                  <Volume2 size={46} color="#ffffff" />
+                ) : voiceState === 'thinking' ? (
+                  <Sparkles size={46} color="#ffffff" className="spin" />
+                ) : (
+                  <MicOff size={46} color="#ffffff" />
+                )}
+              </div>
+            </div>
 
-          {/* Dynamic Status Text */}
-          <h2 style={{
-            margin: '0 0 6px',
-            fontSize: '22px',
-            fontWeight: 800,
-            letterSpacing: '0.3px',
-            color: voiceState === 'listening' ? '#4ade80' : voiceState === 'speaking' ? '#38bdf8' : '#f8fafc'
-          }}>
-            {statusHeadline}
-          </h2>
-          <p style={{
-            margin: 0,
-            fontSize: '13px',
-            color: '#94a3b8',
-            maxWidth: '520px',
-            lineHeight: 1.5
-          }}>
-            {statusSubline}
-          </p>
+            {/* Dynamic Calling Status Headline */}
+            <h3 style={{
+              margin: '0 0 4px',
+              fontSize: '20px',
+              fontWeight: 800,
+              color: voiceState === 'listening'
+                ? '#4ade80'
+                : voiceState === 'speaking'
+                ? '#c084fc'
+                : voiceState === 'thinking'
+                ? '#38bdf8'
+                : '#f87171'
+            }}>
+              {voiceState === 'listening' && 'Listening to you... / میں سن رہا ہوں'}
+              {voiceState === 'speaking' && 'Assistant is speaking... (Speak to interrupt)'}
+              {voiceState === 'thinking' && 'Understanding your question... / سمجھ رہا ہوں'}
+              {voiceState === 'muted' && 'Microphone Muted / مائیک بند ہے'}
+            </h3>
 
-          {/* INTERRUPT / STOP SPEAKING BUTTON (Prominently visible when speaking) */}
-          {voiceState === 'speaking' && (
-            <div style={{ marginTop: '16px' }}>
+            {/* Real-time Frequency Waveform Visualizer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              height: '24px',
+              marginTop: '8px'
+            }}>
+              {[20, 45, 75, 95, 60, 85, 100, 70, 90, 50, 80, 30].map((h, i) => {
+                const liveH = voiceState === 'listening'
+                  ? Math.max(6, Math.min(24, Math.round((volumeLevel / 100) * h)))
+                  : voiceState === 'speaking'
+                  ? Math.max(8, Math.min(24, Math.round((Math.sin((Date.now() / 150) + i) + 1) * 11)))
+                  : 4;
+                return (
+                  <span
+                    key={i}
+                    style={{
+                      width: '3.5px',
+                      height: `${liveH}px`,
+                      borderRadius: '2px',
+                      background: voiceState === 'listening' ? '#4ade80' : voiceState === 'speaking' ? '#c084fc' : '#475569',
+                      transition: 'height 0.08s ease'
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Live Interim Speech Bubble (What user is currently saying) */}
+            {voiceState === 'listening' && interimTranscript && (
+              <div style={{
+                marginTop: '12px',
+                padding: '8px 16px',
+                borderRadius: '16px',
+                background: 'rgba(30, 58, 138, 0.4)',
+                border: '1px solid rgba(96, 165, 250, 0.4)',
+                color: '#93c5fd',
+                fontSize: '13px',
+                fontStyle: 'italic',
+                maxWidth: '560px'
+              }}>
+                "{interimTranscript}"
+              </div>
+            )}
+
+            {/* Manual Interrupt Button (Also triggers automatically on voice) */}
+            {voiceState === 'speaking' && (
               <button
                 onClick={stopSpeaking}
                 style={{
+                  marginTop: '12px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  background: 'linear-gradient(135deg, #dc2626, #ef4444)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '24px',
-                  padding: '8px 20px',
-                  fontSize: '13px',
+                  gap: '6px',
+                  padding: '6px 16px',
+                  borderRadius: '20px',
+                  background: 'rgba(239, 68, 68, 0.25)',
+                  border: '1px solid rgba(239, 68, 68, 0.5)',
+                  color: '#fca5a5',
+                  fontSize: '12px',
                   fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 0 20px rgba(239, 68, 68, 0.5)',
-                  transition: 'transform 0.15s ease'
+                  cursor: 'pointer'
                 }}
               >
-                <Square size={14} fill="#ffffff" />
-                Stop Speaking
+                <Square size={12} fill="#fca5a5" />
+                Tap to Interrupt (or speak directly)
               </button>
+            )}
+          </div>
+
+          {/* ── CONVERSATION TRANSCRIPT (Scrollable Cards) ──────────────────────── */}
+          {showTranscript && (
+            <div style={{
+              flex: 1,
+              maxWidth: '720px',
+              width: '100%',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              {messages.map((m) => {
+                const isUser = m.role === 'user';
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: 'flex',
+                      gap: '10px',
+                      alignSelf: isUser ? 'flex-end' : 'flex-start',
+                      maxWidth: '88%',
+                      flexDirection: isUser ? 'row-reverse' : 'row'
+                    }}
+                  >
+                    <div style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '50%',
+                      background: isUser ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {isUser ? <User size={15} color="#fff" /> : <Bot size={15} color="#fff" />}
+                    </div>
+
+                    <div style={{
+                      background: isUser ? 'linear-gradient(135deg, #1e3a8a, #1e40af)' : 'rgba(15, 23, 42, 0.75)',
+                      border: isUser ? '1px solid rgba(96, 165, 250, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                      padding: '10px 14px',
+                      backdropFilter: 'blur(8px)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: isUser ? '#93c5fd' : '#c084fc' }}>
+                          {isUser ? 'You' : 'Rota Assistant'}
+                        </span>
+                        {!isUser && m.spokenSummary && !speakerMuted && (
+                          <button
+                            onClick={() => speakText(m.spokenSummary, resumeListeningAfterAnswer)}
+                            title="Replay Voice"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#38bdf8',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Volume2 size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      <SimpleMarkdown content={m.content} />
+
+                      {/* PDF Report Download */}
+                      {m.pdfReport && (
+                        <div style={{ marginTop: '8px' }}>
+                          <a
+                            href={`${API_BASE_URL}/ai/download-report/${m.pdfReport.token}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 12px',
+                              background: 'linear-gradient(135deg, #dc2626, #ef4444)',
+                              color: '#ffffff',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <Download size={13} />
+                            Download {m.pdfReport.fileName || 'PDF Report'}
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Excel Sheet Download */}
+                      {m.excelReport && (
+                        <div style={{ marginTop: '8px' }}>
+                          <a
+                            href={`${API_BASE_URL}/ai/download-report/${m.excelReport.token}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 12px',
+                              background: 'linear-gradient(135deg, #15803d, #22c55e)',
+                              color: '#ffffff',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <Download size={13} />
+                            Download {m.excelReport.fileName || 'Excel Sheet'}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
             </div>
           )}
+        </div>
+      )}
 
-          {/* Error Banner */}
-          {errorMessage && (
-            <div style={{
-              marginTop: '16px',
-              padding: '10px 16px',
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              borderRadius: '10px',
-              color: '#fca5a5',
-              fontSize: '12px',
+      {/* ── CALL ACTION DOCK (Fixed Bottom Controls during Call) ─────────────── */}
+      {callStatus === 'connected' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '16px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 100,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          background: 'rgba(15, 23, 42, 0.92)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          padding: '10px 20px',
+          borderRadius: '40px',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(16px)'
+        }}>
+          {/* Mute Microphone */}
+          <button
+            onClick={handleToggleMicMute}
+            title={micMuted ? "Unmute Microphone" : "Mute Microphone"}
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: micMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+              border: micMuted ? '1px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: micMuted ? '#f87171' : '#ffffff',
+              cursor: 'pointer'
+            }}
+          >
+            {micMuted ? <MicOff size={18} /> : <Mic size={18} />}
+          </button>
+
+          {/* Mute Speaker */}
+          <button
+            onClick={() => {
+              if (!speakerMuted && voiceState === 'speaking') stopSpeaking();
+              setSpeakerMuted(!speakerMuted);
+            }}
+            title={speakerMuted ? "Unmute Assistant Speaker" : "Mute Assistant Speaker"}
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: speakerMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+              border: speakerMuted ? '1px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: speakerMuted ? '#f87171' : '#ffffff',
+              cursor: 'pointer'
+            }}
+          >
+            {speakerMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+
+          {/* Speech Rate Toggle (1.0x / 0.85x) */}
+          <button
+            onClick={() => setSpeechSpeed(speechSpeed === 1.0 ? 0.85 : 1.0)}
+            title="Speech Speed"
+            style={{
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: speechSpeed < 1.0 ? 'rgba(14, 165, 233, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+              border: speechSpeed < 1.0 ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.15)',
+              color: speechSpeed < 1.0 ? '#38bdf8' : '#cbd5e1',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <Gauge size={13} />
+            <span>{speechSpeed === 1.0 ? '1.0x' : '0.85x'}</span>
+          </button>
+
+          {/* Text Input Toggle Fallback */}
+          <button
+            onClick={() => setShowTextInput(!showTextInput)}
+            title="Toggle Text Drawer"
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: showTextInput ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+              border: showTextInput ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              cursor: 'pointer'
+            }}
+          >
+            <MessageSquare size={18} />
+          </button>
+
+          {/* BIG RED END CALL BUTTON */}
+          <button
+            onClick={handleEndCall}
+            title="End Call / کال ختم کریں"
+            style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              maxWidth: '540px'
-            }}>
-              <AlertCircle size={16} />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+              padding: '10px 22px',
+              borderRadius: '30px',
+              background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 800,
+              fontSize: '13.5px',
+              cursor: 'pointer',
+              boxShadow: '0 0 25px rgba(220, 38, 38, 0.55)',
+              letterSpacing: '0.3px'
+            }}
+          >
+            <PhoneOff size={18} />
+            <span>End Call</span>
+          </button>
         </div>
+      )}
 
-        {/* ── CONVERSATION TRANSCRIPT ─────────────────────────────────────────── */}
+      {/* ── TEXT INPUT FALLBACK DRAWER ───────────────────────────────────────── */}
+      {callStatus === 'connected' && showTextInput && (
         <div style={{
-          flex: 1,
-          maxWidth: '780px',
-          width: '100%',
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '14px',
-          paddingBottom: '20px'
+          position: 'fixed',
+          bottom: '80px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '90%',
+          maxWidth: '600px',
+          zIndex: 110,
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          borderRadius: '16px',
+          padding: '10px 14px',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)'
         }}>
-          {messages.map((m) => {
-            const isUser = m.role === 'user';
-            return (
-              <div
-                key={m.id}
-                style={{
-                  display: 'flex',
-                  gap: '12px',
-                  alignSelf: isUser ? 'flex-end' : 'flex-start',
-                  maxWidth: '88%',
-                  flexDirection: isUser ? 'row-reverse' : 'row'
-                }}
-              >
-                {/* Avatar Icon */}
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  background: isUser ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'linear-gradient(135deg, #7c3aed, #a855f7)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                }}>
-                  {isUser ? <User size={16} color="#fff" /> : <Bot size={16} color="#fff" />}
-                </div>
-
-                {/* Message Bubble */}
-                <div style={{
-                  background: isUser
-                    ? 'linear-gradient(135deg, #1e3a8a, #1e40af)'
-                    : 'rgba(15, 23, 42, 0.75)',
-                  border: isUser
-                    ? '1px solid rgba(96, 165, 250, 0.3)'
-                    : '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-                  padding: '12px 16px',
-                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
-                  backdropFilter: 'blur(8px)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: isUser ? '#93c5fd' : '#c084fc' }}>
-                      {isUser ? 'You' : 'Rota Assistant'}
-                    </span>
-                    {!isUser && m.spokenSummary && !audioMuted && (
-                      <button
-                        onClick={() => speakText(m.spokenSummary)}
-                        title="Replay Voice Response"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#38bdf8',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          padding: '2px',
-                          marginLeft: '8px'
-                        }}
-                      >
-                        <Volume2 size={13} />
-                      </button>
-                    )}
-                  </div>
-
-                  <SimpleMarkdown content={m.content} />
-
-                  {/* PDF Download Button */}
-                  {m.pdfReport && (
-                    <div style={{ marginTop: '10px' }}>
-                      <a
-                        href={`${API_BASE_URL}/ai/download-report/${m.pdfReport.token}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 14px',
-                          background: 'linear-gradient(135deg, #dc2626, #ef4444)',
-                          color: '#ffffff',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          textDecoration: 'none',
-                          boxShadow: '0 2px 8px rgba(220, 38, 38, 0.4)'
-                        }}
-                      >
-                        <Download size={14} />
-                        Download {m.pdfReport.fileName || 'PDF Report'}
-                      </a>
-                    </div>
-                  )}
-
-                  {/* Excel Download Button */}
-                  {m.excelReport && (
-                    <div style={{ marginTop: '10px' }}>
-                      <a
-                        href={`${API_BASE_URL}/ai/download-report/${m.excelReport.token}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 14px',
-                          background: 'linear-gradient(135deg, #15803d, #22c55e)',
-                          color: '#ffffff',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          textDecoration: 'none',
-                          boxShadow: '0 2px 8px rgba(34, 197, 94, 0.4)'
-                        }}
-                      >
-                        <Download size={14} />
-                        Download {m.excelReport.fileName || 'Excel Sheet'}
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Real-time Interim Voice Speech Preview Bubble */}
-          {voiceState === 'listening' && interimTranscript && (
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              alignSelf: 'flex-end',
-              maxWidth: '85%'
-            }}>
-              <div style={{
-                background: 'rgba(30, 58, 138, 0.5)',
-                border: '1px dashed rgba(96, 165, 250, 0.6)',
-                borderRadius: '16px 4px 16px 16px',
-                padding: '10px 14px',
-                color: '#93c5fd',
-                fontSize: '13px',
-                fontStyle: 'italic'
-              }}>
-                <span style={{ fontSize: '10px', color: '#60a5fa', display: 'block', marginBottom: '2px' }}>Listening...</span>
-                "{interimTranscript}"
-              </div>
-            </div>
-          )}
-
-          {/* Thinking / Searching database indicator */}
-          {voiceState === 'processing' && (
-            <div style={{ display: 'flex', gap: '10px', alignSelf: 'flex-start', alignItems: 'center' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Sparkles size={16} color="#fff" />
-              </div>
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.75)',
-                padding: '8px 14px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                color: '#c084fc',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#a855f7', animation: 'ping 1s infinite' }} />
-                Checking database and calculating answer...
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* ── FOOTER INTERACTION BAR ───────────────────────────────────────────── */}
-      <footer style={{
-        padding: '12px 20px',
-        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'rgba(8, 14, 30, 0.85)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        zIndex: 10
-      }}>
-        {/* Optional text input fallback */}
-        {showTextInput ? (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               if (textInput.trim()) {
                 submitVoiceQuery(textInput);
                 setTextInput('');
+                setShowTextInput(false);
               }
             }}
-            style={{ display: 'flex', gap: '8px', maxWidth: '780px', width: '100%', margin: '0 auto' }}
+            style={{ display: 'flex', gap: '8px' }}
           >
             <input
               type="text"
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Or type your question in Urdu / English..."
+              placeholder="Type your question if in a noisy room..."
               autoFocus
               style={{
                 flex: 1,
-                background: 'rgba(15, 23, 42, 0.8)',
+                background: 'rgba(30, 41, 59, 0.8)',
                 border: '1px solid rgba(255, 255, 255, 0.15)',
-                borderRadius: '10px',
-                padding: '10px 14px',
+                borderRadius: '8px',
+                padding: '8px 12px',
                 color: '#ffffff',
                 fontSize: '13px',
                 outline: 'none'
@@ -1126,88 +1569,35 @@ export default function VoiceAssistantModal({ isOpen, onClose, initialQuery = ''
               type="submit"
               disabled={!textInput.trim()}
               style={{
+                padding: '0 16px',
                 background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
                 border: 'none',
-                borderRadius: '10px',
-                padding: '0 16px',
+                borderRadius: '8px',
                 color: '#ffffff',
                 cursor: textInput.trim() ? 'pointer' : 'default',
                 opacity: textInput.trim() ? 1 : 0.5
               }}
             >
-              <Send size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTextInput(false)}
-              style={{
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '10px',
-                padding: '0 12px',
-                color: '#cbd5e1',
-                cursor: 'pointer'
-              }}
-            >
-              <X size={16} />
+              <Send size={15} />
             </button>
           </form>
-        ) : (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            maxWidth: '780px',
-            width: '100%',
-            margin: '0 auto'
-          }}>
-            <button
-              onClick={() => setShowTextInput(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                fontSize: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              <MessageSquare size={14} />
-              Prefer to type? Click here
-            </button>
+        </div>
+      )}
 
-            <span style={{ fontSize: '11px', color: '#64748b' }}>
-              Pixx Technologies Ltd • Voice Assistant
-            </span>
-
-            <button
-              onClick={() => setMessages(messages.slice(0, 1))}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                fontSize: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              <RotateCcw size={14} />
-              Clear Chat
-            </button>
-          </div>
-        )}
-      </footer>
-
-      {/* Embedded CSS animation for microphone wave pulse */}
+      {/* Embedded CSS animations */}
       <style>{`
         @keyframes pulse {
           0% { transform: scale(1); opacity: 0.8; }
-          50% { transform: scale(1.08); opacity: 0.4; }
+          50% { transform: scale(1.06); opacity: 0.4; }
           100% { transform: scale(1); opacity: 0.8; }
+        }
+        @keyframes ping {
+          0% { transform: scale(1); opacity: 1; }
+          75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.98); }
+          to { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>

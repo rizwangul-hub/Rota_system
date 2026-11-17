@@ -14,7 +14,8 @@ import {
   Trash2,
   Minimize2,
   Maximize2,
-  Mic
+  Mic,
+  PhoneCall
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../context/AuthContext';
@@ -306,9 +307,9 @@ export default function AiAssistantWidget() {
                   setIsOpen(false);
                   setIsVoiceOpen(true);
                 }}
-                title="Switch to Voice Conversation (Urdu + English)"
+                title="Switch to Hands-Free Voice Call (Urdu + English)"
                 style={{
-                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
                   border: 'none',
                   color: '#ffffff',
                   padding: '3px 8px',
@@ -319,11 +320,11 @@ export default function AiAssistantWidget() {
                   gap: '4px',
                   fontSize: '11px',
                   fontWeight: 700,
-                  boxShadow: '0 2px 6px rgba(124, 58, 237, 0.35)'
+                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)'
                 }}
               >
-                <Mic size={12} />
-                <span>Voice</span>
+                <PhoneCall size={12} />
+                <span>Call</span>
               </button>
 
               <button
@@ -567,22 +568,22 @@ export default function AiAssistantWidget() {
                 setIsOpen(false);
                 setIsVoiceOpen(true);
               }}
-              title="Voice Mode (Urdu + English)"
+              title="Start Hands-Free Voice Call"
               style={{
                 width: '36px',
                 height: '36px',
                 borderRadius: '8px',
-                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
                 color: '#ffffff',
                 border: 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)'
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)'
               }}
             >
-              <Mic size={15} />
+              <PhoneCall size={15} />
             </button>
             <button
               type="button"

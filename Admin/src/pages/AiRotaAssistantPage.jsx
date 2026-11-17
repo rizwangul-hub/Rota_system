@@ -20,7 +20,8 @@ import {
   Bot,
   ChevronDown,
   ChevronUp,
-  Mic
+  Mic,
+  PhoneCall
 } from 'lucide-react';
 import { API_BASE_URL } from '../context/AuthContext';
 import VoiceAssistantModal from '../components/VoiceAssistantModal';
@@ -403,25 +404,25 @@ export default function AiRotaAssistantPage() {
           <button
             type="button"
             onClick={() => setIsVoiceOpen(true)}
-            title="Open Voice Assistant (Urdu + English + Roman Urdu)"
+            title="Start Hands-Free Voice Call (Urdu + English + Roman Urdu)"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '5px 12px',
               borderRadius: '8px',
-              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
               color: '#ffffff',
               fontSize: '11.5px',
               fontWeight: 700,
               border: 'none',
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
               transition: 'all 0.15s ease'
             }}
           >
-            <Mic size={14} />
-            <span>Voice Mode / بول کر بات کریں</span>
+            <PhoneCall size={14} />
+            <span>Voice Call / لائیو فون کال</span>
           </button>
 
           <button
@@ -848,23 +849,23 @@ export default function AiRotaAssistantPage() {
         <button
           type="button"
           onClick={() => setIsVoiceOpen(true)}
-          title="Open Voice Assistant (Speak your query)"
+          title="Start Hands-Free Voice Call"
           style={{
             height: '40px',
             width: '40px',
             borderRadius: '10px',
-            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+            background: 'linear-gradient(135deg, #10b981, #059669)',
             color: '#ffffff',
             border: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
             flexShrink: 0
           }}
         >
-          <Mic size={18} />
+          <PhoneCall size={18} />
         </button>
 
         <button

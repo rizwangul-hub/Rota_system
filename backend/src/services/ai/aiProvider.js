@@ -565,7 +565,7 @@ function createSpokenSummary(finalMessage, toolResults = [], originalQuery = '')
   // If greeting or help
   if (isGreetingOrHelp(q)) {
     if (isUrdu) {
-      return "Salam! Main Pixx Rota Assistant hoon. Aap kisi bhi worker, shop ya attendance ke bare mein pooch sakte hain.";
+      return "Wa-Alaikum-Assalam! Main Pixx Rota Assistant hoon. Aap kaise hain aur aaj main aap ki kya madad kar sakta hoon?";
     }
     return "Hello! I am your AI Workforce and Finance Assistant for Pixx Rota System. How can I help you today?";
   }
@@ -598,23 +598,39 @@ function createSpokenSummary(finalMessage, toolResults = [], originalQuery = '')
       return `${wName} has ${count} attendance records logged with ${lateMins} minutes of lateness.`;
     }
 
-    if (first.name === 'getShopDailyAttendance' && res?.attendance) {
-      const present = res.summary?.present || 0;
-      const late = res.summary?.late || 0;
-      const shop = res.shopName || 'Shop';
+    if (first.name === 'getShopDailyAttendance') {
+      const shop = res?.shopName || 'Shop';
+      const workers = res?.workers || [];
+      const totalWorkers = res?.summary?.workersPresent ?? workers.length;
+      const lateWorkers = workers.filter(w => (w.lateMinutes || 0) > 0 || w.status === 'Late').length;
       if (isUrdu) {
-        return `${shop} par ${present} workers present thay aur ${late} worker late aye.`;
+        return `${shop} par ${totalWorkers} workers duty par hain aur ${lateWorkers} worker late aye.`;
       }
-      return `At ${shop}, ${present} workers were present and ${late} arrived late.`;
+      return `At ${shop}, ${totalWorkers} workers are scheduled and ${lateWorkers} arrived late.`;
     }
 
-    if (first.name === 'getWorkerSalaryAndPayroll' && res?.salary) {
-      const s = res.salary;
-      const wName = s.employeeName || 'Worker';
+    if (first.name === 'getDailyAttendanceOverview') {
+      const s = res?.summary || {};
+      const shopLabel = res?.filterShop && res?.filterShop !== 'All Shops' ? `at ${res.filterShop}` : 'across all shops';
+      const shopLabelUrdu = res?.filterShop && res?.filterShop !== 'All Shops' ? `${res.filterShop} par` : 'tamam shops par';
+      const total = s.totalLogged || (res?.records ? res.records.length : 0);
+      const present = s.present || 0;
+      const late = s.late || 0;
+      const absent = s.absent || 0;
       if (isUrdu) {
-        return `${wName} ki weekly salary ${s.finalSalary} pounds hai, ${s.totalHours} ghante kaam ke liye.`;
+        return `Aaj ${shopLabelUrdu} total ${total} workers hain, ${present} present, ${late} late, aur ${absent} absent hain.`;
       }
-      return `${wName}'s total weekly salary is ${s.finalSalary} for ${s.totalHours} hours worked.`;
+      return `Today ${shopLabel}, there are ${total} attendance records logged: ${present} present, ${late} late, and ${absent} absent.`;
+    }
+
+    if (first.name === 'getWorkerSalaryAndPayroll' && (res?.salary || res?.summary)) {
+      const s = res.salary || res.summary;
+      const wName = res.workerName || s.employeeName || 'Worker';
+      const finalSal = s.totalFinalSalary || s.finalSalary || '£0.00';
+      if (isUrdu) {
+        return `${wName} ki weekly salary ${finalSal} hai.`;
+      }
+      return `${wName}'s total weekly salary is ${finalSal}.`;
     }
   }
 
