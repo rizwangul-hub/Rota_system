@@ -19,7 +19,11 @@ const ROUTE_TITLES = {
   '/bonuses': { title: 'Sales Commission', parent: 'Payroll', parentPath: '/salaries' },
   '/distributor': { title: "Arsalan's Dashboard", parent: 'Payroll', parentPath: '/distributor' },
   '/reports': { title: 'Reports & Analytics', parent: 'System', parentPath: '/reports' },
-  '/audit': { title: 'Audit Trail', parent: 'System', parentPath: '/audit' }
+  '/audit': { title: 'Audit Trail', parent: 'System', parentPath: '/audit' },
+  '/worker-accounts': { title: 'Worker Portal Access', parent: 'Staff', parentPath: '/employees' },
+  '/leaves': { title: 'Leave Management', parent: 'Staff', parentPath: '/employees' },
+  '/announcements': { title: 'Company Announcements', parent: 'Staff', parentPath: '/employees' },
+  '/verify-id': { title: 'ID Pass Verification', parent: 'Staff', parentPath: '/employees' }
 };
 
 export default function Navbar() {

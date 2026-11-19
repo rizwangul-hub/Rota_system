@@ -28,6 +28,9 @@ const aiAssistantRoutes = require('./routes/aiAssistantRoutes');
 const workerAuthRoutes = require('./routes/workerAuthRoutes');
 const adminWorkerAccountRoutes = require('./routes/adminWorkerAccountRoutes');
 const workerRoutes = require('./routes/workerRoutes');
+const adminLeaveRoutes = require('./routes/adminLeaveRoutes');
+const adminAnnouncementRoutes = require('./routes/adminAnnouncementRoutes');
+const workerIdCardController = require('./controllers/workerIdCardController');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -164,6 +167,17 @@ app.use('/worker', workerRoutes);
 
 app.use('/api/admin/worker-accounts', adminWorkerAccountRoutes);
 app.use('/admin/worker-accounts', adminWorkerAccountRoutes);
+
+// Phase 6 Admin Routes
+app.use('/api/admin/leaves', adminLeaveRoutes);
+app.use('/admin/leaves', adminLeaveRoutes);
+
+app.use('/api/admin/announcements', adminAnnouncementRoutes);
+app.use('/admin/announcements', adminAnnouncementRoutes);
+
+// Phase 6 Public / Management ID Pass Verification
+app.get('/api/verify-id/:code', workerIdCardController.verifyIdCard);
+app.get('/verify-id/:code', workerIdCardController.verifyIdCard);
 
 // Health check
 app.get('/api/health', (req, res) => {

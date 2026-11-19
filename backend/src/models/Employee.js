@@ -219,6 +219,18 @@ const EmployeeSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
+  },
+
+  // --- Phase 6: Digital Employee ID Card & Verification ---
+  profilePicture: {
+    type: String,
+    default: null
+  },
+  qrVerificationCode: {
+    type: String,
+    sparse: true,
+    unique: true,
+    trim: true
   }
 }, { timestamps: true });
 

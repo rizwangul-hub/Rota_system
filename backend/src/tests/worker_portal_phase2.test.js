@@ -121,10 +121,15 @@ async function runPhase2Tests() {
     { expiresIn: '1h' }
   );
 
-  // Clean any test attendance / salaries / rotas
+  // Clean test data without destroying real database records
   await Attendance.deleteMany({ employee: { $in: [empA._id, empB._id] } });
   await WeeklySalary.deleteMany({ employee: { $in: [empA._id, empB._id] } });
-  await WeeklyRota.deleteMany({ weekStart: startDateString });
+  
+  // Safely back up existing real rota if present so tests never destroy production data
+  const existingActiveRota = await WeeklyRota.findOne({ weekStart: startDateString }).lean();
+  if (existingActiveRota) {
+    await WeeklyRota.deleteOne({ _id: existingActiveRota._id });
+  }
 
   try {
     // TEST 1: Dashboard loads for Worker A
@@ -329,10 +334,15 @@ async function runPhase2Tests() {
     console.log('ALL 10 WORKER PORTAL PHASE 2 TESTS PASSED SUCCESSFULLY!');
     console.log('======================================================\n');
   } finally {
-    // Cleanup test data
+    // Cleanup test data and restore backed-up real rota if existed
     await Attendance.deleteMany({ employee: { $in: [empA._id, empB._id] } });
     await WeeklySalary.deleteMany({ employee: { $in: [empA._id, empB._id] } });
     await WeeklyRota.deleteMany({ weekStart: startDateString });
+    if (existingActiveRota) {
+      delete existingActiveRota._id;
+      delete existingActiveRota.__v;
+      await WeeklyRota.create(existingActiveRota);
+    }
     await User.deleteMany({ email: { $in: ['alice.worker@pixxrota.com', 'bob.worker@pixxrota.com'] } });
     await Employee.deleteMany({ employeeId: { $in: ['TEST_P2_WKRA', 'TEST_P2_WKRB'] } });
     await new Promise((resolve) => server.close(resolve));

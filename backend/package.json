@@ -15,7 +15,8 @@
     "test:worker-phase2": "node src/tests/worker_portal_phase2.test.js",
     "test:worker-phase3": "node src/tests/worker_portal_phase3.test.js",
     "test:worker-phase4": "node src/tests/worker_portal_phase4.test.js",
-    "test:worker-phase5": "node src/tests/worker_portal_phase5.test.js"
+    "test:worker-phase5": "node src/tests/worker_portal_phase5.test.js",
+    "test:worker-phase6": "node src/tests/worker_portal_phase6.test.js"
   },
   "keywords": [],
   "author": "",

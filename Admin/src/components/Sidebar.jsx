@@ -14,7 +14,10 @@ import {
   Clock,
   CalendarDays,
   PanelLeftClose,
-  Sparkles
+  Sparkles,
+  Palmtree,
+  Megaphone,
+  QrCode
 } from 'lucide-react';
 const logo = '/logo.jpg';
 import { useSidebar } from '../context/SidebarContext';
@@ -82,6 +85,21 @@ export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: pro
             <li className="nav-item">
               <NavLink to="/worker-accounts" onClick={() => setMobileOpen(false)}>
                 <ShieldCheck size={18} /> Worker Portal Access
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink to="/leaves" onClick={() => setMobileOpen(false)}>
+                <Palmtree size={18} /> Leave Management
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink to="/announcements" onClick={() => setMobileOpen(false)}>
+                <Megaphone size={18} /> Announcements
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink to="/verify-id" onClick={() => setMobileOpen(false)}>
+                <QrCode size={18} /> Verify ID Pass
               </NavLink>
             </li>
             <li className="nav-item">

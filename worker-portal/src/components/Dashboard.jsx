@@ -8,6 +8,9 @@ import PlaceholderModal from './PlaceholderModal';
 import MyAttendance from './MyAttendance';
 import MyRota from './MyRota';
 import MySalary from './MySalary';
+import MyDigitalId from './MyDigitalId';
+import MyLeaves from './MyLeaves';
+import MyAnnouncements from './MyAnnouncements';
 import api from '../services/api';
 import { AlertCircle, RefreshCw, WifiOff } from 'lucide-react';
 
@@ -84,6 +87,27 @@ export default function Dashboard() {
       return;
     }
 
+    if (moduleKey === 'leaves') {
+      setActiveTab('leaves');
+      setActivePage('leaves');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (moduleKey === 'digital-card' || moduleKey === 'digitalPass') {
+      setActiveTab('more');
+      setActivePage('digital-card');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (moduleKey === 'announcements') {
+      setActiveTab('home');
+      setActivePage('announcements');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     const badgeMap = {
       rota: 'Phase 4',
       attendance: 'Phase 3',
@@ -115,6 +139,18 @@ export default function Dashboard() {
     } else if (mod.id === 'salary' || mod.id === 'ledger') {
       setActiveTab('salary');
       setActivePage('salary');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (mod.id === 'leaves') {
+      setActiveTab('leaves');
+      setActivePage('leaves');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (mod.id === 'digital-card' || mod.id === 'digitalPass') {
+      setActiveTab('more');
+      setActivePage('digital-card');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (mod.id === 'announcements') {
+      setActiveTab('home');
+      setActivePage('announcements');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setSelectedModule(mod);
@@ -190,6 +226,31 @@ export default function Dashboard() {
               fetchDashboardData();
             }}
           />
+        ) : activePage === 'leaves' ? (
+          <MyLeaves
+            onBack={() => {
+              setActivePage('home');
+              setActiveTab('home');
+              fetchDashboardData();
+            }}
+          />
+        ) : activePage === 'digital-card' ? (
+          <MyDigitalId
+            onBack={() => {
+              setActivePage('home');
+              setActiveTab('home');
+              fetchDashboardData();
+            }}
+          />
+        ) : activePage === 'announcements' ? (
+          <MyAnnouncements
+            onNoticeRead={() => fetchDashboardData()}
+            onBack={() => {
+              setActivePage('home');
+              setActiveTab('home');
+              fetchDashboardData();
+            }}
+          />
         ) : (
           data && (
             <main className="dashboard-main-view">
@@ -214,7 +275,10 @@ export default function Dashboard() {
             setMoreDrawerOpen(false);
             setActiveTab('home');
           }}
-          onSelectModule={(mod) => setSelectedModule(mod)}
+          onSelectModule={(mod) => {
+            setMoreDrawerOpen(false);
+            handleSelectQuickModule(mod);
+          }}
         />
       )}
 

@@ -2,6 +2,8 @@ const WeeklyRota = require('../models/WeeklyRota');
 const Attendance = require('../models/Attendance');
 const WeeklySalary = require('../models/WeeklySalary');
 const Employee = require('../models/Employee');
+const LeaveRequest = require('../models/LeaveRequest');
+const Announcement = require('../models/Announcement');
 const { getUKDateString, getWeekRange } = require('../utils/calc');
 const { sendServerError } = require('../utils/httpErrors');
 
@@ -164,16 +166,51 @@ exports.getDashboard = async (req, res) => {
       0
     );
 
-    // 6. Leave Requests (Phase 6 placeholder)
+    // 6. Live Leave Requests
+    const [pendingLeaves, approvedLeaves] = await Promise.all([
+      LeaveRequest.countDocuments({ employee: employeeId, status: 'Pending' }),
+      LeaveRequest.countDocuments({ employee: employeeId, status: 'Approved' })
+    ]);
     const leaveRequests = {
-      pending: 0,
-      approved: 0
+      pending: pendingLeaves,
+      approved: approvedLeaves
     };
 
-    // 7. Announcements (Phase 6 placeholder)
+    // 7. Live Targeted Announcements
+    const now = new Date();
+    const shopId = employee.assignedShop?._id || employee.assignedShop;
+    const targetOrConditions = [{ targetType: 'ALL' }];
+    if (shopId) targetOrConditions.push({ targetType: 'SHOPS', targetShops: shopId });
+    targetOrConditions.push({ targetType: 'EMPLOYEES', targetEmployees: employeeId });
+
+    const activeNotices = await Announcement.find({
+      status: 'Published',
+      $and: [
+        { $or: targetOrConditions },
+        {
+          $or: [
+            { expiresAt: null },
+            { expiresAt: { $gte: now } }
+          ]
+        }
+      ]
+    }).sort({ publishedAt: -1 }).lean();
+
+    const unreadNotices = activeNotices.filter(
+      a => !(a.readBy || []).some(r => String(r.employee) === String(employeeId))
+    );
+
+    const latestNotice = activeNotices.length > 0 ? {
+      id: activeNotices[0]._id,
+      title: activeNotices[0].title,
+      priority: activeNotices[0].priority,
+      publishedAt: activeNotices[0].publishedAt,
+      isRead: !(unreadNotices.some(u => String(u._id) === String(activeNotices[0]._id)))
+    } : null;
+
     const announcements = {
-      unreadCount: 0,
-      latest: null
+      unreadCount: unreadNotices.length,
+      latest: latestNotice
     };
 
     return res.json({

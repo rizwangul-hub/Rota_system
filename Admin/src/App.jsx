@@ -25,6 +25,9 @@ import SettingsPage from './pages/SettingsPage';
 import AuditPage from './pages/AuditPage';
 import WeeklyRotaPlanner from './pages/WeeklyRotaPlanner';
 import AiRotaAssistantPage from './pages/AiRotaAssistantPage';
+import LeaveManagementPage from './pages/LeaveManagementPage';
+import AnnouncementManagementPage from './pages/AnnouncementManagementPage';
+import IdVerificationPage from './pages/IdVerificationPage';
 import AiAssistantWidget from './components/AiAssistantWidget';
 import AuthLoadingScreen from './components/AuthLoadingScreen';
 
@@ -181,6 +184,30 @@ export default function App() {
                       <WorkerAccountsPage />
                     </ProtectedLayout>
                   }
+                />
+                <Route
+                  path="/leaves"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <LeaveManagementPage />
+                    </ProtectedLayout>
+                  }
+                />
+                <Route
+                  path="/announcements"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <AnnouncementManagementPage />
+                    </ProtectedLayout>
+                  }
+                />
+                <Route
+                  path="/verify-id"
+                  element={<IdVerificationPage />}
+                />
+                <Route
+                  path="/verify-id/:code"
+                  element={<IdVerificationPage />}
                 />
 
                 {/* Commission Details (Admin) */}
