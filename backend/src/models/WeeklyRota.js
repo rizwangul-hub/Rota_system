@@ -31,6 +31,15 @@ const PublishedVersionSchema = new mongoose.Schema({
   publishedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { _id: true });
 
+const WorkerAcknowledgementSchema = new mongoose.Schema({
+  employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+  workerUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  acknowledgedAt: { type: Date, required: true, default: Date.now },
+  publishedVersionAcknowledged: { type: Number, default: 1 },
+  publishedAtAcknowledged: { type: Date, default: null },
+  notes: { type: String, default: '' }
+}, { _id: true });
+
 const WeeklyRotaSchema = new mongoose.Schema({
   weekStart: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
   weekEnd: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
@@ -47,6 +56,7 @@ const WeeklyRotaSchema = new mongoose.Schema({
   publishedAt: { type: Date, default: null },
   validation: { errors: { type: [String], default: [] }, warnings: { type: [String], default: [] } },
   publishedVersions: { type: [PublishedVersionSchema], default: [] },
+  acknowledgements: { type: [WorkerAcknowledgementSchema], default: [] },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { timestamps: true, optimisticConcurrency: true });

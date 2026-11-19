@@ -18,6 +18,7 @@ import WeeklySalaryPage from './pages/WeeklySalaryPage';
 import SalaryDistributor from './pages/SalaryDistributor';
 import Employees from './pages/Employees';
 import EmployeeDetail from './pages/EmployeeDetail';
+import WorkerAccountsPage from './pages/WorkerAccountsPage';
 import BonusPage from './pages/BonusPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -170,6 +171,14 @@ export default function App() {
                   element={
                     <ProtectedLayout allowedRoles={['ADMIN']}>
                       <EmployeeDetail />
+                    </ProtectedLayout>
+                  }
+                />
+                <Route
+                  path="/worker-accounts"
+                  element={
+                    <ProtectedLayout allowedRoles={['ADMIN']}>
+                      <WorkerAccountsPage />
                     </ProtectedLayout>
                   }
                 />

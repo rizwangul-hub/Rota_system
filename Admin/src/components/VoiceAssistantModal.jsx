@@ -184,6 +184,7 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
   const lastSpokenAnswerRef = useRef('');
   const callTimerRef = useRef(null);
   const latestSpeechTextRef = useRef('');
+  const restartTimerRef = useRef(null);
 
   // Keep voiceStateRef in sync with state
   useEffect(() => {
@@ -376,12 +377,12 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
     setVoiceState('listening');
     setInterimTranscript('');
     latestSpeechTextRef.current = '';
-    // Ensure recognition is running continuously
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch {}
-    }
+    // Allow 250ms room echo clearance, then start clean recognition
+    setTimeout(() => {
+      if (isCallActiveRef.current && voiceStateRef.current === 'listening') {
+        startContinuousListening();
+      }
+    }, 250);
   }, []);
 
   // Submit recognized question to AI backend
@@ -436,6 +437,13 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
 
     // Stop speaking prior audio
     stopSpeaking();
+
+    // Pause recognition while processing
+    clearTimeout(silenceTimerRef.current);
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+      recognitionRef.current = null;
+    }
 
     setVoiceState('thinking');
     setErrorMessage('');
@@ -493,10 +501,10 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
   }, [messages, stopSpeaking, speakText, resumeListeningAfterAnswer]);
 
   // Start continuous, hands-free listening supervisor
-  const startContinuousListening = useCallback(() => {
+  const startContinuousListening = useCallback((langOverride) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (SpeechRecognition) {
+    if (SpeechRecognition && isCallActiveRef.current) {
       try {
         if (recognitionRef.current) {
           try { recognitionRef.current.abort(); } catch {}
@@ -508,13 +516,14 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
         recognition.continuous = true;
         recognition.interimResults = true;
 
-        if (languageMode === 'ur') {
+        const activeLang = langOverride || languageMode;
+        if (activeLang === 'ur') {
           recognition.lang = 'ur-PK';
-        } else if (languageMode === 'en') {
+        } else if (activeLang === 'en') {
           recognition.lang = 'en-GB';
         } else {
-          // Auto mode: default to ur-PK which understands Roman Urdu phonetics & English loanwords
-          recognition.lang = 'ur-PK';
+          // Auto / Mixed mode: en-GB is optimal for English + Roman Urdu loanwords without dropping speech
+          recognition.lang = 'en-GB';
         }
 
         recognition.onstart = () => {
@@ -525,80 +534,72 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
 
         recognition.onresult = (event) => {
           if (!isCallActiveRef.current) return;
+          // While assistant is outputting audio, ignore microphone feedback
+          if (voiceStateRef.current === 'speaking' || voiceStateRef.current === 'thinking') {
+            return;
+          }
 
-          let currentInterim = '';
-          let currentFinal = '';
+          let finalAccumulated = '';
+          let interimAccumulated = '';
 
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const piece = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              currentFinal += piece;
+          // Accumulate across the entire results collection to prevent dropping earlier words
+          for (let i = 0; i < event.results.length; i++) {
+            const res = event.results[i];
+            const text = res[0]?.transcript || '';
+            if (res.isFinal) {
+              finalAccumulated += text + ' ';
             } else {
-              currentInterim += piece;
+              interimAccumulated += text;
             }
           }
 
-          const activeText = (currentFinal || currentInterim).trim();
+          const fullSpoken = (finalAccumulated + interimAccumulated).trim();
+          if (!fullSpoken) return;
 
-          // ── BARGE-IN INTERRUPTION ──────────────────────────────────────────
-          // If assistant is speaking and user begins talking, INSTANTLY stop assistant audio!
-          if (voiceStateRef.current === 'speaking' && activeText.length > 1) {
-            stopSpeaking();
-            setVoiceState('listening');
-          }
+          setInterimTranscript(fullSpoken);
+          latestSpeechTextRef.current = fullSpoken;
 
-          if (currentInterim) {
-            setInterimTranscript(currentInterim);
-            latestSpeechTextRef.current = currentInterim;
-          }
-
-          // Voice Activity Detection (VAD) Debounce:
-          // Wait 1.4 seconds of silence after speech before submitting the turn
+          // Clear any pending turn submission timer
           clearTimeout(silenceTimerRef.current);
 
-          if (currentFinal) {
-            latestSpeechTextRef.current = currentFinal;
-            setInterimTranscript(currentFinal);
-            silenceTimerRef.current = setTimeout(() => {
-              if (latestSpeechTextRef.current.trim()) {
-                const turnText = latestSpeechTextRef.current.trim();
-                latestSpeechTextRef.current = '';
-                setInterimTranscript('');
-                submitVoiceQuery(turnText);
-              }
-            }, 900);
-          } else if (currentInterim.length > 2) {
-            silenceTimerRef.current = setTimeout(() => {
-              if (latestSpeechTextRef.current.trim()) {
-                const turnText = latestSpeechTextRef.current.trim();
-                latestSpeechTextRef.current = '';
-                setInterimTranscript('');
-                submitVoiceQuery(turnText);
-              }
-            }, 1400);
-          }
+          // Natural VAD: wait 2000ms after final speech, 2800ms after interim speech
+          const delay = finalAccumulated.trim() ? 2000 : 2800;
+          silenceTimerRef.current = setTimeout(() => {
+            if (latestSpeechTextRef.current.trim() && isCallActiveRef.current && voiceStateRef.current === 'listening') {
+              const turnText = latestSpeechTextRef.current.trim();
+              latestSpeechTextRef.current = '';
+              setInterimTranscript('');
+              submitVoiceQuery(turnText);
+            }
+          }, delay);
         };
 
         recognition.onerror = (event) => {
-          console.warn('[SpeechRecognition Notice]:', event.error);
+          // 'no-speech' and 'aborted' are standard normal lifecycle events in Web Speech API
+          if (event.error === 'no-speech' || event.error === 'aborted') {
+            return;
+          }
           if (event.error === 'not-allowed') {
             setErrorMessage('Microphone permission was denied. Please allow microphone in browser settings.');
+          } else if (event.error === 'audio-capture') {
+            setErrorMessage('No microphone detected. Please check your audio input device.');
+          } else {
+            console.warn('[SpeechRecognition Notice]:', event.error);
           }
         };
 
-        // Continuous Watchdog: Auto-restart recognition if it stops unexpectedly during an active call
+        // Continuous Watchdog: Auto-restart recognition smoothly if it stops while listening
         recognition.onend = () => {
-          if (isCallActiveRef.current && voiceStateRef.current !== 'thinking') {
-            try {
-              recognition.start();
-            } catch {
-              setTimeout(() => {
-                if (isCallActiveRef.current && voiceStateRef.current !== 'thinking') {
-                  try { recognition.start(); } catch {}
-                }
-              }, 250);
-            }
+          if (!isCallActiveRef.current) return;
+          if (voiceStateRef.current === 'thinking' || voiceStateRef.current === 'speaking') {
+            return;
           }
+          clearTimeout(restartTimerRef.current);
+          restartTimerRef.current = setTimeout(() => {
+            if (isCallActiveRef.current && voiceStateRef.current === 'listening') {
+              try { recognition.start(); } catch {}
+            }
+          }, 200);
         };
 
         recognition.start();
@@ -607,7 +608,15 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
         console.warn('[SpeechRecognition initialization error]:', recErr.message);
       }
     }
-  }, [languageMode, stopSpeaking, submitVoiceQuery]);
+  }, [languageMode, submitVoiceQuery]);
+
+  // Handle live language switch during active call
+  const handleLanguageChange = (newLang) => {
+    setLanguageMode(newLang);
+    if (isCallActiveRef.current && voiceStateRef.current === 'listening') {
+      startContinuousListening(newLang);
+    }
+  };
 
   // Start Call Handler (Single click initiates continuous telephone conversation)
   const handleStartCall = async () => {
@@ -631,7 +640,7 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
       setCallStatus('connected');
       isCallActiveRef.current = true;
 
-      // 3. Play natural welcoming greeting aloud, then seamlessly enter continuous listening
+      // 3. Play natural welcoming greeting aloud, then seamlessly enter continuous listening ONCE finished
       const initialGreeting = languageMode === 'ur'
         ? "Salam! Main Pixx Rota Assistant hoon. Main aap ki kya madad kar sakta hoon?"
         : languageMode === 'en'
@@ -640,10 +649,7 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
 
       lastSpokenAnswerRef.current = initialGreeting;
 
-      // Start recognition immediately in background
-      startContinuousListening();
-
-      // Speak greeting, and as soon as it ends, start listening hands-free!
+      // Speak greeting FIRST, and as soon as it completes, start listening hands-free!
       speakText(initialGreeting, () => {
         resumeListeningAfterAnswer();
       });
@@ -659,6 +665,7 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
   const handleEndCall = () => {
     isCallActiveRef.current = false;
     clearTimeout(silenceTimerRef.current);
+    clearTimeout(restartTimerRef.current);
 
     stopSpeaking();
 
@@ -820,21 +827,21 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
             <Globe size={14} color="#38bdf8" />
             <select
               value={languageMode}
-              disabled={callStatus === 'connected'}
-              onChange={(e) => setLanguageMode(e.target.value)}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+              title="Change spoken recognition language"
               style={{
                 background: 'transparent',
                 border: 'none',
                 color: '#e2e8f0',
                 fontSize: '11.5px',
                 fontWeight: 600,
-                cursor: callStatus === 'connected' ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 outline: 'none'
               }}
             >
-              <option value="auto" style={{ background: '#0f172a', color: '#fff' }}>Auto (Urdu + Eng)</option>
-              <option value="ur" style={{ background: '#0f172a', color: '#fff' }}>اردو (Urdu)</option>
-              <option value="en" style={{ background: '#0f172a', color: '#fff' }}>English</option>
+              <option value="auto" style={{ background: '#0f172a', color: '#fff' }}>Auto (English + Roman Urdu)</option>
+              <option value="ur" style={{ background: '#0f172a', color: '#fff' }}>اردو (Urdu Script)</option>
+              <option value="en" style={{ background: '#0f172a', color: '#fff' }}>English (UK)</option>
             </select>
           </div>
 
@@ -1221,20 +1228,94 @@ export default function VoiceAssistantModal({ isOpen, onClose }) {
               })}
             </div>
 
-            {/* Live Interim Speech Bubble (What user is currently saying) */}
+            {/* Quick In-Call Language Selector Pills */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              marginTop: '10px',
+              flexWrap: 'wrap'
+            }}>
+              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Speaking:</span>
+              {[
+                { id: 'auto', label: '🌐 Auto (Eng / Roman Urdu)' },
+                { id: 'ur', label: '🇵🇰 اردو (Urdu Script)' },
+                { id: 'en', label: '🇬🇧 English' }
+              ].map((btn) => (
+                <button
+                  key={btn.id}
+                  type="button"
+                  onClick={() => handleLanguageChange(btn.id)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    border: languageMode === btn.id ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: languageMode === btn.id ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                    color: languageMode === btn.id ? '#ffffff' : '#cbd5e1',
+                    fontSize: '11px',
+                    fontWeight: languageMode === btn.id ? 700 : 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Live Interim Speech Bubble with Instant Send Button */}
             {voiceState === 'listening' && interimTranscript && (
               <div style={{
                 marginTop: '12px',
-                padding: '8px 16px',
-                borderRadius: '16px',
-                background: 'rgba(30, 58, 138, 0.4)',
-                border: '1px solid rgba(96, 165, 250, 0.4)',
-                color: '#93c5fd',
-                fontSize: '13px',
-                fontStyle: 'italic',
-                maxWidth: '560px'
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                flexWrap: 'wrap',
+                justifyContent: 'center'
               }}>
-                "{interimTranscript}"
+                <div style={{
+                  padding: '8px 16px',
+                  borderRadius: '16px',
+                  background: 'rgba(30, 58, 138, 0.4)',
+                  border: '1px solid rgba(96, 165, 250, 0.4)',
+                  color: '#93c5fd',
+                  fontSize: '13px',
+                  fontStyle: 'italic',
+                  maxWidth: '520px'
+                }}>
+                  "{interimTranscript}"
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (latestSpeechTextRef.current.trim()) {
+                      clearTimeout(silenceTimerRef.current);
+                      const t = latestSpeechTextRef.current.trim();
+                      latestSpeechTextRef.current = '';
+                      setInterimTranscript('');
+                      submitVoiceQuery(t);
+                    }
+                  }}
+                  title="Send now without waiting for pause"
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '18px',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)'
+                  }}
+                >
+                  <Send size={12} />
+                  <span>Send Now / ابھی پوچھیں</span>
+                </button>
               </div>
             )}
 

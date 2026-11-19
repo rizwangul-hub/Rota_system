@@ -212,7 +212,14 @@ const EmployeeSchema = new mongoose.Schema({
   documents: [EmployeeDocumentSchema],
 
   wageHistory: [WageHistorySchema],
-  shopHistory: [ShopHistorySchema]
+  shopHistory: [ShopHistorySchema],
+
+  // --- Worker Portal Account Link ---
+  userAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  }
 }, { timestamps: true });
 
 EmployeeSchema.index({ assignedShop: 1 });

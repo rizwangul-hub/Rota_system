@@ -25,6 +25,9 @@ const rotaRoutes = require('./routes/rotaRoutes');
 const loanRoutes = require('./routes/loanRoutes');
 const versionRoutes = require('./routes/versionRoutes');
 const aiAssistantRoutes = require('./routes/aiAssistantRoutes');
+const workerAuthRoutes = require('./routes/workerAuthRoutes');
+const adminWorkerAccountRoutes = require('./routes/adminWorkerAccountRoutes');
+const workerRoutes = require('./routes/workerRoutes');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -152,6 +155,15 @@ app.use('/version', versionRoutes);
 
 app.use('/api/ai', aiAssistantRoutes);
 app.use('/ai', aiAssistantRoutes);
+
+app.use('/api/worker/auth', workerAuthRoutes);
+app.use('/worker/auth', workerAuthRoutes);
+
+app.use('/api/worker', workerRoutes);
+app.use('/worker', workerRoutes);
+
+app.use('/api/admin/worker-accounts', adminWorkerAccountRoutes);
+app.use('/admin/worker-accounts', adminWorkerAccountRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

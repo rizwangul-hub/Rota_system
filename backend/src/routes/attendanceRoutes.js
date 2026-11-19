@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
+const attendanceCorrectionReviewController = require('../controllers/attendanceCorrectionReviewController');
 const { authenticate, authorize } = require('../middleware/auth');
 
 // Usman or Admin saves attendance (single or batch)
@@ -9,6 +10,10 @@ router.post('/batch', authenticate, authorize('ATTENDANCE_OPERATOR', 'ADMIN'), a
 
 // Sarfraz, Adeel, Usman or Admin views pending attendance
 router.get('/pending', authenticate, authorize('ATTENDANCE_CHECKER', 'ATTENDANCE_OPERATOR', 'ADMIN'), attendanceController.getPendingAttendance);
+
+// Attendance Correction Requests Review (Sarfraz & Admin)
+router.get('/corrections', authenticate, authorize('ATTENDANCE_CHECKER', 'ADMIN'), attendanceCorrectionReviewController.getAllCorrectionRequests);
+router.post('/corrections/:id/review', authenticate, authorize('ATTENDANCE_CHECKER', 'ADMIN'), attendanceCorrectionReviewController.reviewCorrectionRequest);
 
 // General attendance list/history
 router.get('/', authenticate, attendanceController.getAllAttendance);
@@ -22,4 +27,3 @@ router.post('/approve', authenticate, authorize('ATTENDANCE_CHECKER', 'ADMIN'), 
 router.post('/:id/approve', authenticate, authorize('ATTENDANCE_CHECKER', 'ADMIN'), attendanceController.approveAttendance);
 
 module.exports = router;
-

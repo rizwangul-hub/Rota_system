@@ -27,6 +27,7 @@ import {
 import { getCachedShops, getCachedShopsSync } from '../utils/shopCache';
 import CelebrationOverlay from '../components/celebrations/CelebrationOverlay';
 import TimingSheetModal from '../components/TimingSheetModal';
+import AttendanceCorrectionsModal from '../components/AttendanceCorrectionsModal';
 
 // Module-level cache for attendance reports across tab navigation
 const _attendanceCache = new Map();
@@ -136,6 +137,8 @@ export default function SarfrazAttendance() {
   const [approvedCelebrationCount, setApprovedCelebrationCount] = useState(0);
   const [whatsAppText, setWhatsAppText] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
+  const [correctionsModalOpen, setCorrectionsModalOpen] = useState(false);
+  const [pendingCorrectionsCount, setPendingCorrectionsCount] = useState(0);
 
   // Filters
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -160,7 +163,23 @@ export default function SarfrazAttendance() {
 
   useEffect(() => {
     fetchShops();
+    fetchPendingCorrectionsCount();
   }, []);
+
+  const fetchPendingCorrectionsCount = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`${API_BASE_URL}/attendance/corrections`, {
+        params: { status: 'PENDING' },
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (res.data?.success) {
+        setPendingCorrectionsCount(res.data.counts?.pendingCount ?? (res.data.requests?.length || 0));
+      }
+    } catch (err) {
+      // Non-critical background indicator
+    }
+  };
 
   useEffect(() => {
     fetchAttendanceData();
@@ -537,6 +556,36 @@ export default function SarfrazAttendance() {
             style={{ borderColor: '#ca8a04', color: '#854d0e', fontWeight: 600, background: '#fefce8' }}
           >
             <Clock size={15} color="#ca8a04" /> Timing Sheet
+          </button>
+
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={() => setCorrectionsModalOpen(true)}
+            title="Worker Attendance Correction Requests"
+            style={{
+              borderColor: pendingCorrectionsCount > 0 ? '#f59e0b' : '#cbd5e1',
+              color: pendingCorrectionsCount > 0 ? '#b45309' : '#334155',
+              fontWeight: 600,
+              background: pendingCorrectionsCount > 0 ? '#fef3c7' : '#ffffff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <AlertCircle size={15} color={pendingCorrectionsCount > 0 ? '#d97706' : '#64748b'} />
+            <span>Worker Requests</span>
+            {pendingCorrectionsCount > 0 && (
+              <span style={{
+                background: '#ef4444',
+                color: '#ffffff',
+                fontSize: '11px',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                fontWeight: 700
+              }}>
+                {pendingCorrectionsCount}
+              </span>
+            )}
           </button>
 
           <button
@@ -1341,6 +1390,20 @@ export default function SarfrazAttendance() {
         isOpen={timingSheetModalOpen}
         onClose={() => setTimingSheetModalOpen(false)}
         initialDate={selectedDate}
+      />
+
+      {/* Worker Attendance Correction Requests Modal */}
+      <AttendanceCorrectionsModal
+        isOpen={correctionsModalOpen}
+        onClose={() => {
+          setCorrectionsModalOpen(false);
+          fetchPendingCorrectionsCount();
+          fetchAttendanceData();
+        }}
+        onReviewComplete={() => {
+          fetchPendingCorrectionsCount();
+          fetchAttendanceData();
+        }}
       />
 
       {/* ── Daily Attendance Approval Celebration ─────────────────── */}

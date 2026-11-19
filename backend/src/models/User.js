@@ -27,7 +27,12 @@ const UserSchema = new mongoose.Schema({
   role: {
     type: String,
     required: true,
-    enum: ['ADMIN', 'ATTENDANCE_CHECKER', 'SALARY_DISTRIBUTOR', 'ATTENDANCE_OPERATOR']
+    enum: ['ADMIN', 'ATTENDANCE_CHECKER', 'SALARY_DISTRIBUTOR', 'ATTENDANCE_OPERATOR', 'WORKER']
+  },
+  employee: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    default: null
   },
   assignedShop: {
     type: mongoose.Schema.Types.ObjectId,
@@ -41,8 +46,24 @@ const UserSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  passwordResetToken: {
+    type: String,
+    default: null
+  },
+  passwordResetExpires: {
+    type: Date,
+    default: null
+  },
+  lastLogin: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
+
+UserSchema.index({ employee: 1 }, { unique: true, sparse: true });
+UserSchema.index({ email: 1 }, { unique: true, sparse: true });
+UserSchema.index({ passwordResetToken: 1 }, { sparse: true });
 
 UserSchema.pre('save', async function() {
   if (!this.isModified('password')) return;

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const { logServerError } = require('../utils/httpErrors');
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -42,6 +43,26 @@ async function authenticate(req, res, next) {
     const user = await User.findById(decoded.id).select('-password');
     if (!user || !user.isActive) {
       return res.status(401).json({ success: false, message: 'User account is invalid or deactivated.' });
+    }
+
+    if (user.role === 'WORKER') {
+      if (!user.employee) {
+        return res.status(401).json({
+          success: false,
+          code: 'WORKER_UNLINKED',
+          message: 'Worker account is not linked to any employee record.'
+        });
+      }
+      const employee = await Employee.findById(user.employee);
+      if (!employee || employee.employmentStatus !== 'Active') {
+        return res.status(401).json({
+          success: false,
+          code: 'EMPLOYEE_INACTIVE',
+          message: 'Employee profile is inactive or suspended. Access denied.'
+        });
+      }
+      req.employee = employee;
+      req.employeeId = employee._id;
     }
 
     req.user = user;

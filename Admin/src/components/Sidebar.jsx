@@ -80,6 +80,11 @@ export default function Sidebar({ mobileOpen: propMobileOpen, setMobileOpen: pro
               </NavLink>
             </li>
             <li className="nav-item">
+              <NavLink to="/worker-accounts" onClick={() => setMobileOpen(false)}>
+                <ShieldCheck size={18} /> Worker Portal Access
+              </NavLink>
+            </li>
+            <li className="nav-item">
               <NavLink to="/rota-planner" onClick={() => setMobileOpen(false)}>
                 <CalendarDays size={18} /> Weekly Rota Planner
               </NavLink>
