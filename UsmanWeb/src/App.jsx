@@ -853,14 +853,14 @@ export default function App() {
       );
 
       if (res.data?.success) {
-        // 1. Play celebratory fireworks + clipping chime sound once
+        // 1. Play celebratory fireworks + clapping (taaliyan) sound once
         playSubmissionSuccessSound();
         // 2. Display the celebration modal and status (balloons + fireworks)
         setShowCelebration(true);
-        // 3. Voice announcement timed gracefully AFTER fireworks & clipping sound finishes (~2.4s)
+        // 3. Voice announcement timed gracefully AFTER fireworks & clapping (taaliyan) finish (~2.6s)
         setTimeout(() => {
           speakAnnouncement(`${actor}'s daily attendance has been submitted to Sarfraz Khan.`);
-        }, 2400);
+        }, 2600);
         void refreshRotaForDate(currentDate);
       }
     } catch (err) {

@@ -1,18 +1,15 @@
 /**
  * PIXX Rota System - UsmanWeb Attendance Submission Sound & Fireworks
  *
- * Provides synchronized FIREWORKS (launch whoosh + explosion boom & crackles)
- * followed by the celebratory CLIPPING CHIME sound effect.
- *
  * Sequence:
  * 1. 0.0s - 0.35s: Firework rocket launch whoosh (Fzzzz-WHOOSH!)
- * 2. 0.35s - 0.75s: Firework explosion (BOOM! Crackle & pop!)
- * 3. 0.72s - 2.2s: Tactile clipping transient & triumphant C-major chimes
+ * 2. 0.35s - 0.8s: Firework explosion (💥 BOOM! Crackle & pop!)
+ * 3. 0.45s - 2.6s: TAALIYON KI AAWAZ (CLAPPING / APPLAUSE & CHEERS)
  *
  * Guarantees:
  * - Plays at 100% full volume.
- * - Plays via preloaded HTMLAudioElement AND Web Audio API synthesis for 100% reliability.
- * - Debounced so it never plays twice.
+ * - Dual engine: HTMLAudioElement playing high-fidelity WAV + Web Audio API synthesis.
+ * - Guaranteed single play per submission (debounced).
  */
 
 import celebrationSoundAsset from '../assets/attendance-success.wav';
@@ -35,7 +32,7 @@ try {
 
 /**
  * Prime / unlock audio on user interaction.
- * Called when Usman clicks "Submit Attendance to Sarfraz".
+ * Called immediately when Usman clicks "Submit Attendance to Sarfraz".
  */
 export function unlockAudioContext() {
   try {
@@ -62,18 +59,18 @@ export function unlockAudioContext() {
 /**
  * Synthesizes:
  * 1. Firework rocket launch whoosh (0s - 0.35s)
- * 2. Firework explosion BOOM & crackles (0.35s - 0.75s)
- * 3. Tactile clipping transient & celebratory arpeggio chimes (0.75s - 2.2s)
+ * 2. Firework explosion BOOM (0.35s - 0.85s)
+ * 3. Taaliyon ki aawaz (Energetic hand claps & applause) (0.45s - 2.5s)
  */
 function playWebAudioSynthesized(ctx) {
   try {
     const now = ctx.currentTime;
     const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.95, now);
+    masterGain.gain.setValueAtTime(1.0, now);
     masterGain.connect(ctx.destination);
 
-    // Buffer for pink/white noise (used in whoosh and explosion)
-    const bufferSize = Math.floor(ctx.sampleRate * 2.2);
+    // Buffer for noise (used in whoosh, explosion, and hand claps)
+    const bufferSize = Math.floor(ctx.sampleRate * 2.8);
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     let b0 = 0, b1 = 0, b2 = 0;
@@ -92,11 +89,11 @@ function playWebAudioSynthesized(ctx) {
     whooshFilter.type = 'bandpass';
     whooshFilter.frequency.setValueAtTime(250, now);
     whooshFilter.frequency.exponentialRampToValueAtTime(1400, now + 0.34);
-    whooshFilter.Q.setValueAtTime(3.0, now);
+    whooshFilter.Q.setValueAtTime(2.5, now);
 
     const whooshGain = ctx.createGain();
     whooshGain.gain.setValueAtTime(0.01, now);
-    whooshGain.gain.linearRampToValueAtTime(0.7, now + 0.32);
+    whooshGain.gain.linearRampToValueAtTime(0.75, now + 0.32);
     whooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
 
     whooshSource.connect(whooshFilter);
@@ -105,7 +102,7 @@ function playWebAudioSynthesized(ctx) {
     whooshSource.start(now);
     whooshSource.stop(now + 0.38);
 
-    // --- 2. FIREWORK EXPLOSION BOOM! (0.35s -> 0.9s) ---
+    // --- 2. FIREWORK EXPLOSION BOOM! (0.34s -> 0.85s) ---
     const boomOsc = ctx.createOscillator();
     const boomGain = ctx.createGain();
     boomOsc.type = 'sine';
@@ -113,99 +110,58 @@ function playWebAudioSynthesized(ctx) {
     boomOsc.frequency.exponentialRampToValueAtTime(35, now + 0.85);
 
     boomGain.gain.setValueAtTime(0.001, now + 0.34);
-    boomGain.gain.linearRampToValueAtTime(0.9, now + 0.36);
-    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+    boomGain.gain.linearRampToValueAtTime(0.95, now + 0.36);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
 
     boomOsc.connect(boomGain);
     boomGain.connect(masterGain);
     boomOsc.start(now + 0.34);
-    boomOsc.stop(now + 1.05);
+    boomOsc.stop(now + 1.0);
 
-    // Firework crackle / burst blast noise
-    const blastSource = ctx.createBufferSource();
-    blastSource.buffer = noiseBuffer;
-    const blastFilter = ctx.createBiquadFilter();
-    blastFilter.type = 'lowpass';
-    blastFilter.frequency.setValueAtTime(800, now + 0.35);
-    blastFilter.frequency.exponentialRampToValueAtTime(180, now + 0.9);
+    // --- 3. TAALIYON KI AAWAZ (CLAPPING / APPLAUSE) (0.45s -> 2.5s) ---
+    // Generate ~35 distinct crowd hand claps
+    const clapCount = 35;
+    for (let c = 0; c < clapCount; c++) {
+      const clapOffset = 0.45 + Math.pow(Math.random(), 0.9) * 2.0;
+      const clapTime = now + clapOffset;
 
-    const blastGain = ctx.createGain();
-    blastGain.gain.setValueAtTime(0.001, now + 0.35);
-    blastGain.gain.linearRampToValueAtTime(0.65, now + 0.37);
-    blastGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+      const clapSource = ctx.createBufferSource();
+      clapSource.buffer = noiseBuffer;
 
-    blastSource.connect(blastFilter);
-    blastFilter.connect(blastGain);
-    blastGain.connect(masterGain);
-    blastSource.start(now + 0.35);
-    blastSource.stop(now + 0.9);
+      const clapFilter = ctx.createBiquadFilter();
+      clapFilter.type = 'bandpass';
+      clapFilter.frequency.setValueAtTime(1000 + Math.random() * 800, clapTime);
+      clapFilter.Q.setValueAtTime(2.0, clapTime);
 
-    // --- 3. CLIPPING SOUND & MELODIC CHIMES (0.75s -> 2.2s) ---
-    // Tactile clip transient at 0.72s
-    const clickOsc = ctx.createOscillator();
-    const clickGain = ctx.createGain();
-    clickOsc.type = 'triangle';
-    clickOsc.frequency.setValueAtTime(3400, now + 0.72);
-    clickGain.gain.setValueAtTime(0.65, now + 0.72);
-    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
-    clickOsc.connect(clickGain);
-    clickGain.connect(masterGain);
-    clickOsc.start(now + 0.72);
-    clickOsc.stop(now + 0.76);
+      const clapGain = ctx.createGain();
+      let envelope = 1.0;
+      if (clapOffset < 0.8) envelope = (clapOffset - 0.45) / 0.35;
+      else if (clapOffset > 2.0) envelope = (2.5 - clapOffset) / 0.5;
 
-    // Celebratory chime notes
-    const notes = [
-      { delay: 0.75, freq: 523.25, dur: 0.65, vol: 0.70 }, // C5
-      { delay: 0.85, freq: 659.25, dur: 0.70, vol: 0.75 }, // E5
-      { delay: 0.95, freq: 783.99, dur: 0.75, vol: 0.80 }, // G5
-      { delay: 1.08, freq: 1046.50, dur: 0.85, vol: 0.85 }, // C6
-      { delay: 1.20, freq: 1318.51, dur: 0.95, vol: 0.90 }, // E6
-      { delay: 1.32, freq: 1567.98, dur: 0.85, vol: 0.65 }  // G6
-    ];
+      const vol = (0.5 + Math.random() * 0.45) * Math.max(0.15, envelope);
 
-    notes.forEach(({ delay, freq, dur, vol }) => {
-      const noteTime = now + delay;
+      clapGain.gain.setValueAtTime(0.001, clapTime);
+      clapGain.gain.linearRampToValueAtTime(vol, clapTime + 0.003);
+      clapGain.gain.exponentialRampToValueAtTime(0.0001, clapTime + 0.035);
 
-      const osc = ctx.createOscillator();
-      const oscGain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, noteTime);
+      clapSource.connect(clapFilter);
+      clapFilter.connect(clapGain);
+      clapGain.connect(masterGain);
 
-      const harm = ctx.createOscillator();
-      const harmGain = ctx.createGain();
-      harm.type = 'sine';
-      harm.frequency.setValueAtTime(freq * 2, noteTime);
+      clapSource.start(clapTime);
+      clapSource.stop(clapTime + 0.04);
+    }
 
-      oscGain.gain.setValueAtTime(0.001, noteTime);
-      oscGain.gain.linearRampToValueAtTime(vol, noteTime + 0.006);
-      oscGain.gain.exponentialRampToValueAtTime(0.0001, noteTime + dur);
-
-      harmGain.gain.setValueAtTime(0.001, noteTime);
-      harmGain.gain.linearRampToValueAtTime(vol * 0.35, noteTime + 0.006);
-      harmGain.gain.exponentialRampToValueAtTime(0.0001, noteTime + (dur * 0.7));
-
-      osc.connect(oscGain);
-      oscGain.connect(masterGain);
-
-      harm.connect(harmGain);
-      harmGain.connect(masterGain);
-
-      osc.start(noteTime);
-      osc.stop(noteTime + dur);
-
-      harm.start(noteTime);
-      harm.stop(noteTime + dur);
-    });
-
-    masterGain.gain.setValueAtTime(0.95, now + 1.9);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.3);
+    // Soft master fadeout
+    masterGain.gain.setValueAtTime(1.0, now + 2.4);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.75);
   } catch (err) {
     console.warn('[UsmanWeb Sound] Web Audio error:', err);
   }
 }
 
 /**
- * Play the synchronized Fireworks + Clipping sound.
+ * Play the synchronized Fireworks + Clapping (Taaliyan) sound.
  */
 export function playSubmissionSuccessSound() {
   if (typeof window === 'undefined') return;
@@ -216,7 +172,7 @@ export function playSubmissionSuccessSound() {
   }
   lastPlayTimestamp = nowMs;
 
-  // 1. Play HTML5 Audio element (WAV contains launch whoosh -> BOOM -> clipping chimes)
+  // 1. Play HTML5 Audio element (WAV contains launch whoosh -> BOOM -> enthusiastic crowd clapping)
   try {
     const audio = preloadedAudio || new Audio(celebrationSoundAsset);
     audio.currentTime = 0;
