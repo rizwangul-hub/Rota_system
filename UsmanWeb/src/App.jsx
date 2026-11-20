@@ -49,6 +49,7 @@ import {
   formatReminderTime12H
 } from './services/notificationService';
 import { speakAnnouncement } from './utils/voiceAnnouncement';
+import { unlockAudioContext, playSubmissionSuccessSound } from './utils/submissionSound';
 
 // Time Input component with smart 12-hour AM/PM formatting
 function AttendanceTimeInput({ value, onChange, editable, placeholder, fieldType }) {
@@ -806,6 +807,8 @@ export default function App() {
 
   // Save all attendance batch
   const handleSaveAllAttendance = async () => {
+    if (savingAll) return; // Prevent double clicks while request is in flight
+
     if (!workerRows.length) {
       showAlert('Notice', 'There are no active workers to record.');
       return;
@@ -822,6 +825,9 @@ export default function App() {
       showAlert('Shop Required', `Please choose the work location for every worker before submitting:\n\n${names}`);
       return;
     }
+
+    // Unlock / prime audio context on genuine user interaction
+    unlockAudioContext();
 
     const submittedRows = workerRows.filter((row) => !row.isLocked);
     setSavingAll(true);
@@ -847,8 +853,14 @@ export default function App() {
       );
 
       if (res.data?.success) {
-        speakAnnouncement(`${actor}'s attendance has been submitted successfully.`);
+        // 1. Play celebratory clipping sound once
+        playSubmissionSuccessSound();
+        // 2. Display the celebration modal and status
         setShowCelebration(true);
+        // 3. Voice announcement timed gracefully after the sound chime begins
+        setTimeout(() => {
+          speakAnnouncement(`${actor}'s daily attendance has been submitted to Sarfraz Khan.`);
+        }, 450);
         void refreshRotaForDate(currentDate);
       }
     } catch (err) {
@@ -1096,7 +1108,9 @@ export default function App() {
       <AttendanceCelebration
         show={showCelebration}
         onClose={() => setShowCelebration(false)}
-        recipientName="Sarfraz"
+        recipientName="Sarfraz Khan"
+        dateLabel={formatUKDisplayDate(currentDate)}
+        submittedCount={`${workerRows.filter((r) => !r.isLocked).length} workers recorded`}
       />
 
       {/* 3. Operator Profile Modal (Change Name & Profile Picture) */}

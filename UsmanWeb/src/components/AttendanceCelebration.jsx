@@ -1,14 +1,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { CheckCircle2, Sparkles, X } from 'lucide-react';
+import { CheckCircle2, Sparkles, X, ShieldCheck, Clock } from 'lucide-react';
+import { playSubmissionSuccessSound } from '../utils/submissionSound';
 
 /**
  * AttendanceCelebration
- * Celebratory overlay with:
+ * High-definition celebratory overlay for UsmanWeb:
  * - Floating multi-colored SVG balloons
  * - Cascading multi-angle confetti
  * - Twinkling celebratory sparkles
- * - Premium success card ("🎉 Attendance Submitted Successfully! Your attendance has been sent to Sarfraz.")
+ * - Celebratory clipping sound effect (plays exactly once per submission)
+ * - Clear confirmation that attendance was submitted to Sarfraz Khan
+ * - Live status badge: "Status: Submitted for Verification"
  * - Auto-removes after ~4s with smooth fade
  */
 
@@ -29,8 +32,10 @@ const CONFETTI_COLORS = ['#3b82f6', '#10b981', '#eab308', '#a855f7', '#ec4899', 
 export default function AttendanceCelebration({
   show,
   onClose,
-  soundEnabled = false,
-  recipientName = 'Sarfraz'
+  soundEnabled = true,
+  recipientName = 'Sarfraz Khan',
+  dateLabel = null,
+  submittedCount = null
 }) {
   const [fading, setFading] = useState(false);
 
@@ -65,43 +70,28 @@ export default function AttendanceCelebration({
 
     setFading(false);
 
-    // Optional synthesized web audio chime (disabled by default)
-    if (soundEnabled && typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+    // 1. Play professional celebratory clipping sound once
+    if (soundEnabled) {
       try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now); // C5
-        osc.frequency.setValueAtTime(659.25, now + 0.12); // E5
-        osc.frequency.setValueAtTime(783.99, now + 0.24); // G5
-        osc.frequency.setValueAtTime(1046.5, now + 0.36); // C6
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.7);
-      } catch {
-        // Ignore audio failures
+        playSubmissionSuccessSound();
+      } catch (err) {
+        // Safe fallback - audio failures never interrupt UX
       }
     }
 
-    // Fire Confetti multi-burst
+    // 2. Fire Confetti multi-burst
     try {
-      // 1. Center explosion
+      // Center explosion
       confetti({
-        particleCount: 80,
-        spread: 90,
+        particleCount: 85,
+        spread: 95,
         origin: { y: 0.55 },
         colors: CONFETTI_COLORS,
         disableForReducedMotion: true,
         zIndex: 999998
       });
 
-      // 2. Left and right cannons slightly delayed
+      // Delayed left and right cannons
       const t1 = setTimeout(() => {
         confetti({
           particleCount: 45,
@@ -121,7 +111,7 @@ export default function AttendanceCelebration({
           disableForReducedMotion: true,
           zIndex: 999998
         });
-      }, 300);
+      }, 250);
 
       // Clean timer
       return () => clearTimeout(t1);
@@ -129,15 +119,15 @@ export default function AttendanceCelebration({
       // Confetti fallback
     }
 
-    // Auto-fadeout after ~3.5 seconds
+    // Auto-fadeout after ~4.2 seconds
     const fadeTimer = setTimeout(() => {
       setFading(true);
-    }, 3500);
+    }, 4200);
 
-    // Complete cleanup and unmount after 3.9 seconds
+    // Complete cleanup and unmount after 4.6 seconds
     const autoCloseTimer = setTimeout(() => {
       if (onClose) onClose();
-    }, 3900);
+    }, 4600);
 
     return () => {
       clearTimeout(fadeTimer);
@@ -157,6 +147,7 @@ export default function AttendanceCelebration({
   return (
     <div
       role="dialog"
+      aria-modal="true"
       aria-live="assertive"
       aria-label="Attendance Submitted Successfully"
       style={{
@@ -166,9 +157,9 @@ export default function AttendanceCelebration({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(15, 23, 42, 0.45)',
-        backdropFilter: 'blur(3px)',
-        WebkitBackdropFilter: 'blur(3px)',
+        backgroundColor: 'rgba(15, 23, 42, 0.52)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
         opacity: fading ? 0 : 1,
         transition: 'opacity 0.4s ease-out',
         padding: '16px',
@@ -209,10 +200,10 @@ export default function AttendanceCelebration({
         @keyframes popModalIn {
           0% {
             opacity: 0;
-            transform: scale(0.82) translateY(20px);
+            transform: scale(0.82) translateY(22px);
           }
           65% {
-            transform: scale(1.03) translateY(-2px);
+            transform: scale(1.02) translateY(-2px);
           }
           100% {
             opacity: 1;
@@ -233,13 +224,24 @@ export default function AttendanceCelebration({
 
         @keyframes badgePulse {
           0% {
-            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
           }
           70% {
-            box-shadow: 0 0 0 16px rgba(34, 197, 94, 0);
+            box-shadow: 0 0 0 18px rgba(34, 197, 94, 0);
           }
           100% {
             box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+          }
+        }
+
+        @keyframes statusDotPulse {
+          0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(1.25);
+            opacity: 0.75;
           }
         }
 
@@ -258,7 +260,7 @@ export default function AttendanceCelebration({
         }
 
         .celebration-card {
-          animation: popModalIn 0.45s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+          animation: popModalIn 0.42s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -289,7 +291,6 @@ export default function AttendanceCelebration({
                 animation: `swaySide ${b.swayDuration}s ease-in-out infinite alternate`
               }}
             >
-              {/* Balloon SVG with realistic highlights and string */}
               <svg
                 width={b.size}
                 height={b.size * 1.45}
@@ -304,13 +305,9 @@ export default function AttendanceCelebration({
                     <stop offset="100%" stopColor={b.color.dark} />
                   </radialGradient>
                 </defs>
-                {/* Balloon Body */}
                 <ellipse cx="25" cy="25" rx="22" ry="24" fill={`url(#balloon-grad-${b.id})`} />
-                {/* Specular reflection gloss */}
                 <ellipse cx="18" cy="16" rx="6" ry="9" fill="rgba(255, 255, 255, 0.45)" transform="rotate(-20 18 16)" />
-                {/* Knot */}
                 <polygon points="22,48 28,48 26,52 24,52" fill={b.color.dark} />
-                {/* String */}
                 <path
                   d="M25 52 Q 22 58, 26 64 T 24 72"
                   stroke="rgba(255, 255, 255, 0.6)"
@@ -349,10 +346,10 @@ export default function AttendanceCelebration({
           backgroundColor: '#ffffff',
           borderRadius: '24px',
           padding: '28px 24px',
-          maxWidth: '380px',
+          maxWidth: '410px',
           width: '100%',
           textAlign: 'center',
-          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(226, 232, 240, 0.8)',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.4), 0 0 0 1px rgba(226, 232, 240, 0.9)',
           zIndex: 10
         }}
       >
@@ -360,7 +357,7 @@ export default function AttendanceCelebration({
         <button
           type="button"
           onClick={handleManualClose}
-          aria-label="Close celebration"
+          aria-label="Close confirmation"
           style={{
             position: 'absolute',
             top: '12px',
@@ -383,11 +380,11 @@ export default function AttendanceCelebration({
           <X size={16} />
         </button>
 
-        {/* Celebratory Checkmark Icon */}
+        {/* Celebratory Checkmark Icon Badge */}
         <div
           style={{
-            width: '68px',
-            height: '68px',
+            width: '72px',
+            height: '72px',
             borderRadius: '50%',
             backgroundColor: '#dcfce7',
             color: '#15803d',
@@ -395,38 +392,124 @@ export default function AttendanceCelebration({
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 16px auto',
-            animation: 'badgePulse 1.8s infinite'
+            animation: 'badgePulse 1.8s infinite',
+            border: '3px solid #bbf7d0'
           }}
         >
-          <CheckCircle2 size={40} strokeWidth={2.5} />
+          <CheckCircle2 size={44} strokeWidth={2.4} />
         </div>
 
-        {/* Heading */}
-        <h2
+        {/* Mini Pill Tag */}
+        <div
           style={{
-            fontSize: '19px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            fontSize: '11px',
             fontWeight: 800,
-            color: '#0f172a',
-            margin: '0 0 8px 0',
-            lineHeight: 1.3
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: '#15803d',
+            backgroundColor: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            padding: '4px 10px',
+            borderRadius: '999px',
+            marginBottom: '10px'
           }}
         >
-          🎉 Attendance Submitted Successfully!
+          <Sparkles size={12} color="#16a34a" />
+          <span>Dispatch Confirmed</span>
+        </div>
+
+        {/* Primary Heading */}
+        <h2
+          style={{
+            fontSize: '20px',
+            fontWeight: 800,
+            color: '#0f172a',
+            margin: '0 0 10px 0',
+            lineHeight: 1.25,
+            letterSpacing: '-0.02em'
+          }}
+        >
+          ATTENDANCE SUBMITTED SUCCESSFULLY!
         </h2>
 
-        {/* Message to Sarfraz */}
+        {/* Clear Recipient Confirmation */}
         <p
           style={{
             fontSize: '14px',
-            color: '#475569',
-            margin: '0 0 20px 0',
+            color: '#334155',
+            margin: '0 0 16px 0',
             lineHeight: 1.5,
             fontWeight: 500
           }}
         >
-          Your attendance has been sent to{' '}
-          <strong style={{ color: '#1e293b', fontWeight: 700 }}>{recipientName}</strong> for review.
+          Your daily attendance has been successfully submitted to{' '}
+          <strong style={{ color: '#0f172a', fontWeight: 700 }}>{recipientName}</strong>.
         </p>
+
+        {/* Status Box: Submitted for Verification */}
+        <div
+          style={{
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '14px',
+            padding: '12px 14px',
+            marginBottom: '20px',
+            textAlign: 'left',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
+              Verification Status
+            </span>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#dcfce7',
+                border: '1px solid #86efac',
+                padding: '3px 9px',
+                borderRadius: '999px'
+              }}
+            >
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#16a34a',
+                  display: 'inline-block',
+                  animation: 'statusDotPulse 1.5s infinite'
+                }}
+              />
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#166534' }}>
+                Submitted for Verification
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+            <ShieldCheck size={14} color="#059669" />
+            <span style={{ fontSize: '12px', color: '#475569', fontWeight: 500 }}>
+              Waiting for Sarfraz Khan's review and approval
+            </span>
+          </div>
+
+          {(dateLabel || submittedCount) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', borderTop: '1px dashed #e2e8f0', paddingTop: '6px' }}>
+              <Clock size={13} color="#94a3b8" />
+              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                {[dateLabel, submittedCount].filter(Boolean).join(' • ')}
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Action Button */}
         <button
@@ -434,21 +517,26 @@ export default function AttendanceCelebration({
           onClick={handleManualClose}
           style={{
             width: '100%',
-            padding: '11px 18px',
+            padding: '12px 18px',
             borderRadius: '12px',
-            backgroundColor: '#2563eb',
+            backgroundColor: '#16a34a',
             color: '#ffffff',
             border: 'none',
             fontSize: '14px',
-            fontWeight: 700,
+            fontWeight: 800,
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-            transition: 'background-color 0.15s, transform 0.1s'
+            boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
+            transition: 'background-color 0.15s, transform 0.1s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1d4ed8')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2563eb')}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#15803d')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#16a34a')}
         >
-          Great, Continue
+          <CheckCircle2 size={16} />
+          <span>Great, Continue</span>
         </button>
       </div>
     </div>
