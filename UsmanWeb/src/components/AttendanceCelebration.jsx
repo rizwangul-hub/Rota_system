@@ -1,21 +1,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { CheckCircle2, Sparkles, X, ShieldCheck, Clock } from 'lucide-react';
+import { CheckCircle2, Sparkles, X, ShieldCheck, Clock, Flame } from 'lucide-react';
 import { playSubmissionSuccessSound } from '../utils/submissionSound';
 
 /**
  * AttendanceCelebration
  * High-definition celebratory overlay for UsmanWeb:
+ * - Synchronized FIREWORKS & FIRE effects (shooting rockets + explosion starbursts)
  * - Floating multi-colored SVG balloons
- * - Cascading multi-angle confetti
- * - Twinkling celebratory sparkles
- * - Celebratory clipping sound effect (plays exactly once per submission)
+ * - Cascading multi-angle confetti & sparkling fire embers
+ * - Audio: Firework launch whoosh -> BOOM & crackle -> celebratory clipping chime!
  * - Clear confirmation that attendance was submitted to Sarfraz Khan
  * - Live status badge: "Status: Submitted for Verification"
- * - Auto-removes after ~4s with smooth fade
  */
 
-// Palette: Blue, Green, Yellow, Purple, Pink, Orange, Cyan
+// Balloon palette: Blue, Green, Yellow, Purple, Pink, Orange, Cyan
 const BALLOON_COLORS = [
   { main: '#3b82f6', light: '#93c5fd', dark: '#1d4ed8' }, // Blue
   { main: '#10b981', light: '#6ee7b7', dark: '#047857' }, // Green
@@ -26,8 +25,9 @@ const BALLOON_COLORS = [
   { main: '#06b6d4', light: '#67e8f9', dark: '#0e7490' }  // Cyan
 ];
 
-// Confetti hex colors
-const CONFETTI_COLORS = ['#3b82f6', '#10b981', '#eab308', '#a855f7', '#ec4899', '#f97316', '#06b6d4'];
+// Firework colors (fire flames, embers, gold, neon bursts)
+const FIRE_COLORS = ['#ff3d00', '#ff9100', '#ffd600', '#ff1744', '#ffffff', '#f59e0b'];
+const CONFETTI_COLORS = ['#ff5722', '#3b82f6', '#10b981', '#eab308', '#a855f7', '#ec4899', '#06b6d4'];
 
 export default function AttendanceCelebration({
   show,
@@ -44,9 +44,9 @@ export default function AttendanceCelebration({
     return Array.from({ length: 14 }).map((_, i) => {
       const color = BALLOON_COLORS[i % BALLOON_COLORS.length];
       const leftPercent = Math.min(92, Math.max(8, (i * 7 + Math.random() * 5) % 100));
-      const size = 36 + Math.floor(Math.random() * 28); // 36px to 64px
-      const duration = 2.8 + Math.random() * 1.6; // 2.8s to 4.4s
-      const delay = Math.random() * 0.7; // 0s to 0.7s
+      const size = 36 + Math.floor(Math.random() * 26);
+      const duration = 2.8 + Math.random() * 1.6;
+      const delay = Math.random() * 0.6;
       const swayDuration = 1.4 + Math.random() * 0.8;
       const swayAmount = 15 + Math.random() * 20;
 
@@ -54,14 +54,26 @@ export default function AttendanceCelebration({
     });
   }, [show]);
 
-  // Generate sparkles
+  // Generate visual fireworks bursts
+  const fireworks = useMemo(() => {
+    return [
+      { id: 1, top: 18, left: 22, color: '#ff5722', size: 130, delay: 0.35 },
+      { id: 2, top: 22, left: 78, color: '#ff9800', size: 140, delay: 0.40 },
+      { id: 3, top: 12, left: 50, color: '#ffd600', size: 160, delay: 0.48 },
+      { id: 4, top: 28, left: 35, color: '#ec4899', size: 120, delay: 0.85 },
+      { id: 5, top: 26, left: 65, color: '#06b6d4', size: 125, delay: 0.95 }
+    ];
+  }, [show]);
+
+  // Generate twinkling sparkles / fire embers
   const sparkles = useMemo(() => {
-    return Array.from({ length: 8 }).map((_, i) => ({
+    return Array.from({ length: 12 }).map((_, i) => ({
       id: i,
-      top: 15 + Math.random() * 60,
-      left: 10 + Math.random() * 80,
-      size: 16 + Math.random() * 14,
-      delay: Math.random() * 1.2
+      top: 10 + Math.random() * 70,
+      left: 8 + Math.random() * 84,
+      size: 14 + Math.random() * 16,
+      delay: Math.random() * 1.4,
+      isFire: i % 2 === 0
     }));
   }, [show]);
 
@@ -70,64 +82,96 @@ export default function AttendanceCelebration({
 
     setFading(false);
 
-    // 1. Play professional celebratory clipping sound once
+    // 1. Play Fireworks + Clipping Chime sound
     if (soundEnabled) {
       try {
         playSubmissionSuccessSound();
       } catch (err) {
-        // Safe fallback - audio failures never interrupt UX
+        // Non-blocking
       }
     }
 
-    // 2. Fire Confetti multi-burst
+    // 2. Synchronized Fireworks Bursts with canvas-confetti
     try {
-      // Center explosion
+      // 0ms: Initial upward rocket launch embers
       confetti({
-        particleCount: 85,
-        spread: 95,
-        origin: { y: 0.55 },
-        colors: CONFETTI_COLORS,
+        particleCount: 25,
+        angle: 90,
+        spread: 45,
+        startVelocity: 55,
+        origin: { x: 0.5, y: 0.9 },
+        colors: FIRE_COLORS,
         disableForReducedMotion: true,
         zIndex: 999998
       });
 
-      // Delayed left and right cannons
-      const t1 = setTimeout(() => {
+      // 350ms: EXACT SYNC with FIREWORK BOOM sound!
+      const tBoom = setTimeout(() => {
+        // Giant center explosion
         confetti({
-          particleCount: 45,
-          angle: 60,
-          spread: 60,
-          origin: { x: 0.05, y: 0.65 },
-          colors: CONFETTI_COLORS,
+          particleCount: 95,
+          spread: 100,
+          startVelocity: 48,
+          origin: { x: 0.5, y: 0.35 },
+          colors: FIRE_COLORS,
           disableForReducedMotion: true,
           zIndex: 999998
         });
-        confetti({
-          particleCount: 45,
-          angle: 120,
-          spread: 60,
-          origin: { x: 0.95, y: 0.65 },
-          colors: CONFETTI_COLORS,
-          disableForReducedMotion: true,
-          zIndex: 999998
-        });
-      }, 250);
 
-      // Clean timer
-      return () => clearTimeout(t1);
+        // Left cannon explosion
+        confetti({
+          particleCount: 50,
+          angle: 60,
+          spread: 70,
+          startVelocity: 45,
+          origin: { x: 0.15, y: 0.45 },
+          colors: FIRE_COLORS,
+          disableForReducedMotion: true,
+          zIndex: 999998
+        });
+
+        // Right cannon explosion
+        confetti({
+          particleCount: 50,
+          angle: 120,
+          spread: 70,
+          startVelocity: 45,
+          origin: { x: 0.85, y: 0.45 },
+          colors: FIRE_COLORS,
+          disableForReducedMotion: true,
+          zIndex: 999998
+        });
+      }, 350);
+
+      // 750ms: EXACT SYNC with CLIPPING CHIME melody start!
+      const tChime = setTimeout(() => {
+        confetti({
+          particleCount: 65,
+          spread: 90,
+          origin: { x: 0.5, y: 0.5 },
+          colors: CONFETTI_COLORS,
+          disableForReducedMotion: true,
+          zIndex: 999998
+        });
+      }, 750);
+
+      return () => {
+        clearTimeout(tBoom);
+        clearTimeout(tChime);
+      };
     } catch {
       // Confetti fallback
     }
 
-    // Auto-fadeout after ~4.2 seconds
+    // Auto-fadeout after ~4.8 seconds
     const fadeTimer = setTimeout(() => {
       setFading(true);
-    }, 4200);
+    }, 4800);
 
-    // Complete cleanup and unmount after 4.6 seconds
+    // Complete cleanup after 5.2 seconds
     const autoCloseTimer = setTimeout(() => {
       if (onClose) onClose();
-    }, 4600);
+    }, 5200);
 
     return () => {
       clearTimeout(fadeTimer);
@@ -157,7 +201,7 @@ export default function AttendanceCelebration({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(15, 23, 42, 0.52)',
+        backgroundColor: 'rgba(10, 15, 30, 0.62)',
         backdropFilter: 'blur(4px)',
         WebkitBackdropFilter: 'blur(4px)',
         opacity: fading ? 0 : 1,
@@ -197,10 +241,43 @@ export default function AttendanceCelebration({
           }
         }
 
+        @keyframes fireRocketRise {
+          0% {
+            transform: translateY(100vh) scale(0.6);
+            opacity: 1;
+          }
+          75% {
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(0) scale(1.2);
+            opacity: 0;
+          }
+        }
+
+        @keyframes fireworkBurst {
+          0% {
+            transform: scale(0.1);
+            opacity: 0;
+          }
+          30% {
+            transform: scale(0.8);
+            opacity: 1;
+          }
+          70% {
+            transform: scale(1.15);
+            opacity: 0.9;
+          }
+          100% {
+            transform: scale(1.35);
+            opacity: 0;
+          }
+        }
+
         @keyframes popModalIn {
           0% {
             opacity: 0;
-            transform: scale(0.82) translateY(22px);
+            transform: scale(0.8) translateY(24px);
           }
           65% {
             transform: scale(1.02) translateY(-2px);
@@ -211,37 +288,26 @@ export default function AttendanceCelebration({
           }
         }
 
-        @keyframes sparkleTwinkle {
+        @keyframes firePulse {
           0%, 100% {
-            opacity: 0;
-            transform: scale(0.3) rotate(0deg);
+            transform: scale(1);
+            filter: drop-shadow(0 0 8px rgba(255, 87, 34, 0.8));
           }
           50% {
-            opacity: 1;
-            transform: scale(1.1) rotate(90deg);
+            transform: scale(1.15);
+            filter: drop-shadow(0 0 16px rgba(255, 152, 0, 1));
           }
         }
 
         @keyframes badgePulse {
           0% {
-            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
           }
           70% {
             box-shadow: 0 0 0 18px rgba(34, 197, 94, 0);
           }
           100% {
             box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-          }
-        }
-
-        @keyframes statusDotPulse {
-          0%, 100% {
-            transform: scale(1);
-            opacity: 1;
-          }
-          50% {
-            transform: scale(1.25);
-            opacity: 0.75;
           }
         }
 
@@ -252,9 +318,15 @@ export default function AttendanceCelebration({
           pointer-events: none;
         }
 
+        .firework-starburst {
+          position: absolute;
+          border-radius: 50%;
+          pointer-events: none;
+          will-change: transform, opacity;
+        }
+
         .celebration-sparkle {
           position: absolute;
-          color: #fbbf24;
           will-change: transform, opacity;
           pointer-events: none;
         }
@@ -265,6 +337,7 @@ export default function AttendanceCelebration({
 
         @media (prefers-reduced-motion: reduce) {
           .celebration-balloon,
+          .firework-starburst,
           .celebration-sparkle {
             display: none !important;
           }
@@ -275,7 +348,47 @@ export default function AttendanceCelebration({
         }
       `}</style>
 
-      {/* Floating Animated Balloons */}
+      {/* 1. VISUAL FIREWORKS STARBURSTS */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        {fireworks.map((fw) => (
+          <div
+            key={fw.id}
+            className="firework-starburst"
+            style={{
+              top: `${fw.top}%`,
+              left: `${fw.left}%`,
+              width: `${fw.size}px`,
+              height: `${fw.size}px`,
+              marginLeft: `-${fw.size / 2}px`,
+              marginTop: `-${fw.size / 2}px`,
+              animation: `fireworkBurst 1.2s ease-out ${fw.delay}s infinite`
+            }}
+          >
+            {/* SVG Firework Radiating Sparks */}
+            <svg width="100%" height="100%" viewBox="0 0 120 120" fill="none">
+              <circle cx="60" cy="60" r="12" fill={fw.color} opacity="0.9" />
+              <circle cx="60" cy="60" r="28" stroke="#ffd600" strokeWidth="2" strokeDasharray="4 6" opacity="0.8" />
+              <circle cx="60" cy="60" r="48" stroke={fw.color} strokeWidth="2.5" strokeDasharray="3 8" opacity="0.75" />
+              {/* Radiating Ray Sparks */}
+              {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((deg) => (
+                <line
+                  key={deg}
+                  x1="60"
+                  y1="60"
+                  x2={60 + 52 * Math.cos((deg * Math.PI) / 180)}
+                  y2={60 + 52 * Math.sin((deg * Math.PI) / 180)}
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  opacity="0.85"
+                />
+              ))}
+            </svg>
+          </div>
+        ))}
+      </div>
+
+      {/* 2. FLOATING BALLOONS */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
         {balloons.map((b) => (
           <div
@@ -296,7 +409,7 @@ export default function AttendanceCelebration({
                 height={b.size * 1.45}
                 viewBox="0 0 50 72.5"
                 fill="none"
-                style={{ filter: 'drop-shadow(0 8px 12px rgba(0,0,0,0.18))' }}
+                style={{ filter: 'drop-shadow(0 8px 12px rgba(0,0,0,0.22))' }}
               >
                 <defs>
                   <radialGradient id={`balloon-grad-${b.id}`} cx="35%" cy="35%" r="65%">
@@ -320,7 +433,7 @@ export default function AttendanceCelebration({
         ))}
       </div>
 
-      {/* Sparkles */}
+      {/* 3. FIRE EMBERS & SPARKLES */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         {sparkles.map((s) => (
           <div
@@ -329,15 +442,16 @@ export default function AttendanceCelebration({
             style={{
               top: `${s.top}%`,
               left: `${s.left}%`,
-              animation: `sparkleTwinkle 1.8s ease-in-out ${s.delay}s infinite`
+              color: s.isFire ? '#f97316' : '#fbbf24',
+              animation: `firePulse 1.4s ease-in-out ${s.delay}s infinite`
             }}
           >
-            <Sparkles size={s.size} />
+            {s.isFire ? <Flame size={s.size} /> : <Sparkles size={s.size} />}
           </div>
         ))}
       </div>
 
-      {/* Centered Celebration Success Modal */}
+      {/* 4. CENTERED CELEBRATION MODAL */}
       <div
         className="celebration-card"
         onClick={(e) => e.stopPropagation()}
@@ -349,7 +463,7 @@ export default function AttendanceCelebration({
           maxWidth: '410px',
           width: '100%',
           textAlign: 'center',
-          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.4), 0 0 0 1px rgba(226, 232, 240, 0.9)',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.45), 0 0 0 1px rgba(226, 232, 240, 0.9)',
           zIndex: 10
         }}
       >
@@ -383,8 +497,8 @@ export default function AttendanceCelebration({
         {/* Celebratory Checkmark Icon Badge */}
         <div
           style={{
-            width: '72px',
-            height: '72px',
+            width: '74px',
+            height: '74px',
             borderRadius: '50%',
             backgroundColor: '#dcfce7',
             color: '#15803d',
@@ -396,32 +510,33 @@ export default function AttendanceCelebration({
             border: '3px solid #bbf7d0'
           }}
         >
-          <CheckCircle2 size={44} strokeWidth={2.4} />
+          <CheckCircle2 size={46} strokeWidth={2.4} />
         </div>
 
-        {/* Mini Pill Tag */}
+        {/* Tag Pill with Flame & Sparkles */}
         <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '5px',
+            gap: '6px',
             fontSize: '11px',
             fontWeight: 800,
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
-            color: '#15803d',
-            backgroundColor: '#f0fdf4',
-            border: '1px solid #bbf7d0',
-            padding: '4px 10px',
+            color: '#c2410c',
+            backgroundColor: '#fff7ed',
+            border: '1px solid #fed7aa',
+            padding: '4px 11px',
             borderRadius: '999px',
             marginBottom: '10px'
           }}
         >
-          <Sparkles size={12} color="#16a34a" />
-          <span>Dispatch Confirmed</span>
+          <Flame size={13} color="#ea580c" />
+          <span>Attendance Confirmed</span>
+          <Sparkles size={12} color="#f59e0b" />
         </div>
 
-        {/* Primary Heading */}
+        {/* Heading */}
         <h2
           style={{
             fontSize: '20px',
@@ -435,7 +550,7 @@ export default function AttendanceCelebration({
           ATTENDANCE SUBMITTED SUCCESSFULLY!
         </h2>
 
-        {/* Clear Recipient Confirmation */}
+        {/* Recipient Confirmation */}
         <p
           style={{
             fontSize: '14px',
@@ -449,7 +564,7 @@ export default function AttendanceCelebration({
           <strong style={{ color: '#0f172a', fontWeight: 700 }}>{recipientName}</strong>.
         </p>
 
-        {/* Status Box: Submitted for Verification */}
+        {/* Status Box */}
         <div
           style={{
             backgroundColor: '#f8fafc',
@@ -484,8 +599,7 @@ export default function AttendanceCelebration({
                   height: '7px',
                   borderRadius: '50%',
                   backgroundColor: '#16a34a',
-                  display: 'inline-block',
-                  animation: 'statusDotPulse 1.5s infinite'
+                  display: 'inline-block'
                 }}
               />
               <span style={{ fontSize: '11px', fontWeight: 800, color: '#166534' }}>
