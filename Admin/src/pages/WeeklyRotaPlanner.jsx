@@ -1134,29 +1134,29 @@ export default function WeeklyRotaPlanner() {
     let html = `
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:Arial,sans-serif;font-size:9px;padding:12px;color:#0f172a;background:#fff}
-        h1{font-size:16px;text-align:center;margin-bottom:2px;font-weight:900;letter-spacing:1px;color:#0f172a}
-        .subtitle{font-size:9px;text-align:center;color:#475569;margin-bottom:12px;font-weight:600}
-        .top-date-row{display:grid;grid-template-columns:85px repeat(7, 1fr);background:#e2e8f0;border:1px solid #cbd5e1;margin-bottom:8px;font-weight:700;font-size:8px;color:#1e293b;text-align:center}
+        body{font-family:Arial,sans-serif;font-size:11px;padding:12px;color:#0f172a;background:#fff}
+        h1{font-size:18px;text-align:center;margin-bottom:2px;font-weight:900;letter-spacing:1.5px;color:#0f172a}
+        .subtitle{font-size:10.5px;text-align:center;color:#475569;margin-bottom:12px;font-weight:600}
+        .top-date-row{display:grid;grid-template-columns:105px repeat(7, 1fr);background:#e2e8f0;border:1px solid #cbd5e1;margin-bottom:10px;font-weight:700;font-size:9.5px;color:#1e293b;text-align:center}
         .top-corner{background:#cbd5e1;border-right:1px solid #cbd5e1}
-        .top-date-cell{padding:5px 2px;border-right:1px solid #cbd5e1}
-        .shop-block{margin-bottom:14px;border:1px solid #cbd5e1;border-radius:4px;overflow:hidden;page-break-inside:avoid}
-        .shop-title{font-size:12px;font-weight:900;padding:6px 12px;letter-spacing:.3px;font-style:italic}
+        .top-date-cell{padding:6px 3px;border-right:1px solid #cbd5e1}
+        .shop-block{margin-bottom:16px;border:1.5px solid #cbd5e1;border-radius:4px;overflow:hidden;page-break-inside:avoid}
+        .shop-title{font-size:14px;font-weight:900;padding:7px 12px;letter-spacing:.5px;font-style:italic}
         table{width:100%;border-collapse:collapse}
-        th,td{border:1px solid #cbd5e1;padding:3px 4px;text-align:center;font-size:7.5px}
-        th{font-weight:700;color:#1e293b;font-size:7.5px}
-        td.name-col{text-align:left;font-weight:700;background:#ffffff;min-width:85px;max-width:85px;font-size:8px;padding-left:6px;color:#0f172a}
+        th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:center;font-size:10px}
+        th{font-weight:700;color:#1e293b;font-size:10px}
+        td.name-col{text-align:left;font-weight:700;background:#ffffff;min-width:105px;max-width:105px;font-size:10.5px;padding-left:8px;color:#0f172a}
         td.cell-white{background:#ffffff}
-        .date-hdr{font-size:7px;color:#1e293b}
-        .day-hdr{font-size:7px;color:#1e293b;font-weight:800}
-        .pill-off{background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;font-weight:800;display:inline-block;font-size:7.5px}
-        .pill-loaned{padding:2px 8px;border-radius:10px;font-weight:700;display:inline-block;font-size:7.5px;border:1px solid transparent}
-        .text-avail{color:#0f172a;font-size:7.5px}
-        .total-row td{font-weight:800;font-size:8px}
-        footer{text-align:center;font-size:7px;color:#94a3b8;margin-top:10px}
+        .date-hdr{font-size:9px;color:#1e293b}
+        .day-hdr{font-size:9.5px;color:#1e293b;font-weight:800}
+        .pill-off{background:#fee2e2;color:#dc2626;padding:3px 10px;border-radius:10px;font-weight:900;display:inline-block;font-size:10px}
+        .pill-loaned{padding:3px 8px;border-radius:10px;font-weight:700;display:inline-block;font-size:9.5px;border:1px solid transparent}
+        .text-avail{color:#0f172a;font-size:10px;font-weight:600}
+        .total-row td{font-weight:800;font-size:10.5px;padding:6px 4px}
+        footer{text-align:center;font-size:8.5px;color:#94a3b8;margin-top:12px}
         @media print{
           body{padding:6px}
-          @page{size:A4 landscape;margin:10mm 8mm}
+          @page{size:A4 landscape;margin:8mm 8mm}
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       </style>

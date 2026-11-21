@@ -1330,8 +1330,8 @@
     background: none !important;
     border: none !important;
     color: #0f172a !important;
-    font-size: 14px !important;
-    font-weight: 800 !important;
+    font-size: 16px !important;
+    font-weight: 900 !important;
     padding: 0 !important;
   }
 
@@ -1343,41 +1343,47 @@
     background: #f8fafc !important;
     color: #0f172a !important;
     border: 1px solid #cbd5e1 !important;
-    padding: 4px 4px !important;
-    font-size: 10px !important;
+    padding: 5px 4px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
   }
 
   .rota-matrix-table td {
     border: 1px solid #cbd5e1 !important;
-    padding: 3px 4px !important;
-    font-size: 10px !important;
+    padding: 4px 4px !important;
+    font-size: 11px !important;
   }
 
   .rota-cell-btn {
     border: none !important;
     background: none !important;
     padding: 0 !important;
-    font-size: 10px !important;
+    font-size: 11px !important;
     font-weight: 600 !important;
   }
 
   .cell-off {
     color: #dc2626 !important;
-    font-weight: 800 !important;
+    font-weight: 900 !important;
+    font-size: 11.5px !important;
   }
 
   .cell-available {
     color: #0f172a !important;
+    font-weight: 600 !important;
+    font-size: 11px !important;
   }
 
   .cell-loaned {
     color: #0f172a !important;
     font-weight: 700 !important;
+    font-size: 11px !important;
   }
 
   .tr-total-row td {
     border-top: 1.5px solid #cbd5e1 !important;
     font-weight: 800 !important;
+    font-size: 11.5px !important;
     background: #f8fafc !important;
   }
 }
