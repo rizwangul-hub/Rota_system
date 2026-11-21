@@ -533,6 +533,33 @@ export default function WeeklySalaryPage() {
     }
   };
 
+  const handleUnfinalizeAllSalaries = async () => {
+    const finalizedUnpaid = payableSalaries.filter(s => isFinalized(s) && (s.totalPaid || 0) === 0);
+    if (finalizedUnpaid.length === 0) {
+      showNotification('No unpaid finalized salaries available to unlock.', true);
+      return;
+    }
+    const weekLabel = weekInfo?.week?.weekLabel || (salaries[0] ? salaries[0].weekLabel : '');
+    if (!window.confirm(`Unlock all ${finalizedUnpaid.length} salaries for week ${weekLabel}? This will reset their status back to draft so you can recalculate with newly approved attendance.`)) {
+      return;
+    }
+    setUnfinalizing(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/salaries/unfinalize-all`, {
+        weekLabel,
+        salaryIds: finalizedUnpaid.map(s => s._id)
+      });
+      if (res.data?.success) {
+        showNotification(res.data.message || `Unlocked ${res.data.count} salaries.`);
+        fetchWeekInfoAndSalaries();
+      }
+    } catch (err) {
+      showNotification(err.response?.data?.message || err.message || 'Failed to unlock salaries.', true);
+    } finally {
+      setUnfinalizing(false);
+    }
+  };
+
   // The salary breakdown shown in the detail modal
   const activeSalary = detailData?.salary || detailSalary;
 
@@ -617,28 +644,51 @@ export default function WeeklySalaryPage() {
           </button>
 
           {alreadyGenerated && (
-            <button
-              className="btn btn-sm"
-              onClick={handleFinalizeAllSalaries}
-              disabled={finalizing || unfinalizedCount === 0}
-              style={{
-                fontWeight: 600,
-                background: unfinalizedCount === 0 ? '#10b981' : '#059669',
-                borderColor: '#059669',
-                color: '#ffffff',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-              title={unfinalizedCount === 0 ? 'All salaries for this week are finalized' : `Finalize all ${unfinalizedCount} salaries`}
-            >
-              <Lock size={15} />
-              {finalizing
-                ? 'Finalizing All...'
-                : unfinalizedCount === 0
-                ? 'All Finalized ✓'
-                : `Finalize All Salaries (${unfinalizedCount})`}
-            </button>
+            <>
+              {unfinalizedCount === 0 && (
+                <button
+                  className="btn btn-sm btn-outline"
+                  onClick={handleUnfinalizeAllSalaries}
+                  disabled={unfinalizing}
+                  style={{
+                    fontWeight: 600,
+                    color: '#d97706',
+                    borderColor: '#d97706',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#fffbeb'
+                  }}
+                  title="Unlock all unpaid finalized salaries back to draft to recalculate with newly approved attendance"
+                >
+                  <Unlock size={15} />
+                  {unfinalizing ? 'Unlocking...' : 'Unlock Week'}
+                </button>
+              )}
+
+              <button
+                className="btn btn-sm"
+                onClick={handleFinalizeAllSalaries}
+                disabled={finalizing || unfinalizedCount === 0}
+                style={{
+                  fontWeight: 600,
+                  background: unfinalizedCount === 0 ? '#10b981' : '#059669',
+                  borderColor: '#059669',
+                  color: '#ffffff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title={unfinalizedCount === 0 ? 'All salaries for this week are finalized' : `Finalize all ${unfinalizedCount} salaries`}
+              >
+                <Lock size={15} />
+                {finalizing
+                  ? 'Finalizing All...'
+                  : unfinalizedCount === 0
+                  ? 'All Finalized ✓'
+                  : `Finalize All Salaries (${unfinalizedCount})`}
+              </button>
+            </>
           )}
         </div>
       </div>

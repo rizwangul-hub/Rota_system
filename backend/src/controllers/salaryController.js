@@ -1051,6 +1051,77 @@ exports.finalizeAllWeeklySalaries = async (req, res) => {
 };
 
 /**
+ * Admin unfinalizes all unpaid weekly salaries for a week
+ */
+exports.unfinalizeAllWeeklySalaries = async (req, res) => {
+  try {
+    const { weekLabel, salaryIds } = req.body;
+    let query = {};
+    if (Array.isArray(salaryIds) && salaryIds.length > 0) {
+      query._id = { $in: salaryIds.map(safeObjectId).filter(Boolean) };
+    } else if (weekLabel) {
+      query.weekLabel = weekLabel;
+    } else {
+      return res.status(400).json({ success: false, message: 'weekLabel or salaryIds is required.' });
+    }
+
+    // Only unfinalize unpaid salaries
+    query.totalPaid = { $in: [0, null] };
+    query.status = { $in: ['FINALIZED', 'Finalized'] };
+
+    const salaries = await WeeklySalary.find(query);
+    if (!salaries.length) {
+      return res.status(400).json({ success: false, message: 'No unpaid finalized salaries found to unlock.' });
+    }
+
+    let unfinalizedCount = 0;
+    for (const salary of salaries) {
+      try {
+        await revertSalaryLoanDeduction(salary._id);
+      } catch (e) {}
+
+      salary.status = 'Generated';
+      salary.finalizedBy = null;
+      salary.finalizedAt = null;
+      salary.finalizationSnapshot = null;
+
+      await Attendance.updateMany(
+        { weeklySalary: salary._id },
+        { $set: { approvalStatus: 'Checked' } }
+      );
+
+      await LedgerTransaction.deleteMany({
+        employee: salary.employee,
+        transactionType: 'SALARY_EARNED',
+        referenceId: salary._id
+      });
+
+      await salary.save();
+      await recalculateEmployeeLedger(salary.employee);
+      unfinalizedCount++;
+    }
+
+    await logAction({
+      user: req.user._id,
+      username: req.user.name,
+      role: req.user.role,
+      action: 'SALARIES_ALL_UNFINALIZED',
+      recordType: 'WeeklySalary',
+      details: `Admin unlocked all ${unfinalizedCount} weekly salaries for ${weekLabel || 'week'}`,
+      req
+    });
+
+    res.json({
+      success: true,
+      count: unfinalizedCount,
+      message: `Successfully unlocked ${unfinalizedCount} salaries back to draft. You can now recalculate them with newly approved attendance.`
+    });
+  } catch (error) {
+    return sendServerError(res, error, 'Failed to unfinalize weekly salaries.');
+  }
+};
+
+/**
  * Admin unfinalizes a weekly salary if no payments have been disbursed
  */
 exports.unfinalizeWeeklySalary = async (req, res) => {

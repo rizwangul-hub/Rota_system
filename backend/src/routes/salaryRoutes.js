@@ -25,6 +25,7 @@ router.patch('/:id/loan-deduction', authenticate, authorize('ADMIN'), salaryCont
 
 // Admin finalizes / unfinalizes weekly salary
 router.post('/finalize-all', authenticate, authorize('ADMIN'), salaryController.finalizeAllWeeklySalaries);
+router.post('/unfinalize-all', authenticate, authorize('ADMIN'), salaryController.unfinalizeAllWeeklySalaries);
 router.post('/:id/finalize', authenticate, authorize('ADMIN'), salaryController.finalizeWeeklySalary);
 router.post('/:id/unfinalize', authenticate, authorize('ADMIN'), salaryController.unfinalizeWeeklySalary);
 
