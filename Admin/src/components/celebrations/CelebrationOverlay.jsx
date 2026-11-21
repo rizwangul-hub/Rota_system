@@ -17,7 +17,7 @@ export default function CelebrationOverlay({
   type = 'rota', // 'rota' | 'payroll' | 'attendance'
   data = {},     // { weekLabel, totalAmount, employeeCount, approvedCount }
   duration = 4200,
-  soundEnabled = true
+  soundEnabled = false
 }) {
   const [fading, setFading] = useState(false);
 
@@ -26,43 +26,7 @@ export default function CelebrationOverlay({
 
     setFading(false);
 
-    // Optional synthesized audio chime
-    if (soundEnabled && typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.type = 'sine';
-        if (type === 'payroll') {
-          // Cheerful cash register chime
-          osc.frequency.setValueAtTime(587.33, now); // D5
-          osc.frequency.setValueAtTime(880, now + 0.1); // A5
-          osc.frequency.setValueAtTime(1174.66, now + 0.22); // D6
-        } else if (type === 'rota') {
-          // Crisp harmonic chime
-          osc.frequency.setValueAtTime(523.25, now); // C5
-          osc.frequency.setValueAtTime(659.25, now + 0.12); // E5
-          osc.frequency.setValueAtTime(783.99, now + 0.24); // G5
-        } else {
-          // Playful celebration chime
-          osc.frequency.setValueAtTime(659.25, now); // E5
-          osc.frequency.setValueAtTime(783.99, now + 0.1); // G5
-          osc.frequency.setValueAtTime(1046.5, now + 0.2); // C6
-        }
-
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.72);
-      } catch {
-        // Ignore audio playback failure
-      }
-    }
+    // Audio chimes completely disabled for Admin Dashboard as requested
 
     // Trigger customized canvas-confetti bursts
     const colors = type === 'rota' ? ROTA_CONFETTI : type === 'payroll' ? PAYROLL_CONFETTI : ATTENDANCE_CONFETTI;

@@ -8,7 +8,6 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AnnouncementProvider } from './context/AnnouncementContext';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
-import VoiceAnnouncementDock from './components/VoiceAnnouncementDock';
 
 // Pages
 import Login from './pages/Login';
@@ -69,9 +68,6 @@ function ProtectedLayout({ children, allowedRoles }) {
 
       {/* Floating AI Assistant Widget (accessible on every page) */}
       <AiAssistantWidget />
-
-      {/* Floating System Voice Announcements Dock */}
-      <VoiceAnnouncementDock />
 
       {/* Persistent floating button to easily restore sidebar from any page */}
       {isSidebarHidden && (

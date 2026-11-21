@@ -28,14 +28,14 @@ export function AnnouncementProvider({ children }) {
     return user.name || user.username || 'Authorized User';
   }, [user]);
 
-  // Start announcement
+  // Start announcement (silent status tracking only - NO voice output in Admin)
   const announceStart = useCallback((opId, {
     actor = currentActorName,
     label = 'Operation in progress',
     message,
     waitMessage = 'Please wait a moment.'
   } = {}) => {
-    const spokenText = message || `${actor} is ${label.toLowerCase()}. ${waitMessage}`;
+    const text = message || `${actor} is ${label.toLowerCase()}. ${waitMessage}`;
 
     setActiveOperations(prev => ({
       ...prev,
@@ -52,20 +52,18 @@ export function AnnouncementProvider({ children }) {
       type: 'in-progress',
       title: label,
       actor,
-      message: spokenText,
+      message: text,
       timestamp: Date.now()
     });
-
-    voiceAnnouncementService.speak(spokenText);
   }, [currentActorName]);
 
-  // Success announcement
+  // Success announcement (silent status tracking only - NO voice output in Admin)
   const announceSuccess = useCallback((opId, {
     actor = currentActorName,
     label = 'Operation completed',
     message
   } = {}) => {
-    const spokenText = message || `${actor} has successfully completed ${label.toLowerCase()}.`;
+    const text = message || `${actor} has successfully completed ${label.toLowerCase()}.`;
 
     setActiveOperations(prev => {
       const next = { ...prev };
@@ -77,21 +75,19 @@ export function AnnouncementProvider({ children }) {
       type: 'success',
       title: label,
       actor,
-      message: spokenText,
+      message: text,
       timestamp: Date.now()
     });
-
-    voiceAnnouncementService.speak(spokenText);
   }, [currentActorName]);
 
-  // Failure announcement
+  // Failure announcement (silent status tracking only - NO voice output in Admin)
   const announceFailure = useCallback((opId, {
     actor = currentActorName,
     label = 'Operation',
     message,
     error
   } = {}) => {
-    const spokenText = message || `${label} could not be completed. Please check the error message.`;
+    const text = message || `${label} could not be completed. Please check the error message.`;
 
     setActiveOperations(prev => {
       const next = { ...prev };
@@ -103,16 +99,13 @@ export function AnnouncementProvider({ children }) {
       type: 'error',
       title: `${label} Failed`,
       actor,
-      message: spokenText,
+      message: text,
       timestamp: Date.now()
     });
-
-    voiceAnnouncementService.speak(spokenText);
   }, [currentActorName]);
 
   /**
-   * Helper that executes an async operation with full start, success, and error announcements.
-   * Only announces success when the promise resolves without throwing.
+   * Helper that executes an async operation silently (zero voice or speech).
    */
   const runAnnouncedOperation = useCallback(async ({
     id = `op-${Date.now()}`,
@@ -152,23 +145,22 @@ export function AnnouncementProvider({ children }) {
     }
   }, [currentActorName, announceStart, announceSuccess, announceFailure]);
 
-  const testAnnouncement = useCallback((customText) => {
-    const text = customText || `System announcement test for ${currentActorName}. Voice announcements are working properly.`;
-    voiceAnnouncementService.speak(text);
-  }, [currentActorName]);
+  const testAnnouncement = useCallback(() => {
+    // Silent
+  }, []);
 
   const value = {
     settings,
     updateSettings,
     activeOperations,
     recentNotification,
+    currentActorName,
     announceStart,
     announceSuccess,
     announceFailure,
     runAnnouncedOperation,
     testAnnouncement,
-    currentActorName,
-    voices: voiceAnnouncementService.getAvailableVoices()
+    voices: []
   };
 
   return (
@@ -179,22 +171,23 @@ export function AnnouncementProvider({ children }) {
 }
 
 export function useAnnouncement() {
-  const context = useContext(AnnouncementContext);
-  if (!context) {
+  const ctx = useContext(AnnouncementContext);
+  if (!ctx) {
     return {
       settings: { enabled: false },
       updateSettings: () => {},
       activeOperations: {},
       recentNotification: null,
+      currentActorName: 'Staff',
       announceStart: () => {},
       announceSuccess: () => {},
       announceFailure: () => {},
       runAnnouncedOperation: async ({ action }) => (typeof action === 'function' ? action() : null),
       testAnnouncement: () => {},
-      currentActorName: 'Staff',
       voices: []
     };
   }
-  return context;
+  return ctx;
 }
+
 export default AnnouncementContext;
