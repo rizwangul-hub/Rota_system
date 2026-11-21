@@ -311,12 +311,14 @@ export default function BonusPage() {
         <div className="modal-overlay">
           <div className="modal-card">
             <div className="modal-header">
-              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Add Monthly Commission</h2>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
+                {editingBonusId ? 'Edit Monthly Commission' : 'Add Monthly Commission'}
+              </h2>
               <button onClick={() => setIsAddModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreateBonus}>
+            <form onSubmit={handleSaveBonus}>
               <div className="modal-body">
                 <div className="form-group">
                   <label className="form-label">Employee</label>
@@ -324,14 +326,21 @@ export default function BonusPage() {
                     className="form-select"
                     value={empId}
                     onChange={(e) => {
-                      setEmpId(e.target.value);
-                      const emp = employees.find(x => x._id === e.target.value);
-                      if (emp && emp.assignedShop) {
-                        setShopId(emp.assignedShop._id || emp.assignedShop);
-                        setCommitment(`${rate}% - ${emp.assignedShop.name || 'Shop'}`);
+                      const newEmpId = e.target.value;
+                      setEmpId(newEmpId);
+                      const emp = employees.find(x => x._id === newEmpId);
+                      // Only default shopId if user has NOT already chosen a shop
+                      if (emp && emp.assignedShop && !shopId) {
+                        const sId = emp.assignedShop._id || emp.assignedShop;
+                        setShopId(sId);
+                        const sObj = shops.find(s => s._id === sId) || (emp.assignedShop.name ? emp.assignedShop : null);
+                        if (!commitment || commitment.includes('% -') || commitment === '') {
+                          setCommitment(`${rate}% - ${sObj?.name || 'Shop'}`);
+                        }
                       }
                     }}
                     required
+                    disabled={!!editingBonusId}
                   >
                     <option value="">Select Employee</option>
                     {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.employeeId})</option>)}
@@ -339,17 +348,23 @@ export default function BonusPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Shop Location</label>
+                  <label className="form-label">Shop Location <span style={{ color: '#ef4444' }}>*</span></label>
                   <select
                     className="form-select"
                     value={shopId}
                     onChange={(e) => {
-                      setShopId(e.target.value);
-                      const s = shops.find(x => x._id === e.target.value);
-                      if (s) setCommitment(`${rate}% - ${s.name}`);
+                      const newShopId = e.target.value;
+                      setShopId(newShopId);
+                      const s = shops.find(x => x._id === newShopId);
+                      if (s) {
+                        if (!commitment || commitment.includes('% -') || commitment.trim() === '') {
+                          setCommitment(`${rate}% - ${s.name}`);
+                        }
+                      }
                     }}
+                    required
                   >
-                    <option value="">Select Shop</option>
+                    <option value="">Select Shop (Required)</option>
                     {shops.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                   </select>
                 </div>
@@ -377,9 +392,12 @@ export default function BonusPage() {
                       placeholder="e.g. 1, 2, 3"
                       value={rate}
                       onChange={(e) => {
-                        setRate(e.target.value);
+                        const newRate = e.target.value;
+                        setRate(newRate);
                         const s = shops.find(x => x._id === shopId);
-                        if (s) setCommitment(`${e.target.value}% - ${s.name}`);
+                        if (s && (!commitment || commitment.includes('% -'))) {
+                          setCommitment(`${newRate}% - ${s.name}`);
+                        }
                       }}
                       required
                     />
@@ -387,14 +405,18 @@ export default function BonusPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Commitment Label (Shown in Report)</label>
+                  <label className="form-label">Narration / Commitment (Shown in Ledger & Reports) <span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. 1% - Leebridge"
+                    placeholder="e.g. 1% - Leebridge Cycles"
                     value={commitment}
                     onChange={(e) => setCommitment(e.target.value)}
+                    required
                   />
+                  <span style={{ fontSize: '11px', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                    This exact narration is preserved in the worker's salary ledger and report.
+                  </span>
                 </div>
 
                 <div className="form-group">
@@ -421,7 +443,7 @@ export default function BonusPage() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Save Commission
+                  {editingBonusId ? 'Update Commission' : 'Save Commission'}
                 </button>
               </div>
             </form>
