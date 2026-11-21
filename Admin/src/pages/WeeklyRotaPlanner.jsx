@@ -2498,6 +2498,12 @@ export default function WeeklyRotaPlanner() {
                 </button>
                 <button
                   className="preset-pill-btn"
+                  onClick={() => updateCellStatus('CUSTOM', { note: 'Available (09:00 am to 02:00 pm)', startTime: '09:00', endTime: '14:00' })}
+                >
+                  09:00 am – 02:00 pm
+                </button>
+                <button
+                  className="preset-pill-btn"
                   onClick={() => updateCellStatus('CUSTOM', { note: 'Available (02:00 pm to 07:00 pm)', startTime: '14:00', endTime: '19:00' })}
                 >
                   02:00 pm – 07:00 pm
