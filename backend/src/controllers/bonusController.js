@@ -185,7 +185,7 @@ exports.updateBonus = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Finalized commission records cannot be modified.' });
     }
 
-    const { salesAmount, bonusPercentage, month, year, commitmentText, notes, assignedWeeklySalaryId } = req.body;
+    const { salesAmount, bonusPercentage, month, year, commitmentText, notes, assignedWeeklySalaryId, shopId } = req.body;
 
     const sales = salesAmount !== undefined ? Number(salesAmount) : bonus.salesAmount;
     const rate = bonusPercentage !== undefined ? Number(bonusPercentage) : bonus.bonusPercentage;
@@ -195,6 +195,14 @@ exports.updateBonus = async (req, res) => {
     }
     if (bonusPercentage !== undefined && (isNaN(rate) || rate < 0)) {
       return res.status(400).json({ success: false, message: 'Bonus percentage must be a non-negative number.' });
+    }
+
+    if (shopId) {
+      const shop = await Shop.findById(shopId);
+      if (shop) {
+        bonus.shop = shop._id;
+        bonus.shopName = shop.name;
+      }
     }
 
     // Backend-authoritative recalculation

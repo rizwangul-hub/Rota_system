@@ -16,6 +16,7 @@ export default function BonusPage() {
 
   // Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingBonusId, setEditingBonusId] = useState(null);
   const [empId, setEmpId] = useState('');
   const [shopId, setShopId] = useState('');
   const [salesAmount, setSalesAmount] = useState('');
@@ -56,27 +57,70 @@ export default function BonusPage() {
     }
   };
 
-  const handleCreateBonus = async (e) => {
+  const handleOpenAdd = () => {
+    setEditingBonusId(null);
+    setEmpId('');
+    setShopId('');
+    setSalesAmount('');
+    setRate(1);
+    setCommitment('');
+    setNotes('');
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenEdit = (b) => {
+    setEditingBonusId(b._id);
+    setEmpId(b.employee?._id || b.employee || '');
+    setShopId(b.shop?._id || b.shop || '');
+    setSalesAmount(b.salesAmount ?? '');
+    setRate(b.bonusPercentage ?? 1);
+    setCommitment(b.commitmentText || '');
+    setNotes(b.notes || '');
+    setIsAddModalOpen(true);
+  };
+
+  const handleSaveBonus = async (e) => {
     e.preventDefault();
+    if (!shopId) {
+      alert('Please select a Shop Location.');
+      return;
+    }
     try {
-      const res = await axios.post(`${API_BASE_URL}/bonuses`, {
-        employeeId: empId,
-        shopId: shopId || undefined,
-        month,
-        year: Number(year),
-        salesAmount: Number(salesAmount),
-        bonusPercentage: Number(rate),
-        commitmentText: commitment,
-        notes: notes.trim()
-      });
-      if (res.data.success) {
-        setIsAddModalOpen(false);
-        setSalesAmount('');
-        setNotes('');
-        fetchBonuses();
+      if (editingBonusId) {
+        const res = await axios.put(`${API_BASE_URL}/bonuses/${editingBonusId}`, {
+          shopId,
+          month,
+          year: Number(year),
+          salesAmount: Number(salesAmount),
+          bonusPercentage: Number(rate),
+          commitmentText: commitment.trim(),
+          notes: notes.trim()
+        });
+        if (res.data.success) {
+          setIsAddModalOpen(false);
+          setEditingBonusId(null);
+          fetchBonuses();
+        }
+      } else {
+        const res = await axios.post(`${API_BASE_URL}/bonuses`, {
+          employeeId: empId,
+          shopId,
+          month,
+          year: Number(year),
+          salesAmount: Number(salesAmount),
+          bonusPercentage: Number(rate),
+          commitmentText: commitment.trim(),
+          notes: notes.trim()
+        });
+        if (res.data.success) {
+          setIsAddModalOpen(false);
+          setSalesAmount('');
+          setNotes('');
+          fetchBonuses();
+        }
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create commission entry');
+      alert(err.response?.data?.message || 'Failed to save commission entry');
     }
   };
 
@@ -136,7 +180,7 @@ export default function BonusPage() {
           <button className="btn btn-outline btn-sm" onClick={downloadExcel} disabled={downloading} title="Download Excel Spreadsheet">
             <Download size={14} /> Download Excel
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setNotes(''); setIsAddModalOpen(true); }}>
+          <button className="btn btn-primary btn-sm" onClick={handleOpenAdd}>
             <Plus size={14} /> Add Commission
           </button>
         </div>
@@ -188,12 +232,12 @@ export default function BonusPage() {
               <tr style={{ background: '#ffff00', color: '#000000', fontWeight: 'bold', borderTop: '2px solid #000', borderBottom: '2px solid #000' }}>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', width: '50px', textAlign: 'center' }}>No</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000' }}>Name</th>
-                <th style={{ padding: '10px 14px', border: '1px solid #000' }}>Commitment</th>
+                <th style={{ padding: '10px 14px', border: '1px solid #000' }}>Narration / Commitment</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'right' }}>Monthly Sale</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'center', width: '80px' }}>Rate</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'right' }}>Commision</th>
                 <th style={{ padding: '10px 14px', border: '1px solid #000' }}>Notes</th>
-                <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'center', width: '70px' }}>Action</th>
+                <th style={{ padding: '10px 14px', border: '1px solid #000', textAlign: 'center', width: '90px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -217,13 +261,22 @@ export default function BonusPage() {
                     {b.notes || '—'}
                   </td>
                   <td style={{ padding: '10px 14px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleDelete(b._id)}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                      title="Delete"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <button
+                        onClick={() => handleOpenEdit(b)}
+                        style={{ background: 'transparent', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '2px' }}
+                        title="Edit Commission"
+                      >
+                        <Edit size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(b._id)}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                        title="Delete Commission"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

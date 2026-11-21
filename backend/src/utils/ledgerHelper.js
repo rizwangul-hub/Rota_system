@@ -173,6 +173,12 @@ async function recalculateEmployeeLedger(employeeId) {
           txDate = new Date(SYSTEM_START_DATE);
         }
         const noteStr = b.notes && b.notes.trim() ? ` - Note: ${b.notes.trim()}` : '';
+        const narration = b.commitmentText && b.commitmentText.trim() ? b.commitmentText.trim() : '';
+        const shopNameStr = b.shopName ? ` (${b.shopName})` : '';
+        const desc = narration
+          ? `Commission / Bonus for ${b.month} ${b.year}${shopNameStr} - ${narration}${noteStr}`
+          : `Commission / Bonus for ${b.month} ${b.year}${shopNameStr}${noteStr}`;
+
         await LedgerTransaction.findOneAndUpdate(
           {
             employee: employeeId,
@@ -183,7 +189,7 @@ async function recalculateEmployeeLedger(employeeId) {
             employee: employeeId,
             date: txDate,
             transactionType: 'BONUS_CREDIT',
-            description: `Commission / Bonus for ${b.month} ${b.year}${b.shopName ? ` (${b.shopName})` : ''}${noteStr}`,
+            description: desc,
             referenceType: 'Bonus',
             referenceId: b._id,
             bonus: Number(b.bonusAmount) || 0,
@@ -194,6 +200,7 @@ async function recalculateEmployeeLedger(employeeId) {
               salesAmount: Number(b.salesAmount) || 0,
               rate: Number(b.bonusPercentage) || 0,
               shopName: b.shopName || '',
+              commitmentText: b.commitmentText || '',
               notes: b.notes || ''
             }
           },
@@ -369,6 +376,12 @@ async function syncBonusToLedger(bonus, userId = null) {
     });
   } else if ((bonus.bonusAmount || 0) > 0) {
     const noteStr = bonus.notes && bonus.notes.trim() ? ` - Note: ${bonus.notes.trim()}` : '';
+    const narration = bonus.commitmentText && bonus.commitmentText.trim() ? bonus.commitmentText.trim() : '';
+    const shopNameStr = bonus.shopName ? ` (${bonus.shopName})` : '';
+    const desc = narration
+      ? `Commission / Bonus for ${bonus.month} ${bonus.year}${shopNameStr} - ${narration}${noteStr}`
+      : `Commission / Bonus for ${bonus.month} ${bonus.year}${shopNameStr}${noteStr}`;
+
     let txDate = bonus.createdAt ? new Date(bonus.createdAt) : new Date();
     if (isNaN(txDate.getTime()) || txDate < SYSTEM_START_DATE) {
       txDate = new Date(SYSTEM_START_DATE);
@@ -383,7 +396,7 @@ async function syncBonusToLedger(bonus, userId = null) {
         employee: bonus.employee,
         date: txDate,
         transactionType: 'BONUS_CREDIT',
-        description: `Commission / Bonus for ${bonus.month} ${bonus.year}${bonus.shopName ? ` (${bonus.shopName})` : ''}${noteStr}`,
+        description: desc,
         referenceType: 'Bonus',
         referenceId: bonus._id,
         bonus: Number(bonus.bonusAmount) || 0,
@@ -394,6 +407,7 @@ async function syncBonusToLedger(bonus, userId = null) {
           salesAmount: Number(bonus.salesAmount) || 0,
           rate: Number(bonus.bonusPercentage) || 0,
           shopName: bonus.shopName || '',
+          commitmentText: bonus.commitmentText || '',
           notes: bonus.notes || ''
         },
         ...(userId ? { createdBy: userId } : {})
