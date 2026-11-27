@@ -5,5 +5,6 @@ deployment:
     - export FRONTEND_PATH=/home/leabridg/rota.leabridgecycles.co.uk
     - /bin/cp -rf $BACKEND_PATH/backend/* $BACKEND_PATH/
     - /bin/cp -rf $BACKEND_PATH/Admin/dist/* $FRONTEND_PATH/
+    - /bin/cp -f $BACKEND_PATH/Admin/dist/.htaccess $FRONTEND_PATH/
     - /bin/mkdir -p $BACKEND_PATH/tmp
     - /bin/touch $BACKEND_PATH/tmp/restart.txt
