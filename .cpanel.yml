@@ -2,9 +2,12 @@
 deployment:
   tasks:
     - export BACKEND_PATH=/home/leabridg/rota-api.leabridgecycles.co.uk
-    - export FRONTEND_PATH=/home/leabridg/rota.leabridgecycles.co.uk
+    - export ADMIN_PATH=/home/leabridg/rota.leabridgecycles.co.uk
+    - export ATTENDANCE_PATH=/home/leabridg/attendance.leabridgecycles.co.uk
     - /bin/cp -rf $BACKEND_PATH/backend/* $BACKEND_PATH/
-    - /bin/cp -rf $BACKEND_PATH/Admin/dist/* $FRONTEND_PATH/
-    - /bin/cp -f $BACKEND_PATH/Admin/dist/.htaccess $FRONTEND_PATH/
+    - /bin/cp -rf $BACKEND_PATH/Admin/dist/* $ADMIN_PATH/
+    - /bin/cp -f $BACKEND_PATH/Admin/dist/.htaccess $ADMIN_PATH/
+    - /bin/cp -rf $BACKEND_PATH/UsmanWeb/dist/* $ATTENDANCE_PATH/
+    - /bin/cp -f $BACKEND_PATH/UsmanWeb/dist/.htaccess $ATTENDANCE_PATH/
     - /bin/mkdir -p $BACKEND_PATH/tmp
     - /bin/touch $BACKEND_PATH/tmp/restart.txt
