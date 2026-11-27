@@ -20,7 +20,7 @@ function isAllowedOrigin(origin, allowedOrigins, isProduction) {
   }
   try {
     const originUrl = new URL(origin);
-    if (originUrl.hostname.endsWith('.vercel.app')) {
+    if (originUrl.hostname.endsWith('.vercel.app') || originUrl.hostname.endsWith('leabridgecycles.co.uk')) {
       return true;
     }
   } catch {}
