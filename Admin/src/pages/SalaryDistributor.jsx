@@ -215,7 +215,7 @@ export default function SalaryDistributor() {
     setIsPaying(true);
     const actor = user?.name || 'Arsalan';
     try {
-      await runAnnouncedOperation({
+      const res = await runAnnouncedOperation({
         id: `pay-${payModalSalary._id}`,
         label: `Recording Payment for ${payModalSalary.employeeName}`,
         actor,
@@ -223,7 +223,7 @@ export default function SalaryDistributor() {
         successMessage: `${actor} has successfully recorded salary payment for ${payModalSalary.employeeName}.`,
         errorMessage: 'The salary payment could not be recorded.',
         action: async () => {
-          const res = await axios.post(`${API_BASE_URL}/salaries/${payModalSalary._id}/pay`, {
+          const response = await axios.post(`${API_BASE_URL}/salaries/${payModalSalary._id}/pay`, {
             amount,
             deductionAmount: deduct,
             deductionReason: deductReason || 'Rounding adjustment / write-off',
@@ -232,16 +232,13 @@ export default function SalaryDistributor() {
             notes: payNotes,
             clientReference: `${payModalSalary._id}-${Date.now()}`
           });
-          if (!res.data?.success) {
-            throw new Error(res.data?.message || 'Payment recording failed');
+          if (!response.data?.success) {
+            throw new Error(response.data?.message || 'Payment recording failed');
           }
-          return res;
+          return response;
         }
       });
-      // Refresh distributor data after successful payment
-      await fetchDistributorData();
-      setPayModalSalary(null);
-      if (res.data.success) {
+      if (res?.data?.success) {
         const openingBal = Number(payModalSalary.openingBalance || payModalSalary.employee?.openingBalance || 0);
         const weeklySalary = Number(payModalSalary.attendanceSalary ?? (payModalSalary.weeklySalary || payModalSalary.finalSalary || 0));
         const bonus = Number(payModalSalary.bonus || 0);
