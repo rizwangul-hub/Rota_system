@@ -1344,7 +1344,7 @@ exports.recordSalaryPayment = async (req, res) => {
       // 1. Process adjustment/deduction if requested
       if (deductAmt > 0) {
         const reasonText = (deductionReason && deductionReason.trim()) || 'Rounding / balance adjustment';
-        await SalaryAdjustment.create([{
+        const [adjustmentDoc] = await SalaryAdjustment.create([{
           weeklySalary: salary._id,
           employee: salary.employee,
           type: 'MANUAL_DEDUCTION',
@@ -1354,31 +1354,46 @@ exports.recordSalaryPayment = async (req, res) => {
           addedByName: req.user.name
         }], { session });
 
+        const salaryBeforeAdjustment = Number((salary.finalSalary || 0).toFixed(2));
         salary.manualDeductions = Number(((salary.manualDeductions || 0) + deductAmt).toFixed(2));
-        salary.finalSalary = Number(Math.max(0, (salary.finalSalary || 0) - deductAmt).toFixed(2));
+        salary.finalSalary = Number(Math.max(0, salaryBeforeAdjustment - deductAmt).toFixed(2));
         totalPayable = Number(Math.max(0, totalPayable - deductAmt).toFixed(2));
 
-        await LedgerTransaction.findOneAndUpdate(
-          {
-            employee: salary.employee,
-            transactionType: 'SALARY_EARNED',
-            referenceId: salary._id
-          },
-          {
+        // Keep SALARY_EARNED at the full weekly salary amount (do not deduct adjustment from earned salary)
+        const existingEarnedTx = await LedgerTransaction.findOne({
+          employee: salary.employee,
+          transactionType: 'SALARY_EARNED',
+          referenceId: salary._id
+        }).session(session);
+
+        if (!existingEarnedTx) {
+          await LedgerTransaction.create([{
             employee: salary.employee,
             date: salary.weekEndDate,
+            transactionType: 'SALARY_EARNED',
             description: `Weekly Salary for week ${salary.weekLabel} (${salary.shopName})`,
             referenceType: 'WeeklySalary',
             referenceId: salary._id,
             attendancePay: salary.netAttendancePay,
             lateDeduction: salary.lateDeductions,
             allowance: (salary.travelAllowance || 0) + (salary.otherAllowances || 0),
-            deduction: salary.manualDeductions || 0,
-            amountEarned: salary.finalSalary,
+            amountEarned: salaryBeforeAdjustment,
             amountPaid: 0
-          },
-          { upsert: true, session }
-        );
+          }], { session });
+        }
+
+        // Record the rounding/balance adjustment as a separate ledger entry
+        await LedgerTransaction.create([{
+          employee: salary.employee,
+          date: pDate,
+          transactionType: 'MANUAL_ADJUSTMENT',
+          description: `Adjustment (${reasonText}) for week ${salary.weekLabel}`,
+          referenceType: 'Manual',
+          referenceId: adjustmentDoc._id,
+          amountEarned: 0,
+          amountPaid: deductAmt,
+          createdBy: req.user._id
+        }], { session });
       }
 
       // 2. Process payment payout if requested
